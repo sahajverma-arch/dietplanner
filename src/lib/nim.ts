@@ -15,6 +15,10 @@ const MealSchema = z.object({
   time: z.string().default(""),
   items: z.array(MealItemSchema).min(1),
   notes: z.string().default(""),
+  calories: z.number().default(0),
+  protein_g: z.number().default(0),
+  carbs_g: z.number().default(0),
+  fat_g: z.number().default(0),
 });
 
 const DaySchema = z.object({
@@ -61,9 +65,13 @@ const PLAN_JSON_SPEC = `{
       "meals": [                      // 4-6 meals per day (breakfast, snacks, lunch, dinner)
         {
           "name": string,             // e.g. "Breakfast"
-          "time": string,             // e.g. "8:00 AM"
+          "time": string,             // 24h format, e.g. "08:00"
           "items": [ { "food": string, "quantity": string } ],  // quantity compact, e.g. "2 rotis", "150 g"
-          "notes": string
+          "notes": string,
+          "calories": number,         // estimated kcal for this meal
+          "protein_g": number,        // estimated grams of protein in this meal
+          "carbs_g": number,          // estimated grams of carbohydrates in this meal
+          "fat_g": number             // estimated grams of fat in this meal
         }
       ]
     }
@@ -122,7 +130,8 @@ Hard rules:
 5. Adapt the plan to all stated medical conditions (e.g. low-GI for diabetes, low-sodium for hypertension, PCOS-friendly, etc.).
 6. "days" must contain EXACTLY 7 entries named "Day 1" through "Day 7".
 7. Keep food names and quantities short and specific. Use realistic household measures.
-8. Calories and macros must be internally consistent and appropriate for the client's stats, activity and goal.`;
+8. Calories and macros must be internally consistent and appropriate for the client's stats, activity and goal.
+9. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. The meal calories of each day must add up to that day's "total_calories" (within ~5%), which should be close to "daily_calories". Vary meal times sensibly around the client's schedule.`;
 
   const profile = {
     name: intake.fullName,
@@ -206,34 +215,44 @@ async function callNim(messages: ChatMessage[]): Promise<string> {
     throw new Error("NVIDIA_API_KEY is not configured on the server");
   }
 
-  const res = await fetch(NIM_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      model: NIM_MODEL,
-      messages,
-      temperature: 0.5,
-      top_p: 0.9,
-      max_tokens: 4096,
-      stream: false,
-    }),
-  });
+  let lastError = "";
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const res = await fetch(NIM_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        model: NIM_MODEL,
+        messages,
+        temperature: 0.5,
+        top_p: 0.9,
+        max_tokens: 4096,
+        stream: false,
+      }),
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+      };
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error("NVIDIA NIM returned an empty response");
+      return content;
+    }
+
     const body = await res.text().catch(() => "");
-    throw new Error(`NVIDIA NIM request failed (${res.status}): ${body.slice(0, 500)}`);
+    lastError = `NVIDIA NIM request failed (${res.status}): ${body.slice(0, 500)}`;
+
+    // Retry once on transient upstream errors (gateway timeouts, overload)
+    const transient = res.status === 429 || res.status >= 500;
+    if (!transient || attempt === 2) break;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("NVIDIA NIM returned an empty response");
-  return content;
+  throw new Error(lastError);
 }
 
 /**

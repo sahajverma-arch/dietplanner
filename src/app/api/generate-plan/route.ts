@@ -137,6 +137,8 @@ export async function POST(request: Request) {
     const plan = await generateDietPlan({ intake, week, previousPlan, followup });
 
     // ---- Render PDF and store it in the private bucket under the dietitian's folder
+    const planStart = new Date();
+    planStart.setDate(planStart.getDate() + 1); // plan starts tomorrow
     const pdfBuffer = await renderPlanPdf({
       plan,
       clientName,
@@ -147,6 +149,9 @@ export async function POST(request: Request) {
         month: "long",
         year: "numeric",
       }),
+      startDateIso: planStart.toISOString(),
+      dietType: intake.dietType || "",
+      conditions: Array.isArray(intake.conditions) ? intake.conditions : [],
     });
 
     const pdfPath = `${user.id}/${clientId}/week-${week}-${Date.now()}.pdf`;

@@ -69,7 +69,7 @@ export default function PlanView({
                     <div className="text-sm font-medium">{meal.name}</div>
                     {meal.time && <div className="text-xs text-zinc-500">{meal.time}</div>}
                   </div>
-                  <div className="min-w-0 text-sm text-zinc-300">
+                  <div className="min-w-0 flex-1 text-sm text-zinc-300">
                     {meal.items.map((item, ii) => (
                       <div key={ii}>
                         {item.food}
@@ -80,6 +80,20 @@ export default function PlanView({
                       <div className="mt-0.5 text-xs italic text-zinc-500">{meal.notes}</div>
                     )}
                   </div>
+                  {(meal.calories || 0) > 0 && (
+                    <div className="shrink-0 text-right text-xs">
+                      <div className="font-semibold text-zinc-300">
+                        {Math.round(meal.calories)} kcal
+                      </div>
+                      <div className="mt-0.5 text-zinc-500">
+                        <span className="text-sky-400">P {Math.round(meal.protein_g)}</span>
+                        {" · "}
+                        <span className="text-amber-400">C {Math.round(meal.carbs_g)}</span>
+                        {" · "}
+                        <span className="text-red-400">F {Math.round(meal.fat_g)}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
