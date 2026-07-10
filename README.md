@@ -126,7 +126,8 @@ NVIDIA_API_KEY=nvapi-...
 | `NEXT_PUBLIC_SUPABASE_URL` | client + server | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server | Safe to expose — RLS enforces access |
 | `NVIDIA_API_KEY` | **server only** | Never exposed to the browser |
-| `NVIDIA_MODEL` | server, optional | Defaults to `meta/llama-3.1-70b-instruct` |
+| `NVIDIA_MODEL` | server, optional | Defaults to `meta/llama-3.1-70b-instruct`; if that shared endpoint is congested, `mistralai/mistral-small-4-119b-2603` is a fast, strong alternative |
+| `NVIDIA_FALLBACK_MODEL` | server, optional | Tried automatically when the primary model times out or errors; defaults to `meta/llama-3.1-8b-instruct` |
 | `NVIDIA_NIM_URL` | server, optional | Defaults to the hosted NIM endpoint |
 
 ## AI output contract

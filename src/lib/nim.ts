@@ -43,6 +43,16 @@ export const DietPlanSchema = z.object({
 
 export type DietPlan = z.infer<typeof DietPlanSchema>;
 
+// The plan is generated in two halves — the shared NIM serving functions cap
+// completions around ~2k tokens, and a full 7-day plan with per-meal macros
+// doesn't fit. Each half fits comfortably.
+const PartOneSchema = DietPlanSchema.extend({
+  days: z.array(DaySchema).length(4),
+});
+const PartTwoSchema = z.object({
+  days: z.array(DaySchema).length(3),
+});
+
 // ---------------------------------------------------------------------------
 // NVIDIA NIM (OpenAI-compatible chat completions endpoint)
 // ---------------------------------------------------------------------------
@@ -51,32 +61,46 @@ const NIM_URL =
   process.env.NVIDIA_NIM_URL ||
   "https://integrate.api.nvidia.com/v1/chat/completions";
 const NIM_MODEL = process.env.NVIDIA_MODEL || "meta/llama-3.1-70b-instruct";
+// Used automatically when the primary model times out or errors (the shared
+// NIM endpoints for popular models get congested); pick a small, always-fast one.
+const NIM_FALLBACK_MODEL =
+  process.env.NVIDIA_FALLBACK_MODEL || "meta/llama-3.1-8b-instruct";
+// Fail fast instead of waiting for NVIDIA's multi-minute gateway timeout.
+const NIM_TIMEOUT_MS = 120_000;
 
-const PLAN_JSON_SPEC = `{
+const DAY_SPEC = `{
+  "day": string,                  // e.g. "Day 1"
+  "total_calories": number,
+  "meals": [                      // 4-6 meals per day (breakfast, snacks, lunch, dinner)
+    {
+      "name": string,             // e.g. "Breakfast"
+      "time": string,             // 24h format, e.g. "08:00"
+      "items": [ { "food": string, "quantity": string } ],  // quantity compact, e.g. "2 rotis", "150 g"
+      "notes": string,            // usually "", max 5 words
+      "calories": number,         // estimated kcal for this meal
+      "protein_g": number,
+      "carbs_g": number,
+      "fat_g": number
+    }
+  ]
+}`;
+
+const PART_ONE_SPEC = `{
   "summary": string,                  // 2-3 sentence overview of the plan strategy for this client
   "daily_calories": number,           // target kcal/day
   "macros": { "protein_g": number, "carbs_g": number, "fat_g": number },
-  "guidelines": string[],             // 4-7 short practical rules
+  "guidelines": string[],             // max 5 short practical rules (max 12 words each)
   "hydration": string,                // daily water guidance
-  "days": [                           // EXACTLY 7 entries, "Day 1" .. "Day 7"
-    {
-      "day": string,
-      "total_calories": number,
-      "meals": [                      // 4-6 meals per day (breakfast, snacks, lunch, dinner)
-        {
-          "name": string,             // e.g. "Breakfast"
-          "time": string,             // 24h format, e.g. "08:00"
-          "items": [ { "food": string, "quantity": string } ],  // quantity compact, e.g. "2 rotis", "150 g"
-          "notes": string,
-          "calories": number,         // estimated kcal for this meal
-          "protein_g": number,        // estimated grams of protein in this meal
-          "carbs_g": number,          // estimated grams of carbohydrates in this meal
-          "fat_g": number             // estimated grams of fat in this meal
-        }
-      ]
-    }
+  "days": [                           // EXACTLY 4 entries: "Day 1" .. "Day 4"
+    ${DAY_SPEC}
   ],
-  "foods_to_avoid": string[]
+  "foods_to_avoid": string[]          // max 6 short entries
+}`;
+
+const PART_TWO_SPEC = `{
+  "days": [                           // EXACTLY 3 entries: "Day 5", "Day 6", "Day 7"
+    ${DAY_SPEC}
+  ]
 }`;
 
 export interface PlanContext {
@@ -101,8 +125,8 @@ function dietRules(dietType: string): string {
   }
 }
 
-function compactPreviousPlan(plan: DietPlan): string {
-  return plan.days
+function compactDays(days: DietPlan["days"]): string {
+  return days
     .map(
       (d) =>
         `${d.day}: ${d.meals
@@ -112,15 +136,13 @@ function compactPreviousPlan(plan: DietPlan): string {
     .join("\n");
 }
 
-function buildMessages(ctx: PlanContext): ChatMessage[] {
-  const { intake, week, previousPlan, followup } = ctx;
+function buildSystem(intake: IntakeForm, spec: string, dayRule: string): string {
+  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.
 
-  const system = `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.
-
-You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON.
+You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON. Output MINIFIED JSON on a single line without indentation or unnecessary whitespace.
 
 The JSON must match this exact shape:
-${PLAN_JSON_SPEC}
+${spec}
 
 Hard rules:
 1. ${dietRules(intake.dietType)}
@@ -128,11 +150,14 @@ Hard rules:
 3. NEVER include foods the client dislikes.
 4. Prefer foods the client likes and their preferred cuisines where healthy.
 5. Adapt the plan to all stated medical conditions (e.g. low-GI for diabetes, low-sodium for hypertension, PCOS-friendly, etc.).
-6. "days" must contain EXACTLY 7 entries named "Day 1" through "Day 7".
+6. ${dayRule}
 7. Keep food names and quantities short and specific. Use realistic household measures.
-8. Calories and macros must be internally consistent and appropriate for the client's stats, activity and goal.
-9. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. The meal calories of each day must add up to that day's "total_calories" (within ~5%), which should be close to "daily_calories". Vary meal times sensibly around the client's schedule.`;
+8. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
+9. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.`;
+}
 
+function profileText(ctx: PlanContext): string {
+  const { intake, followup } = ctx;
   const profile = {
     name: intake.fullName,
     age: intake.age,
@@ -168,10 +193,10 @@ Hard rules:
     dietitian_notes: intake.notes,
   };
 
-  let user = `Create the Week ${week} one-week diet plan for this client:\n${JSON.stringify(profile, null, 2)}`;
+  let text = JSON.stringify(profile, null, 2);
 
   if (followup) {
-    user += `\n\nThis week's follow-up check-in:\n${JSON.stringify(
+    text += `\n\nThis week's follow-up check-in:\n${JSON.stringify(
       {
         current_weight_kg: followup.weightKg,
         adherence_to_last_plan: followup.adherence,
@@ -185,16 +210,7 @@ Hard rules:
     )}\nAdjust the plan based on progress, adherence and complaints.`;
   }
 
-  if (previousPlan) {
-    user += `\n\nLast week's meals (keep what worked, introduce sensible variety, do not repeat the exact same menu):\n${compactPreviousPlan(previousPlan)}`;
-  }
-
-  user += `\n\nReturn ONLY the JSON object.`;
-
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
+  return text;
 }
 
 function extractJson(raw: string): unknown {
@@ -209,15 +225,28 @@ function extractJson(raw: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function callNim(messages: ChatMessage[]): Promise<string> {
+class NimError extends Error {
+  transient: boolean;
+  constructor(message: string, transient: boolean) {
+    super(message);
+    this.transient = transient;
+  }
+}
+
+async function callNimOnce(
+  messages: ChatMessage[],
+  model: string,
+  maxTokens = 8192,
+  jsonMode = true
+): Promise<string> {
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) {
-    throw new Error("NVIDIA_API_KEY is not configured on the server");
+    throw new NimError("NVIDIA_API_KEY is not configured on the server", false);
   }
 
-  let lastError = "";
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    const res = await fetch(NIM_URL, {
+  let res: Response;
+  try {
+    res = await fetch(NIM_URL, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -225,68 +254,174 @@ async function callNim(messages: ChatMessage[]): Promise<string> {
         Accept: "application/json",
       },
       body: JSON.stringify({
-        model: NIM_MODEL,
+        model,
         messages,
-        temperature: 0.5,
+        temperature: 0.4,
         top_p: 0.9,
-        max_tokens: 4096,
+        max_tokens: maxTokens,
         stream: false,
+        // Constrained decoding — guarantees syntactically valid JSON on models
+        // that support it (schema shape is still validated with Zod after).
+        ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
       }),
+      signal: AbortSignal.timeout(NIM_TIMEOUT_MS),
     });
-
-    if (res.ok) {
-      const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-      const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error("NVIDIA NIM returned an empty response");
-      return content;
-    }
-
-    const body = await res.text().catch(() => "");
-    lastError = `NVIDIA NIM request failed (${res.status}): ${body.slice(0, 500)}`;
-
-    // Retry once on transient upstream errors (gateway timeouts, overload)
-    const transient = res.status === 429 || res.status >= 500;
-    if (!transient || attempt === 2) break;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  } catch (e) {
+    // Timeouts and network failures are transient — worth trying the fallback.
+    const reason = e instanceof Error ? e.name || e.message : String(e);
+    throw new NimError(`NVIDIA NIM (${model}) unreachable: ${reason}`, true);
   }
 
-  throw new Error(lastError);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    // Some models reject json mode or cap completion length lower — degrade once.
+    if (res.status === 400 && jsonMode && /response_format/i.test(body)) {
+      return callNimOnce(messages, model, maxTokens, false);
+    }
+    if (res.status === 400 && maxTokens > 4096 && /max_tokens/i.test(body)) {
+      return callNimOnce(messages, model, 4096, jsonMode);
+    }
+    throw new NimError(
+      `NVIDIA NIM (${model}) failed (${res.status}): ${body.slice(0, 300)}`,
+      res.status === 429 || res.status >= 500
+    );
+  }
+
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new NimError(`NVIDIA NIM (${model}) returned an empty response`, true);
+  return content;
+}
+
+async function callNim(messages: ChatMessage[]): Promise<string> {
+  try {
+    return await callNimOnce(messages, NIM_MODEL);
+  } catch (e) {
+    const transient = e instanceof NimError ? e.transient : true;
+    if (!transient || NIM_FALLBACK_MODEL === NIM_MODEL) throw e;
+    console.warn(
+      `Primary model failed (${e instanceof Error ? e.message : e}); ` +
+        `falling back to ${NIM_FALLBACK_MODEL}`
+    );
+    return await callNimOnce(messages, NIM_FALLBACK_MODEL);
+  }
 }
 
 /**
- * Generates a validated 1-week diet plan. Makes up to 2 attempts: if the first
- * response fails JSON parsing or schema validation, the errors are fed back to
- * the model for one corrected retry.
+ * Calls the model and validates the response against a schema, giving the
+ * model one corrective retry (validation errors are fed back; truncated
+ * responses get a fresh, stronger brevity instruction instead).
  */
-export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
-  const messages = buildMessages(ctx);
+async function generateValidated<T>(
+  messages: ChatMessage[],
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  expectation: string
+): Promise<T> {
   let lastError = "";
 
   for (let attempt = 1; attempt <= 2; attempt++) {
     const content = await callNim(messages);
 
+    let json: unknown;
     try {
-      const json = extractJson(content);
-      const parsed = DietPlanSchema.safeParse(json);
-      if (parsed.success) return parsed.data;
-      lastError = parsed.error.issues
-        .slice(0, 8)
-        .map((i) => `${i.path.join(".")}: ${i.message}`)
-        .join("; ");
+      json = extractJson(content);
     } catch (e) {
+      // Unparseable usually means the output hit the completion-length cap.
+      // Echoing the huge broken response back would only make the next attempt
+      // longer — retry with a stronger brevity instruction instead.
       lastError = e instanceof Error ? e.message : String(e);
+      messages.push(
+        { role: "assistant", content: content.slice(0, 200) + " …[cut off]" },
+        {
+          role: "user",
+          content: `Your response was cut off because it was too long. Return the COMPLETE minified JSON again, much more concisely: empty "notes", max 3 items per meal, food names under 4 words. ${expectation}. JSON only.`,
+        }
+      );
+      continue;
     }
+
+    const parsed = schema.safeParse(json);
+    if (parsed.success) return parsed.data;
+    lastError = parsed.error.issues
+      .slice(0, 8)
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
 
     messages.push(
       { role: "assistant", content },
       {
         role: "user",
-        content: `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected JSON object only — no other text, exactly 7 days.`,
+        content: `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected minified JSON object only — no other text. ${expectation}.`,
       }
     );
   }
 
   throw new Error(`AI returned an invalid diet plan after 2 attempts: ${lastError}`);
+}
+
+/**
+ * Generates a validated 1-week diet plan in two model calls (overview + days
+ * 1-4, then days 5-7) so each response stays within the completion-length
+ * limits of NVIDIA's shared NIM endpoints.
+ */
+export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
+  const { intake, week, previousPlan } = ctx;
+
+  // ---- Part 1: plan overview + days 1-4
+  const partOneMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: buildSystem(
+        intake,
+        PART_ONE_SPEC,
+        '"days" must contain EXACTLY 4 entries named "Day 1" through "Day 4" (days 5-7 are requested separately).'
+      ),
+    },
+    {
+      role: "user",
+      content:
+        `Create the overview and days 1-4 of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        (previousPlan
+          ? `\n\nLast week's meals (keep what worked, introduce sensible variety, do not repeat the exact same menu):\n${compactDays(previousPlan.days)}`
+          : "") +
+        `\n\nReturn ONLY the JSON object.`,
+    },
+  ];
+  const partOne = await generateValidated(
+    partOneMessages,
+    PartOneSchema,
+    'exactly 4 days ("Day 1" to "Day 4")'
+  );
+
+  // ---- Part 2: days 5-7, aware of days 1-4 for variety
+  const partTwoMessages: ChatMessage[] = [
+    {
+      role: "system",
+      content: buildSystem(
+        intake,
+        PART_TWO_SPEC,
+        '"days" must contain EXACTLY 3 entries named "Day 5", "Day 6" and "Day 7".'
+      ),
+    },
+    {
+      role: "user",
+      content:
+        `Create days 5-7 of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        `\n\nDaily target: ~${Math.round(partOne.daily_calories)} kcal (protein ${Math.round(partOne.macros.protein_g)}g, carbs ${Math.round(partOne.macros.carbs_g)}g, fat ${Math.round(partOne.macros.fat_g)}g).` +
+        `\n\nDays 1-4 already planned (add variety, do not repeat the same menus):\n${compactDays(partOne.days)}` +
+        `\n\nReturn ONLY the JSON object.`,
+    },
+  ];
+  const partTwo = await generateValidated(
+    partTwoMessages,
+    PartTwoSchema,
+    'exactly 3 days ("Day 5" to "Day 7")'
+  );
+
+  return DietPlanSchema.parse({
+    ...partOne,
+    days: [...partOne.days, ...partTwo.days],
+  });
 }

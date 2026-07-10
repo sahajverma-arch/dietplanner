@@ -6,7 +6,7 @@ import { renderPlanPdf } from "@/lib/pdf";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const BodySchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("first"), form: z.record(z.any()) }),
