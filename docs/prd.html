@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LEANR Diet Platform — Product Requirements Document</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #18181b; font-size: 10.5pt; line-height: 1.55; margin: 0; }
+  .cover { background: #0a0a0a; color: #fff; border-radius: 10px; padding: 28px 30px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; }
+  .cover h1 { margin: 0; font-size: 20pt; }
+  .cover h1 .brand { color: #FFED00; }
+  .cover .sub { color: #d4d4d8; margin-top: 8px; font-size: 10pt; }
+  .cover img { height: 46px; }
+  .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  .meta-table td { border: 1px solid #e4e4e7; padding: 6px 10px; font-size: 9.5pt; }
+  .meta-table td:first-child { background: #fafafa; font-weight: 600; width: 140px; color: #52525b; }
+  h2 { background: #FFED00; color: #0a0a0a; display: inline-block; padding: 3px 12px; border-radius: 4px; font-size: 11.5pt; text-transform: uppercase; letter-spacing: 0.5px; margin: 26px 0 10px; page-break-after: avoid; }
+  h3 { font-size: 11pt; margin: 16px 0 6px; page-break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  table.req { width: 100%; border-collapse: collapse; margin: 8px 0 14px; page-break-inside: auto; }
+  table.req th { background: #0a0a0a; color: #FFED00; text-align: left; padding: 6px 9px; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.4px; }
+  table.req td { border: 1px solid #e4e4e7; padding: 6px 9px; font-size: 9.5pt; vertical-align: top; }
+  table.req tr { page-break-inside: avoid; }
+  table.req td.id { font-weight: 700; white-space: nowrap; width: 64px; }
+  .pill { display: inline-block; background: #FEFCE8; border: 1px solid #eab308; color: #854d0e; border-radius: 999px; padding: 0 8px; font-size: 8.5pt; font-weight: 600; }
+  .note { background: #FEFCE8; border-left: 4px solid #FFED00; padding: 8px 12px; border-radius: 4px; margin: 10px 0; font-size: 9.5pt; }
+  .footer { margin-top: 30px; border-top: 1px solid #e4e4e7; padding-top: 8px; color: #a1a1aa; font-size: 8.5pt; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div>
+    <h1><span class="brand">LEANR</span> Diet Platform</h1>
+    <div class="sub">Product Requirements Document (PRD) · v1.0 · 10 July 2026</div>
+  </div>
+  <img src="../public/logo.png" alt="LEANR by Fitelo">
+</div>
+
+<table class="meta-table">
+  <tr><td>Product</td><td>LEANR Diet Platform — AI-assisted diet counselling &amp; weekly plan management for dietitians</td></tr>
+  <tr><td>Owner</td><td>LEANR by Fitelo (rayan.ranaut@fitelo.co)</td></tr>
+  <tr><td>Status</td><td>v1.0 shipped — live at github.com/sahajverma-arch/dietplanner</td></tr>
+  <tr><td>Platforms</td><td>Web (desktop-first, responsive) · Vercel + Supabase + NVIDIA NIM</td></tr>
+</table>
+
+<h2>1. Overview</h2>
+<p>Dietitians run 45–50 minute first-counselling calls where they collect a client's food preferences, lifestyle, and medical history — then spend significant additional time manually composing a personalised 1-week diet chart, formatting it, and repeating a lighter version of this every week per client. The LEANR Diet Platform removes the composition and formatting work: the dietitian fills a structured form live during the call, and the platform generates a restriction-aware, macro-annotated 7-day plan as a branded, client-ready PDF in about a minute. Weekly follow-ups take a short check-in form and produce the next week's adjusted plan.</p>
+
+<h2>2. Goals &amp; Non-Goals</h2>
+<h3>Goals</h3>
+<ul>
+  <li>Cut per-client plan preparation time from hours to minutes while keeping the dietitian in control of all inputs.</li>
+  <li>Guarantee plans respect hard constraints: diet type (veg / non-veg / vegan / eggetarian), allergies, intolerances, dislikes, and medical conditions.</li>
+  <li>Produce a premium, client-shareable PDF with per-meal calories and macros, daily totals, and a weekly summary.</li>
+  <li>Zero data leakage between dietitians — every record is isolated at the database level.</li>
+  <li>Never lose intake data: the counselling form autosaves continuously during the live call.</li>
+</ul>
+<h3>Non-Goals (v1)</h3>
+<ul>
+  <li>No client-facing portal or login — the dietitian is the only user; plans reach clients as PDFs.</li>
+  <li>No payment/subscription management, scheduling, or CRM features.</li>
+  <li>No medical diagnosis — the AI adapts plans to stated conditions but the dietitian reviews every plan.</li>
+</ul>
+
+<h2>3. Users</h2>
+<p><strong>Primary persona — the practising dietitian.</strong> Handles 20–100 active clients, runs multiple counselling calls per day, needs to capture details fast mid-conversation, and sends every client a weekly chart. Values speed, correctness of restrictions, and a professional-looking deliverable carrying the LEANR brand.</p>
+
+<h2>4. User Journeys</h2>
+<h3>4.1 First counselling (during the call)</h3>
+<ol>
+  <li>Dietitian signs in and clicks <strong>+ New Counselling</strong>.</li>
+  <li>Fills the 5-section form (Basics · Food Preferences · Lifestyle · Medical · Notes) while talking; every change autosaves with a visible "Saved" indicator. Closing the tab and returning restores the draft.</li>
+  <li>Clicks <strong>Generate Week 1 Diet Plan</strong>. The AI composes the plan (~1 min), the PDF is stored, and the person becomes a saved client. The dietitian lands on the client's page with the plan and its downloadable PDF.</li>
+</ol>
+<h3>4.2 Weekly follow-up</h3>
+<ol>
+  <li>Dietitian opens the client card, records weight, adherence, energy, hunger, complaints, and notes.</li>
+  <li>Clicks <strong>Generate Week N Plan</strong> — the AI sees the full intake, the check-in, and last week's menu (for variety) and produces the adjusted week with a fresh PDF added to the plan history.</li>
+</ol>
+
+<h2>5. Functional Requirements</h2>
+<table class="req">
+  <tr><th>ID</th><th>Requirement</th><th>Notes</th></tr>
+  <tr><td class="id">FR-1</td><td>Email/password authentication; a dietitian profile is created automatically on signup.</td><td>Supabase Auth + DB trigger</td></tr>
+  <tr><td class="id">FR-2</td><td>Dashboard lists the dietitian's own clients as cards (goal, diet type, weight, current week, last plan date) with a "+ New Counselling" action.</td><td>RLS-scoped query</td></tr>
+  <tr><td class="id">FR-3</td><td>Multi-section first-counselling form: basics, food preferences (incl. diet type, likes/dislikes/allergies/intolerances), lifestyle, medical (condition checklist, medications, labs), free-text notes.</td><td>5 tabs, single state</td></tr>
+  <tr><td class="id">FR-4</td><td>The counselling form autosaves continuously (debounced ≤2s) server-side and restores on reload; the draft is cleared only after successful plan generation.</td><td>form_drafts table</td></tr>
+  <tr><td class="id">FR-5</td><td>On submit, a strict-JSON 7-day plan is generated server-side honouring all restrictions, with per-meal calories, protein, carbs and fat.</td><td>NVIDIA NIM + Zod validation</td></tr>
+  <tr><td class="id">FR-6</td><td>Every plan is rendered as a branded PDF (macro-report format: per-day meal tables, daily totals, weekly summary) stored in private cloud storage and downloadable via expiring signed URLs.</td><td>@react-pdf/renderer</td></tr>
+  <tr><td class="id">FR-7</td><td>Submitting a first counselling converts the person into a saved client; intake is retained in full for future weeks.</td><td>clients.intake JSONB</td></tr>
+  <tr><td class="id">FR-8</td><td>Weekly follow-up form (weight, adherence, energy, hunger, complaints, notes) generates the next week's plan; client weight is kept current.</td><td>followups table</td></tr>
+  <tr><td class="id">FR-9</td><td>Client page shows the latest plan inline (meals, macros, guidelines), the full plan history with PDF downloads, and the follow-up form.</td><td></td></tr>
+  <tr><td class="id">FR-10</td><td>If generation fails after the client is saved, the intake is preserved and a one-click retry is offered on the client page.</td><td>regenerate endpoint</td></tr>
+</table>
+
+<h2>6. Non-Functional Requirements</h2>
+<table class="req">
+  <tr><th>ID</th><th>Requirement</th></tr>
+  <tr><td class="id">NFR-1</td><td><strong>Isolation:</strong> Postgres Row Level Security on every table (<span class="pill">dietitian_id = auth.uid()</span>) and folder-scoped storage policies; one dietitian can never read another's data, even with the public API key.</td></tr>
+  <tr><td class="id">NFR-2</td><td><strong>Secrets:</strong> the NVIDIA API key is server-side only and never shipped to the browser.</td></tr>
+  <tr><td class="id">NFR-3</td><td><strong>Performance:</strong> plan generation typically completes in ≤90 seconds; hard cap 300 seconds with explicit failure and retry path.</td></tr>
+  <tr><td class="id">NFR-4</td><td><strong>Resilience:</strong> per-call AI timeouts, automatic fallback model when the primary is congested, constrained JSON decoding, schema validation with one corrective retry, and split (two-call) generation to respect provider output limits.</td></tr>
+  <tr><td class="id">NFR-5</td><td><strong>Data safety:</strong> no intake data loss on network failure, generation failure, or tab close (autosaved drafts + preserved clients).</td></tr>
+  <tr><td class="id">NFR-6</td><td><strong>Deployability:</strong> single-command Vercel deploy; entire database provisioned by one SQL migration.</td></tr>
+</table>
+
+<h2>7. Success Metrics</h2>
+<ul>
+  <li>Median time from "form complete" to "PDF in hand" ≤ 2 minutes (target ~1 minute).</li>
+  <li>≥ 95% of generation attempts produce a valid plan (including automatic retries/fallback).</li>
+  <li>Zero cross-tenant data access incidents.</li>
+  <li>Zero reported intake-data losses during live calls.</li>
+</ul>
+
+<h2>8. Future Scope (v2 candidates)</h2>
+<ul>
+  <li>WhatsApp/email delivery of the weekly PDF directly to the client.</li>
+  <li>Meal-level swap suggestions ("replace this meal") without regenerating the full week.</li>
+  <li>Client progress analytics (weight trend, adherence history) on the client page.</li>
+  <li>Plan templates and a dietitian-editable food database for tighter macro accuracy.</li>
+  <li>Multi-dietitian clinics with team/admin roles.</li>
+</ul>
+
+<div class="note"><strong>Review policy:</strong> every AI-generated plan is presented to the dietitian before it reaches a client; the PDF footer states the plan was generated with AI assistance and reviewed by the dietitian, and is not a substitute for medical advice.</div>
+
+<div class="footer">LEANR Diet Platform · Product Requirements Document v1.0 · 10 July 2026 · LEANR by Fitelo</div>
+
+</body>
+</html>

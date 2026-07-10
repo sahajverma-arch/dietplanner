@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LEANR Diet Platform — Technical Documentation</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #18181b; font-size: 10pt; line-height: 1.55; margin: 0; }
+  .cover { background: #0a0a0a; color: #fff; border-radius: 10px; padding: 28px 30px; margin-bottom: 22px; display: flex; justify-content: space-between; align-items: center; }
+  .cover h1 { margin: 0; font-size: 20pt; }
+  .cover h1 .brand { color: #FFED00; }
+  .cover .sub { color: #d4d4d8; margin-top: 8px; font-size: 10pt; }
+  .cover img { height: 46px; }
+  h2 { background: #FFED00; color: #0a0a0a; display: inline-block; padding: 3px 12px; border-radius: 4px; font-size: 11.5pt; text-transform: uppercase; letter-spacing: 0.5px; margin: 24px 0 10px; page-break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 14px 0 6px; page-break-after: avoid; }
+  p { margin: 6px 0; }
+  ul, ol { margin: 6px 0; padding-left: 22px; }
+  li { margin-bottom: 3px; }
+  code, pre { font-family: Consolas, "Courier New", monospace; }
+  code { background: #f4f4f5; border: 1px solid #e4e4e7; border-radius: 3px; padding: 0 4px; font-size: 8.8pt; }
+  pre { background: #0a0a0a; color: #e4e4e7; border-radius: 6px; padding: 10px 14px; font-size: 8.3pt; line-height: 1.5; overflow: hidden; white-space: pre-wrap; page-break-inside: avoid; }
+  pre .y { color: #FFED00; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; }
+  th { background: #0a0a0a; color: #FFED00; text-align: left; padding: 5px 9px; font-size: 8.6pt; text-transform: uppercase; letter-spacing: 0.4px; }
+  td { border: 1px solid #e4e4e7; padding: 5px 9px; font-size: 9pt; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  .note { background: #FEFCE8; border-left: 4px solid #FFED00; padding: 8px 12px; border-radius: 4px; margin: 10px 0; font-size: 9.3pt; }
+  .footer { margin-top: 30px; border-top: 1px solid #e4e4e7; padding-top: 8px; color: #a1a1aa; font-size: 8.5pt; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div>
+    <h1><span class="brand">LEANR</span> Diet Platform</h1>
+    <div class="sub">Technical Documentation · v1.0 · 10 July 2026</div>
+  </div>
+  <img src="../public/logo.png" alt="LEANR by Fitelo">
+</div>
+
+<h2>1. Architecture Overview</h2>
+<pre>
+Browser (dietitian)
+   │  cookie session (@supabase/ssr)
+   ▼
+<span class="y">Next.js 14 App Router</span> — Vercel
+   ├─ Server Components ──────────► <span class="y">Supabase Postgres</span> (RLS on every table)
+   ├─ middleware.ts (auth gate + token refresh)
+   └─ POST /api/generate-plan
+        ├─► <span class="y">NVIDIA NIM</span> chat completions (2 calls: days 1-4 + days 5-7)
+        ├─► @react-pdf/renderer → PDF buffer
+        └─► <span class="y">Supabase Storage</span> (private bucket, signed URLs)
+</pre>
+<p>All database and storage writes execute <em>as the signed-in user</em> via the cookie-bound Supabase client — there is no service-role key anywhere, so Row Level Security is the single source of authorization.</p>
+
+<h3>Stack</h3>
+<table>
+  <tr><th>Layer</th><th>Technology</th></tr>
+  <tr><td>Frontend / SSR</td><td>Next.js 14 (App Router), TypeScript, Tailwind CSS (dark LEANR theme, brand yellow <code>#FFED00</code>)</td></tr>
+  <tr><td>Auth / DB / Files</td><td>Supabase — Postgres + Auth + Storage, <code>@supabase/ssr</code> cookie sessions</td></tr>
+  <tr><td>AI</td><td>NVIDIA NIM OpenAI-compatible endpoint — default <code>meta/llama-3.1-70b-instruct</code>, configurable + automatic fallback</td></tr>
+  <tr><td>PDF</td><td><code>@react-pdf/renderer</code> server-side (<code>renderToBuffer</code>)</td></tr>
+  <tr><td>Hosting</td><td>Vercel (Node runtime; generate route <code>maxDuration = 300</code>)</td></tr>
+</table>
+
+<h2>2. Repository Structure</h2>
+<pre>
+supabase/migrations/0001_init.sql   tables + RLS + signup trigger + storage bucket/policies
+scripts/render-sample-pdf.tsx       dev utility: render the PDF layout without calling the AI
+src/
+  middleware.ts                     session refresh + redirect unauthenticated → /login
+  app/
+    login/page.tsx                  sign in / sign up
+    page.tsx                        dashboard (client cards, + New Counselling)
+    counselling/new/page.tsx        first-counselling form (loads draft server-side)
+    clients/[id]/page.tsx           client detail: latest plan, history, follow-up form
+    api/generate-plan/route.ts      the generation pipeline (see §5)
+    auth/signout/route.ts
+  lib/
+    nim.ts                          NIM client, prompts, Zod schemas, fallback/timeout logic
+    pdf.tsx                         premium macro-report PDF document
+    logo.ts                         logo as base64 data URI (embedded in PDFs)
+    supabase/{client,server}.ts     browser / server Supabase factories
+    types.ts                        IntakeForm, FollowUpInput, row types
+  components/                       CounsellingForm (autosave), FollowUpForm, PlanView,
+                                    ClientCard, AppHeader, DownloadPdfButton, RegenerateButton
+</pre>
+
+<h2>3. Data Model</h2>
+<table>
+  <tr><th>Table</th><th>Purpose</th><th>Key columns</th></tr>
+  <tr><td><code>profiles</code></td><td>One row per dietitian; auto-created by trigger <code>on_auth_user_created</code></td><td><code>id (= auth.users.id)</code>, <code>full_name</code></td></tr>
+  <tr><td><code>clients</code></td><td>Clients owned by a dietitian; full intake retained</td><td><code>dietitian_id</code>, basics columns, <code>intake JSONB</code></td></tr>
+  <tr><td><code>diet_plans</code></td><td>One row per generated weekly plan</td><td><code>client_id</code>, <code>week_number</code>, <code>source</code> (first_counselling | follow_up), <code>plan JSONB</code>, <code>pdf_path</code></td></tr>
+  <tr><td><code>followups</code></td><td>Weekly check-in used to generate the next plan</td><td><code>client_id</code>, <code>week_number</code>, <code>weight_kg</code>, <code>adherence</code>, <code>data JSONB</code></td></tr>
+  <tr><td><code>form_drafts</code></td><td>Live autosave of the counselling form</td><td><code>unique (dietitian_id, kind)</code>, <code>data JSONB</code></td></tr>
+</table>
+<p><strong>RLS:</strong> every table has <code>FOR ALL USING (dietitian_id = auth.uid()) WITH CHECK (dietitian_id = auth.uid())</code> (profiles: <code>id = auth.uid()</code>). <strong>Storage:</strong> private bucket <code>diet-pdfs</code>; object paths are <code>&lt;dietitian_id&gt;/&lt;client_id&gt;/week-N-&lt;ts&gt;.pdf</code> and policies require the first folder segment to equal <code>auth.uid()</code>. Downloads use 1-hour signed URLs created client-side (RLS applies).</p>
+
+<h2>4. Authentication Flow</h2>
+<ul>
+  <li><code>src/middleware.ts</code> runs on every request: refreshes the Supabase session cookie and redirects unauthenticated users to <code>/login</code> (and authenticated users away from it).</li>
+  <li>Server components and route handlers build a per-request client via <code>lib/supabase/server.ts</code> (cookie-bound). The browser uses <code>lib/supabase/client.ts</code>.</li>
+  <li>Signup passes <code>full_name</code> in user metadata; a <code>SECURITY DEFINER</code> trigger copies it into <code>profiles</code>.</li>
+</ul>
+
+<h2>5. AI Generation Pipeline (<code>src/lib/nim.ts</code>)</h2>
+<p>The shared NIM serving functions cap completions at roughly 2k tokens — a full 7-day plan with per-meal macros does not fit in one response. The plan is therefore generated in <strong>two calls</strong> and merged:</p>
+<ol>
+  <li><strong>Part 1</strong> — overview (summary, daily calories, macro targets, guidelines, hydration, foods to avoid) + days 1–4.</li>
+  <li><strong>Part 2</strong> — days 5–7; the prompt includes a compact listing of days 1–4 meals so menus vary, plus the part-1 calorie/macro targets for consistency.</li>
+</ol>
+<p>Each call goes through the same hardened path:</p>
+<ul>
+  <li><strong>Constrained decoding:</strong> <code>response_format: {type: "json_object"}</code>; degrades gracefully (one retry without it) if a model rejects the parameter, same for <code>max_tokens</code> above a model's cap.</li>
+  <li><strong>Timeout:</strong> <code>AbortSignal.timeout(120s)</code> per call — never waits on NVIDIA's multi-minute gateway 504s.</li>
+  <li><strong>Fallback model:</strong> any transient failure (timeout, 429, 5xx, network) retries once on <code>NVIDIA_FALLBACK_MODEL</code> (default <code>meta/llama-3.1-8b-instruct</code>).</li>
+  <li><strong>Validation:</strong> responses are parsed (code-fence tolerant) and validated with Zod (<code>PartOneSchema</code> / <code>PartTwoSchema</code>; merged result re-validated against <code>DietPlanSchema</code> — exactly 7 days). One corrective retry feeds validation errors back; truncated responses instead get a fresh brevity instruction (the broken output is <em>not</em> echoed back).</li>
+  <li><strong>Hard rules in the system prompt:</strong> diet-type enforcement (vegan/veg/eggetarian/non-veg), absolute exclusion of allergies/intolerances/dislikes, adaptation to medical conditions, per-meal macros that sum to daily totals (±5%).</li>
+</ul>
+
+<h3>Plan JSON contract (stored in <code>diet_plans.plan</code>)</h3>
+<pre>{ "summary": string, "daily_calories": number,
+  "macros": {"protein_g": n, "carbs_g": n, "fat_g": n},
+  "guidelines": string[], "hydration": string, "foods_to_avoid": string[],
+  "days": [ 7 × { "day": "Day N", "total_calories": n, "meals": [
+    { "name": "Breakfast", "time": "08:00",
+      "items": [{"food": string, "quantity": string}], "notes": string,
+      "calories": n, "protein_g": n, "carbs_g": n, "fat_g": n } ] } ] }</pre>
+
+<h2>6. API Reference — <code>POST /api/generate-plan</code></h2>
+<p>Auth: session cookie (401 otherwise). Runtime: Node, <code>maxDuration 300</code>. Three request variants:</p>
+<table>
+  <tr><th>Body</th><th>Behaviour</th></tr>
+  <tr><td><code>{"type":"first","form": IntakeForm}</code></td><td>Creates the client, generates Week 1, renders + stores PDF, inserts plan row, clears the autosaved draft. Returns <code>{clientId, planId, week}</code>.</td></tr>
+  <tr><td><code>{"type":"followup","clientId","followup": FollowUpInput}</code></td><td>Inserts the follow-up row, updates client weight, generates week <code>latest+1</code> seeing the previous menu.</td></tr>
+  <tr><td><code>{"type":"regenerate","clientId"}</code></td><td>Retries generation from stored intake (used when a first generation failed after the client was saved).</td></tr>
+</table>
+<p><strong>Errors:</strong> 400 invalid body · 401 unauthenticated · 404 unknown client · 502 with <code>{error, clientId?}</code> when generation/PDF/storage fails — the UI uses <code>clientId</code> to route to the client page where retry is offered. The PDF filename pattern is <code>week-N-&lt;timestamp&gt;.pdf</code>; plan start date is the day after generation (day labels on the PDF are real dates).</p>
+
+<h2>7. PDF Rendering (<code>src/lib/pdf.tsx</code>)</h2>
+<ul>
+  <li>Premium macro-report layout: black header band with client name + LEANR logo (embedded data URI from <code>lib/logo.ts</code>), macro target cards, color legend, per-day tables (Time | Meal | Foods | Calories | Protein | Carbs | Fat | Cal%), highlighted Daily Total rows, Weekly Summary with P%/C%/F%, guidelines, foods to avoid, and a two-line disclaimer footer on every page.</li>
+  <li>Daily totals, Cal% and the weekly summary are <em>computed from meal data</em>, never trusted from the model.</li>
+  <li><code>next.config.mjs</code> marks <code>@react-pdf/renderer</code> as a server external package (required for the Node runtime bundle).</li>
+  <li>Preview the layout without the AI: <code>npx tsx scripts/render-sample-pdf.tsx out.pdf</code>.</li>
+</ul>
+
+<h2>8. Autosave Design</h2>
+<p><code>CounsellingForm</code> debounces every state change (1.2s) into an upsert on <code>form_drafts</code> keyed by <code>(dietitian_id, kind)</code>, with a live Saving/Saved/Failed indicator. The draft is fetched server-side on page load (no flash) and deleted only after a successful generation, so a failed generation or closed tab never loses call notes.</p>
+
+<h2>9. Environment Variables</h2>
+<table>
+  <tr><th>Variable</th><th>Scope</th><th>Notes</th></tr>
+  <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td>client + server</td><td>Supabase project URL</td></tr>
+  <tr><td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>client + server</td><td>Safe to expose — RLS enforces access</td></tr>
+  <tr><td><code>NVIDIA_API_KEY</code></td><td><strong>server only</strong></td><td>From build.nvidia.com; never sent to the browser</td></tr>
+  <tr><td><code>NVIDIA_MODEL</code></td><td>server, optional</td><td>Default <code>meta/llama-3.1-70b-instruct</code>; <code>mistralai/mistral-small-4-119b-2603</code> is a fast, strong alternative when the default is congested</td></tr>
+  <tr><td><code>NVIDIA_FALLBACK_MODEL</code></td><td>server, optional</td><td>Default <code>meta/llama-3.1-8b-instruct</code>; used automatically on transient failures</td></tr>
+  <tr><td><code>NVIDIA_NIM_URL</code></td><td>server, optional</td><td>Default <code>https://integrate.api.nvidia.com/v1/chat/completions</code></td></tr>
+</table>
+
+<h2>10. Setup &amp; Deployment</h2>
+<ol>
+  <li><strong>Supabase:</strong> create a project; run <code>supabase/migrations/0001_init.sql</code> in the SQL Editor (creates all tables, RLS, trigger, bucket, policies). Recommended: disable "Confirm email" under Authentication → Sign In / Providers → Email (the built-in mailer is rate-limited to ~2 emails/hour).</li>
+  <li><strong>Local:</strong> <code>npm install</code> → copy <code>.env.example</code> to <code>.env.local</code> and fill the three keys → <code>npm run dev</code>.</li>
+  <li><strong>Vercel:</strong> import the GitHub repo, set the env vars, deploy; then add the Vercel domain to Supabase Authentication → URL Configuration.</li>
+</ol>
+
+<h2>11. Operations &amp; Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>Cause / fix</th></tr>
+  <tr><td>Generation slow or 502 with "NVIDIA NIM … failed (504)"</td><td>Shared free NIM endpoint congested. The fallback model usually still succeeds; optionally set <code>NVIDIA_MODEL</code> to a healthier model. Retry from the client page — intake is never lost.</td></tr>
+  <tr><td>"AI returned an invalid diet plan after 2 attempts"</td><td>Rare double validation failure — retry. Persistent cases: check the model supports <code>response_format</code> and ~2k-token outputs per half-plan.</td></tr>
+  <tr><td>"Email rate limit exceeded" on signup</td><td>Supabase's built-in mailer (~2/hour). Disable Confirm email, or delete the stuck unconfirmed user and retry.</td></tr>
+  <tr><td>PDF download does nothing</td><td>Pop-up blocked, or storage policies missing — re-run the migration section for <code>storage.objects</code> policies.</td></tr>
+  <tr><td>401 from NIM</td><td>Bad/missing <code>NVIDIA_API_KEY</code>.</td></tr>
+</table>
+
+<div class="note"><strong>Security summary:</strong> no service-role key in the codebase; all reads/writes ride the user's JWT through RLS; the private bucket is only reachable through per-user policies and short-lived signed URLs; the only server-held secret is the NVIDIA key.</div>
+
+<div class="footer">LEANR Diet Platform · Technical Documentation v1.0 · 10 July 2026 · LEANR by Fitelo</div>
+
+</body>
+</html>
