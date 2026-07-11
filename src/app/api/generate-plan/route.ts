@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { generateDietPlan, DietPlanSchema, type DietPlan } from "@/lib/nim";
+import { groundPlan } from "@/lib/nutrition";
 import { renderPlanPdf } from "@/lib/pdf";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
@@ -134,7 +135,24 @@ export async function POST(request: Request) {
     }
 
     // ---- AI generation (server-side; NVIDIA_API_KEY never leaves the server)
-    const plan = await generateDietPlan({ intake, week, previousPlan, followup });
+    let plan = await generateDietPlan({ intake, week, previousPlan, followup });
+
+    // ---- Ground macros in the foods reference table (INDB + USDA). Never
+    // fatal: if the table isn't seeded yet, the model estimates are kept.
+    try {
+      const grounded = await groundPlan(supabase, plan);
+      plan = grounded.plan;
+      console.log(
+        `nutrition grounding: ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ` +
+          `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
+          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
+      );
+    } catch (groundError) {
+      console.warn(
+        "nutrition grounding skipped:",
+        groundError instanceof Error ? groundError.message : groundError
+      );
+    }
 
     // ---- Render PDF and store it in the private bucket under the dietitian's folder
     const planStart = new Date();

@@ -42,6 +42,13 @@ Security** so every dietitian sees only their own clients.
 
 ```
 supabase/migrations/0001_init.sql   # tables + RLS + trigger + storage bucket/policies
+supabase/migrations/0002_foods.sql  # foods reference table + fuzzy-match function
+supabase/migrations/0003_match_ranking.sql  # blended match scoring (exact/INDB/raw rules)
+scripts/
+  seed-foods.mjs                    # seeds public.foods from scripts/data/*.json
+  data/indb_foods.json              # INDB — 1,014 Indian recipes (ICMR-NIN IFCT based)
+  data/usda_foods.json              # USDA SR Legacy — 6,781 generic foods (CC0)
+  data/staples.json                 # curated exact-name staples ("Roti", "Banana", "Curd")
 src/
   middleware.ts                     # session refresh + auth-gate for all routes
   app/
@@ -49,14 +56,36 @@ src/
     page.tsx                        # dashboard — client cards + "+ New Counselling"
     counselling/new/page.tsx        # first-counselling form (autosave)
     clients/[id]/page.tsx           # client detail, plan history, follow-up form
-    api/generate-plan/route.ts      # NIM call + Zod validation + PDF + storage
+    api/generate-plan/route.ts      # NIM call + Zod validation + grounding + PDF
     auth/signout/route.ts
   lib/
     nim.ts                          # NVIDIA NIM client, prompt, strict plan schema
+    nutrition.ts                    # grounds AI macro estimates in the foods table
     pdf.tsx                         # @react-pdf/renderer document
     supabase/{client,server}.ts     # browser / server Supabase clients
   components/                       # forms, cards, plan viewer, PDF download
 ```
+
+## Nutrition grounding (foods reference database)
+
+The model is good at composing culturally appropriate menus but only *estimates*
+calories/macros. After generation, `src/lib/nutrition.ts` re-computes every meal's
+numbers from a credible reference table:
+
+- **INDB** — [Indian Nutrient Databank](https://www.anuvaad.org.in/indian-nutrient-databank/)
+  (Anuvaad Solutions, built on **ICMR-NIN IFCT 2017**): 1,014 Indian recipes with
+  per-100 g nutrients *and* household serving weights (one parantha = 56 g, one bowl
+  of dal makhani = 353 g). Cite: *Vijayakumar A, Dubasi HB, Awasthi A, Jaacks LM.
+  Development of an Indian Food Composition Database. Curr Dev Nutr. 2024.*
+- **USDA FoodData Central (SR Legacy)** — 6,781 generic/raw foods, public domain (CC0).
+
+How it works per plan: all item names go to Postgres in **one RPC**
+(`match_foods_batch`, `pg_trgm` fuzzy matching with a small preference for Indian
+entries), quantities like `"2 rotis"`, `"150 g"`, `"1 katori"` are resolved to grams,
+and a meal's macros are replaced **only when every item in it matched and resolved** —
+otherwise that meal keeps the model's estimate (mixing DB values for some items with
+nothing for the rest would undercount). Grounding is non-fatal: if the `foods` table
+is missing or empty, plans generate exactly as before.
 
 ## Setup
 
@@ -67,7 +96,11 @@ src/
    `supabase/migrations/0001_init.sql`, and run it. This creates all tables, RLS
    policies, the signup trigger, the private `diet-pdfs` bucket and its policies.
    (Alternative: `supabase link && supabase db push` with the CLI.)
-3. *(Recommended for quick start)* **Authentication → Sign In / Providers → Email**:
+3. Repeat with `supabase/migrations/0002_foods.sql` and `0003_match_ranking.sql`
+   (foods reference table + match scoring), then seed it: put your **service_role**
+   key in `.env.local` as `SUPABASE_SERVICE_ROLE_KEY` and run `npm run seed:foods`
+   (~7,900 rows, one-off; safe to re-run — it upserts).
+4. *(Recommended for quick start)* **Authentication → Sign In / Providers → Email**:
    turn **off** "Confirm email" so dietitians can sign in immediately after signup.
    If you keep it on, users must click the confirmation link first — the app handles
    both cases.
@@ -126,6 +159,7 @@ NVIDIA_API_KEY=nvapi-...
 | `NEXT_PUBLIC_SUPABASE_URL` | client + server | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server | Safe to expose — RLS enforces access |
 | `NVIDIA_API_KEY` | **server only** | Never exposed to the browser |
+| `SUPABASE_SERVICE_ROLE_KEY` | **local seeding only** | Only needed to run `npm run seed:foods`; never deploy it to Vercel |
 | `NVIDIA_MODEL` | server, optional | Defaults to `meta/llama-3.1-70b-instruct`; if that shared endpoint is congested, `mistralai/mistral-small-4-119b-2603` is a fast, strong alternative |
 | `NVIDIA_FALLBACK_MODEL` | server, optional | Tried automatically when the primary model times out or errors; defaults to `meta/llama-3.1-8b-instruct` |
 | `NVIDIA_NIM_URL` | server, optional | Defaults to the hosted NIM endpoint |

@@ -430,7 +430,8 @@ function PlanDocument({
             </View>
           </View>
           <Text style={styles.disclaimer}>
-            Macros are estimated values based on standard portion sizes.
+            Nutrition data: ICMR-NIN IFCT/INDB &amp; USDA FoodData Central where
+            matched; otherwise estimated from standard portions.
           </Text>
         </View>
 
