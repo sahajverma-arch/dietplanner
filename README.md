@@ -87,8 +87,15 @@ also press **Sync sheet now** on `/admin`. The sync upserts only sheet columns, 
 workflow status survives re-syncs. Setup:
 
 1. Run `supabase/migrations/0005_counselling_activity.sql`.
-2. Make the sheet link-viewable, set `COUNSELLING_SHEET_CSV_URL` to
-   `https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=csv&gid=0`.
+2. Sheet access, either:
+   - **Private (recommended):** create a service account in Google Cloud, enable the
+     Sheets API, share the sheet with the service account email (Viewer), set
+     `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_KEY` (private key,
+     `\n`-escaped) and `COUNSELLING_SHEET_ID`. The sheet's link sharing can then be
+     Restricted.
+   - **Public fallback:** make the sheet link-viewable and set
+     `COUNSELLING_SHEET_CSV_URL` to
+     `https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=csv&gid=0`.
 3. Set `CRON_SECRET` (any long random string) and `SUPABASE_SERVICE_ROLE_KEY` in
    Vercel env vars.
 4. In [Upstash QStash](https://console.upstash.com/qstash) create a **Schedule**:
