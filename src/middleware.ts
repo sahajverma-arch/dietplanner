@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/login", "/auth/callback"];
+// /api/sync-counselling authenticates itself (CRON_SECRET or admin session) —
+// QStash calls it with no session cookie, so the middleware must let it pass.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/sync-counselling"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });

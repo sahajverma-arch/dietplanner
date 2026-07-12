@@ -25,9 +25,11 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 export default function CounsellingForm({
   dietitianId,
   initialDraft,
+  appointmentId = null,
 }: {
   dietitianId: string;
   initialDraft: IntakeForm | null;
+  appointmentId?: string | null;
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -94,7 +96,11 @@ export default function CounsellingForm({
       const res = await fetch("/api/generate-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "first", form }),
+        body: JSON.stringify({
+          type: "first",
+          form,
+          ...(appointmentId ? { appointmentId } : {}),
+        }),
       });
       const json = await res.json();
       if (res.ok) {

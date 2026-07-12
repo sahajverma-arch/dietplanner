@@ -10,7 +10,11 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const BodySchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("first"), form: z.record(z.any()) }),
+  z.object({
+    type: z.literal("first"),
+    form: z.record(z.any()),
+    appointmentId: z.string().uuid().optional(),
+  }),
   z.object({
     type: z.literal("followup"),
     clientId: z.string().uuid(),
@@ -79,6 +83,20 @@ export async function POST(request: Request) {
       clientName = client.full_name;
       week = 1;
       source = "first_counselling";
+
+      // Started from Today's Activity — the counselling happened, so mark the
+      // appointment completed and link the client (RLS limits this to the
+      // dietitian's own emp_code rows; a mismatch just updates nothing).
+      if (body.appointmentId) {
+        await supabase
+          .from("counselling_appointments")
+          .update({
+            status: "completed",
+            client_id: clientId,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", body.appointmentId);
+      }
     } else {
       clientId = body.clientId;
       const { data: client, error } = await supabase

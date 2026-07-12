@@ -72,6 +72,29 @@ src/
   components/                       # forms, cards, plan viewer, PDF download
 ```
 
+## Today's Activity (ops sheet sync)
+
+Each dietitian's **Today's Activity** tab lists the counselling calls scheduled for
+them today, matched by `profiles.employee_code` against the `Emp Code` column of the
+ops Google Sheet (`Raw_Counselling`). Rows show every sheet column plus a workflow
+status (Pending/Completed) and a **Start Counselling** action that opens the intake
+form; generating the client's first plan automatically marks the appointment
+Completed and links the created client.
+
+Sync pipeline: Google Sheet → `POST /api/sync-counselling` → `counselling_appointments`
+table. QStash calls the endpoint daily with the `x-cron-secret` header; admins can
+also press **Sync sheet now** on `/admin`. The sync upserts only sheet columns, so
+workflow status survives re-syncs. Setup:
+
+1. Run `supabase/migrations/0005_counselling_activity.sql`.
+2. Make the sheet link-viewable, set `COUNSELLING_SHEET_CSV_URL` to
+   `https://docs.google.com/spreadsheets/d/<SHEET_ID>/export?format=csv&gid=0`.
+3. Set `CRON_SECRET` (any long random string) and `SUPABASE_SERVICE_ROLE_KEY` in
+   Vercel env vars.
+4. In [Upstash QStash](https://console.upstash.com/qstash) create a **Schedule**:
+   URL `https://<your-app>/api/sync-counselling`, method POST, cron `30 0 * * *`
+   (06:00 IST daily), header `x-cron-secret: <your CRON_SECRET>`.
+
 ## Nutrition grounding (foods reference database)
 
 The model is good at composing culturally appropriate menus but only *estimates*

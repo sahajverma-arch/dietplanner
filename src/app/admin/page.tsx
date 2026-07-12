@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
+import SyncSheetButton from "@/components/SyncSheetButton";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +82,10 @@ export default async function AdminPage() {
             <h1 className="text-xl font-bold">Admin overview</h1>
             <p className="text-sm text-zinc-400">Read-only view across the whole team</p>
           </div>
-          <Link href="/" className="btn-secondary">← My clients</Link>
+          <div className="flex items-center gap-3">
+            <SyncSheetButton />
+            <Link href="/" className="btn-secondary">← My clients</Link>
+          </div>
         </div>
 
         {/* Stats */}
