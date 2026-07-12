@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -48,6 +48,28 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
+  }
+
+  // First sign-in must complete the profile (employee code + phone) before
+  // using the app — these fields drive reporting/data mapping.
+  if (user && !isPublic && path !== "/auth/signout" && !path.startsWith("/api/")) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("employee_code, phone")
+      .eq("id", user.id)
+      .maybeSingle();
+    const complete = Boolean(profile?.employee_code?.trim() && profile?.phone?.trim());
+
+    if (!complete && path !== "/onboarding") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/onboarding";
+      return NextResponse.redirect(url);
+    }
+    if (complete && path === "/onboarding") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/";
+      return NextResponse.redirect(url);
+    }
   }
 
   return response;

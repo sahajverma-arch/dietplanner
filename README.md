@@ -18,8 +18,11 @@ Security** so every dietitian sees only their own clients.
 
 ## How it works
 
-1. **Sign in** — Supabase email/password auth. A `profiles` row is auto-created by a
-   DB trigger on signup.
+1. **Sign in** — "Continue with Google", restricted to **@fitelo.co** accounts
+   (enforced in the DB trigger and the OAuth callback, not just the UI). On first
+   sign-in a `profiles` row is auto-created and the user completes onboarding
+   (employee code + phone — used for reporting/data mapping). Admins
+   (`profiles.role = 'admin'`) get a read-only `/admin` overview of the whole team.
 2. **+ New Counselling** — a 5-section form (Basics · Food Preferences · Lifestyle ·
    Medical · Notes). Every keystroke is debounced and upserted into `form_drafts`, so
    nothing is lost mid-call and the draft is restored if the tab is closed.
@@ -52,7 +55,10 @@ scripts/
 src/
   middleware.ts                     # session refresh + auth-gate for all routes
   app/
-    login/page.tsx                  # sign in / sign up
+    login/page.tsx                  # "Continue with Google" (fitelo.co only)
+    auth/callback/route.ts          # OAuth code exchange + domain check
+    onboarding/page.tsx             # first-login: employee code + phone
+    admin/page.tsx                  # read-only team overview (role = admin)
     page.tsx                        # dashboard — client cards + "+ New Counselling"
     counselling/new/page.tsx        # first-counselling form (autosave)
     clients/[id]/page.tsx           # client detail, plan history, follow-up form
@@ -100,11 +106,21 @@ is missing or empty, plans generate exactly as before.
    (foods reference table + match scoring), then seed it: put your **service_role**
    key in `.env.local` as `SUPABASE_SERVICE_ROLE_KEY` and run `npm run seed:foods`
    (~7,900 rows, one-off; safe to re-run — it upserts).
-4. *(Recommended for quick start)* **Authentication → Sign In / Providers → Email**:
-   turn **off** "Confirm email" so dietitians can sign in immediately after signup.
-   If you keep it on, users must click the confirmation link first — the app handles
-   both cases.
-4. Copy the **Project URL** and **anon public key** from **Project Settings → API**.
+4. Run `supabase/migrations/0004_google_auth_admin.sql` (fitelo.co-only signups,
+   profile fields, admin role/policies).
+5. **Google sign-in** (one-time):
+   1. In [Google Cloud Console](https://console.cloud.google.com) → APIs & Services →
+      Credentials → **Create OAuth client ID** (type: Web application). Add the
+      authorized redirect URI shown in Supabase under
+      **Authentication → Sign In / Providers → Google** (looks like
+      `https://<ref>.supabase.co/auth/v1/callback`).
+   2. Paste the client ID + secret into that same Supabase Google provider screen
+      and enable it.
+   3. Under **Authentication → URL Configuration** add your app URLs (local +
+      production) to Site URL / Redirect URLs, e.g. `http://localhost:3000/**`.
+6. Make yourself admin:
+   `update public.profiles set role = 'admin' where email = 'you@fitelo.co';`
+7. Copy the **Project URL** and **anon public key** from **Project Settings → API**.
 
 ### 2. NVIDIA NIM
 

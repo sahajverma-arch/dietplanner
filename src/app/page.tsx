@@ -13,11 +13,14 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: clients } = await supabase
-    .from("clients")
-    .select("id, full_name, goal, diet_type, weight_kg, created_at, diet_plans(week_number, created_at)")
-    .eq("dietitian_id", user.id)
-    .order("created_at", { ascending: false });
+  const [{ data: clients }, { data: me }] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, full_name, goal, diet_type, weight_kg, created_at, diet_plans(week_number, created_at)")
+      .eq("dietitian_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+  ]);
 
   const cards: ClientCardData[] = (clients ?? []).map((c: any) => {
     const plans: { week_number: number; created_at: string }[] = c.diet_plans ?? [];
@@ -39,7 +42,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="min-h-screen">
-      <AppHeader email={user.email ?? ""} />
+      <AppHeader email={user.email ?? ""} isAdmin={me?.role === "admin"} />
 
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
