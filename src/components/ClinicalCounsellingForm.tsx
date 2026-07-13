@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   answered,
+  missingRequired,
   visibleQuestions,
   visibleSections,
   type Answers,
@@ -42,6 +43,7 @@ export default function ClinicalCounsellingForm({
   const section = sections.find((s) => s.id === sectionId) ?? sections[0];
   const flags = useMemo(() => redFlags(answers), [answers]);
   const score = useMemo(() => audit(answers), [answers]);
+  const missing = useMemo(() => missingRequired(answers), [answers]);
 
   const set = (id: string, value: string | string[]) =>
     setAnswers((a) => ({ ...a, [id]: value }));
@@ -93,6 +95,14 @@ export default function ClinicalCounsellingForm({
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+    if (missing.length > 0) {
+      setSectionId(missing[0].sectionId);
+      setError(
+        `${missing.length} mandatory question${missing.length > 1 ? "s are" : " is"} still unanswered — complete the sections marked in red before generating the plan.`
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
@@ -126,7 +136,8 @@ export default function ClinicalCounsellingForm({
   const sectionProgress = (s: Section) => {
     const qs = visibleQuestions(s, answers);
     const done = qs.filter((q) => answered(answers, q.id)).length;
-    return { done, total: qs.length };
+    const requiredLeft = qs.filter((q) => q.required && !answered(answers, q.id)).length;
+    return { done, total: qs.length, requiredLeft };
   };
 
   const index = sections.findIndex((s) => s.id === section?.id);
@@ -244,7 +255,7 @@ export default function ClinicalCounsellingForm({
                 {sections
                   .filter((s) => s.stage === stage)
                   .map((s) => {
-                    const { done, total } = sectionProgress(s);
+                    const { done, total, requiredLeft } = sectionProgress(s);
                     const active = s.id === section.id;
                     return (
                       <button
@@ -259,16 +270,28 @@ export default function ClinicalCounsellingForm({
                         }`}
                       >
                         <span className="truncate">{s.title}</span>
-                        <span
-                          className={`ml-2 shrink-0 tabular-nums ${
-                            active
-                              ? "text-black/60"
-                              : done === total && total > 0
-                                ? "text-emerald-400"
-                                : "text-zinc-600"
-                          }`}
-                        >
-                          {done}/{total}
+                        <span className="ml-2 flex shrink-0 items-center gap-1.5">
+                          {requiredLeft > 0 && (
+                            <span
+                              className={`rounded px-1 text-[10px] font-semibold ${
+                                active ? "bg-black/15 text-black" : "bg-red-500/15 text-red-400"
+                              }`}
+                              title={`${requiredLeft} mandatory unanswered`}
+                            >
+                              {requiredLeft}*
+                            </span>
+                          )}
+                          <span
+                            className={`tabular-nums ${
+                              active
+                                ? "text-black/60"
+                                : done === total && total > 0
+                                  ? "text-emerald-400"
+                                  : "text-zinc-600"
+                            }`}
+                          >
+                            {done}/{total}
+                          </span>
                         </span>
                       </button>
                     );
@@ -351,8 +374,47 @@ export default function ClinicalCounsellingForm({
                 before finalising.
               </p>
             )}
-            <button onClick={handleSubmit} disabled={submitting} className="btn-primary mt-3 w-full">
-              {submitting ? "Generating plan… (this takes ~60s)" : "Generate Week 1 Diet Plan"}
+            {missing.length > 0 && (
+              <div className="mt-2 rounded bg-red-500/10 px-3 py-2 text-xs">
+                <p className="font-semibold text-red-400">
+                  {missing.length} mandatory question{missing.length > 1 ? "s" : ""} (*) unanswered —
+                  the plan can only be generated once these are complete:
+                </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {Object.entries(
+                    missing.reduce<Record<string, { sectionId: string; count: number }>>((acc, m) => {
+                      acc[m.sectionTitle] = {
+                        sectionId: m.sectionId,
+                        count: (acc[m.sectionTitle]?.count ?? 0) + 1,
+                      };
+                      return acc;
+                    }, {})
+                  ).map(([title, { sectionId: sid, count }]) => (
+                    <button
+                      key={sid}
+                      type="button"
+                      onClick={() => {
+                        setSectionId(sid);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className="rounded bg-zinc-900 px-2 py-1 text-zinc-300 ring-1 ring-red-500/30 hover:bg-zinc-800"
+                    >
+                      {title} · {count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || missing.length > 0}
+              className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {submitting
+                ? "Generating plan… (this takes ~60s)"
+                : missing.length > 0
+                  ? `Answer ${missing.length} mandatory question${missing.length > 1 ? "s" : ""} to generate the plan`
+                  : "Generate Week 1 Diet Plan"}
             </button>
           </div>
         </div>
@@ -383,7 +445,14 @@ function Field({
     <div>
       <label className="mb-1 flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
         {q.n && <span className="text-xs text-zinc-600">Q{q.n}</span>}
-        <span>{q.label}</span>
+        <span>
+          {q.label}
+          {q.required && (
+            <span className="ml-1 text-red-400" title="Mandatory — required before plan generation">
+              *
+            </span>
+          )}
+        </span>
         {q.tag && q.tag !== "core" && (
           <span
             className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${

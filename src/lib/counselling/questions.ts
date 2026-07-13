@@ -43,6 +43,8 @@ export interface Question {
   why?: string;
   /** Guidance the dietitian must keep in mind (shown as a caution note). */
   note?: string;
+  /** Must be answered (when visible) before a diet plan can be generated. */
+  required?: boolean;
   showIf?: (a: Answers) => boolean;
 }
 
@@ -1462,6 +1464,31 @@ const AD: Section = {
       ],
       why: "These stay in the plan. The diet is built around them, not against them.",
     },
+    {
+      id: "q260a", tag: "planning", type: "single",
+      label: "Do you avoid any foods on specific days of the week? (religious/cultural)",
+      options: YES_NO,
+      why: "e.g. no non-veg or eggs on Tuesday/Thursday — the plan makes those days fully compliant.",
+    },
+    {
+      id: "q260b", tag: "conditional", type: "multi", label: "On which days?",
+      options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+      showIf: (a) => is(a, "q260a", "Yes"),
+    },
+    {
+      id: "q260c", tag: "conditional", type: "multi", label: "What do you avoid on those days?",
+      options: [
+        "Non-vegetarian food", "Eggs", "Onion & garlic", "All animal products",
+        "Grains (fasting)", "Alcohol", "Other",
+      ],
+      showIf: (a) => is(a, "q260a", "Yes"),
+    },
+    {
+      id: "q260d", tag: "conditional", type: "textarea",
+      label: "Details (if it differs by day, spell it out)",
+      placeholder: "e.g. No non-veg or eggs on Tuesday and Thursday; fasts on Ekadashi",
+      showIf: (a) => is(a, "q260a", "Yes"),
+    },
     { id: "q261", n: 261, tag: "planning", type: "textarea", label: "What are you completely willing to change?" },
     {
       id: "q262", n: 262, tag: "planning", type: "single",
@@ -1755,4 +1782,103 @@ export function visibleSections(a: Answers): Section[] {
 /** Questions currently visible inside a section. */
 export function visibleQuestions(section: Section, a: Answers): Question[] {
   return section.questions.filter((q) => !q.showIf || q.showIf(a));
+}
+
+// ---------------------------------------------------------------------------
+// MANDATORY QUESTIONS — the ~5-6 per section that a diet plan cannot safely be
+// built without. A required question only blocks generation while it is
+// visible (hidden conditionals and inactive branches don't count).
+// ---------------------------------------------------------------------------
+
+const REQUIRED_IDS = new Set<string>([
+  // Client details
+  "name", "gender", "phone",
+  // A — Welcome & expectations
+  "q1", "q2", "q3", "q4", "q6", "q6a", "q9",
+  // B — Body & weight journey
+  "q11", "q12", "q13", "q16", "q22", "q30",
+  // C — Body composition
+  "q31", "q37", "q38", "q39",
+  // D — Medical screening
+  "q41", "q46", "q49", "q50", "q53", "q55",
+  // E — Medication
+  "q56", "q57", "q60",
+  // F — Supplements
+  "q61", "q62", "q67",
+  // G — Blood reports
+  "q68", "q71", "q72",
+  // X — Women's health
+  "q226", "q231", "q232", "q233",
+  // Clinical / fitness branches
+  "d1", "d3", "d5", "d6", "p2", "t2", "t3", "k1", "k2", "k4", "l1", "g2", "m5", "m8",
+  // H — 24-hour diet recall
+  "q79", "q80", "q89", "q90", "q102", "q103",
+  // I — Weekly food pattern
+  "q108", "q109", "q112",
+  // J — Food environment & culture
+  "q115", "q116", "q117", "q119", "q120",
+  // K — Food preference
+  "q121", "q122", "q123", "q124", "q124a", "q125",
+  // L — Protein assessment
+  "q131", "q132", "q133", "q135", "q136", "q140",
+  // M — Training assessment
+  "q143", "q145", "q148", "q150", "q156", "q157",
+  // N — Injury & training setup
+  "q158", "q163", "q164", "q165",
+  // O — Daily routine
+  "q166", "q168", "q169", "q171", "q172", "q174",
+  // P — Cooking & food access
+  "q175", "q176", "q178", "q179",
+  // Q — Food budget
+  "q181", "q182",
+  // R — Hunger & satiety
+  "q183", "q185", "q186",
+  // S — Cravings & eating behaviour
+  "q189", "q190", "q191", "q192", "q194",
+  // T — Digestion
+  "q197", "q200", "q203", "q204", "q205",
+  // U — Hydration
+  "q206", "q207",
+  // V — Sleep
+  "q211", "q212", "q213", "q214", "q218", "q219",
+  // W — Stress & recovery
+  "q221", "q222", "q223",
+  // Y — Alcohol, smoking & caffeine
+  "q236", "q239", "q240",
+  // Z — Travel & social life
+  "q242", "q245",
+  // AA — Previous diet history
+  "q246", "q247", "q249",
+  // AB — Adherence personality
+  "q251", "q252", "q253", "q255",
+  // AC — Barriers
+  "q256", "q257",
+  // AD — Non-negotiables & readiness
+  "q260", "q260a", "q260b", "q260c", "q261", "q262", "q263", "q265",
+  // Dietitian assessment
+  "s_objective", "s_restrictions", "s_gaps", "s_blocking", "s_p1",
+  // Plan decision matrix
+  "pl_structure", "pl_protein", "pl_carb", "pl_meals", "pl_priority1",
+  // PT handover
+  "pt_goal",
+]);
+
+for (const s of SECTIONS)
+  for (const q of s.questions) if (REQUIRED_IDS.has(q.id)) q.required = true;
+
+export interface MissingRequired {
+  sectionId: string;
+  sectionTitle: string;
+  questionId: string;
+  label: string;
+}
+
+/** Required questions still unanswered, respecting section and question visibility. */
+export function missingRequired(a: Answers): MissingRequired[] {
+  const out: MissingRequired[] = [];
+  for (const s of visibleSections(a))
+    for (const q of visibleQuestions(s, a))
+      if (q.required && !answered(a, q.id))
+        out.push({ sectionId: s.id, sectionTitle: s.title, questionId: q.id, label: q.label });
+  return out;
 }

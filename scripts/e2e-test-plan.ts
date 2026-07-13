@@ -20,7 +20,8 @@ for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
 
 async function main() {
   const { toIntake, redFlags, audit } = await import("../src/lib/counselling/assessment");
-  const { generateDietPlan } = await import("../src/lib/nim");
+  const { missingRequired } = await import("../src/lib/counselling/questions");
+  const { generateDietPlan, planWeekdays } = await import("../src/lib/nim");
   const { groundPlan } = await import("../src/lib/nutrition");
   const { renderPlanPdf } = await import("../src/lib/pdf");
   const { createClient } = await import("@supabase/supabase-js");
@@ -39,6 +40,17 @@ async function main() {
   ] as const) {
     const t0 = Date.now();
     console.log(`\n================ ${slug} ================`);
+
+    // The same gate the API route enforces: every mandatory question answered.
+    const missing = missingRequired(answers);
+    if (missing.length > 0) {
+      console.error(
+        `!! ${missing.length} mandatory questions unanswered: ` +
+          missing.map((m) => `${m.sectionTitle} — ${m.questionId}`).join("; ")
+      );
+      process.exit(1);
+    }
+    console.log("mandatory-question gate: all answered");
 
     const intake = toIntake(answers, null);
     const flags = redFlags(answers);
@@ -76,6 +88,31 @@ async function main() {
           for (const term of forbidden)
             if (item.food.toLowerCase().includes(term)) hits.push(`${day.day} ${meal.name}: ${item.food}`);
     console.log(hits.length ? `!! FORBIDDEN FOOD PRESENT: ${hits.join("; ")}` : "forbidden-food check: clean");
+
+    // Day-of-week rules: Rahul's Tuesdays & Thursdays must be veg + egg-free.
+    if (slug === "rahul-test") {
+      const weekdays = planWeekdays();
+      const nonveg = [
+        "chicken", "fish", "mutton", "prawn", "shrimp", "seafood", "crab", "keema",
+        "meat", "lamb", "pork", "beef", "egg", "omelette", "omelet",
+      ];
+      const dayHits: string[] = [];
+      plan.days.forEach((day, i) => {
+        if (weekdays[i] !== "Tuesday" && weekdays[i] !== "Thursday") return;
+        for (const meal of day.meals)
+          for (const item of meal.items)
+            if (nonveg.some((t) => new RegExp(`\\b${t}s?\\b`, "i").test(item.food)))
+              dayHits.push(`${day.day} (${weekdays[i]}) ${meal.name}: ${item.food}`);
+      });
+      const restrictedDays = plan.days
+        .map((d, i) => `${d.day}=${weekdays[i]}`)
+        .filter((_, i) => weekdays[i] === "Tuesday" || weekdays[i] === "Thursday");
+      console.log(
+        dayHits.length
+          ? `!! DAY-RULE VIOLATION (${restrictedDays.join(", ")}): ${dayHits.join("; ")}`
+          : `day-rule check (${restrictedDays.join(", ")} veg + egg-free): clean`
+      );
+    }
 
     const planStart = new Date();
     planStart.setDate(planStart.getDate() + 1);

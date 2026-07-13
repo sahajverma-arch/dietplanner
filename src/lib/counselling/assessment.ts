@@ -353,10 +353,26 @@ export function toIntake(a: Answers, appointmentId?: string | null): ClinicalInt
     digestion: joinList(a, "q197"),
     labNotes: [joinList(a, "q72"), val(a, "q72a")].filter(Boolean).join(" — "),
 
-    notes: val(a, "pl_notes"),
+    notes: [val(a, "pl_notes"), weeklyDayRulesText(a)].filter(Boolean).join("\n"),
     answers: a,
     appointmentId: appointmentId ?? null,
   };
+}
+
+/**
+ * "On Tuesday, Thursday avoids: Non-vegetarian food, Eggs — <details>".
+ * Empty string when the client has no day-specific food rules.
+ */
+export function weeklyDayRulesText(a: Answers): string {
+  if (!is(a, "q260a", "Yes")) return "";
+  const days = list(a, "q260b");
+  const avoided = list(a, "q260c");
+  const details = val(a, "q260d").trim();
+  if (!days.length && !details) return "";
+  const parts: string[] = [];
+  if (days.length && avoided.length) parts.push(`On ${days.join(", ")} avoids: ${avoided.join(", ")}`);
+  if (details) parts.push(details);
+  return parts.join(" — ");
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +446,7 @@ export function aiProfile(a: Answers): Block {
 
   put("food_rules", clean({
     diet_pattern: val(a, "q121"),
+    weekly_day_specific_exclusions: weeklyDayRulesText(a),
     allergies_never_include: val(a, "q124a"),
     intolerances: list(a, "q125").filter((v) => v !== "None"),
     foods_causing_discomfort: val(a, "q126"),

@@ -47,13 +47,28 @@ export type DietPlan = z.infer<typeof DietPlanSchema>;
 
 // The plan is generated in two halves — the shared NIM serving functions cap
 // completions around ~2k tokens, and a full 7-day plan with per-meal macros
-// doesn't fit. Each half fits comfortably.
+// doesn't fit. Each half fits comfortably. Models sometimes return more days
+// than asked (e.g. echoing all 7 in the second call), so the count is a
+// minimum and pickDays() selects the ones that were requested.
 const PartOneSchema = DietPlanSchema.extend({
-  days: z.array(DaySchema).length(4),
+  days: z.array(DaySchema).min(4),
 });
 const PartTwoSchema = z.object({
-  days: z.array(DaySchema).length(3),
+  days: z.array(DaySchema).min(3),
 });
+
+/** Select (and rename) the requested days from a possibly over-long answer. */
+function pickDays(days: DietPlan["days"], names: string[]): DietPlan["days"] {
+  const byName = names.map((n) =>
+    days.find((d) => d.day.trim().toLowerCase() === n.toLowerCase())
+  );
+  const chosen = byName.every(Boolean)
+    ? (byName as DietPlan["days"])
+    : names[0] === "Day 1"
+      ? days.slice(0, names.length)
+      : days.slice(-names.length);
+  return chosen.map((d, i) => ({ ...d, day: names[i] }));
+}
 
 // ---------------------------------------------------------------------------
 // NVIDIA NIM (OpenAI-compatible chat completions endpoint)
@@ -138,7 +153,7 @@ function compactDays(days: DietPlan["days"]): string {
     .join("\n");
 }
 
-function buildSystem(intake: IntakeForm, spec: string, dayRule: string): string {
+function buildSystem(intake: IntakeForm, spec: string, dayRule: string, weeklyNote = ""): string {
   const rules = foodRules(intake);
   const forbidden = Array.from(new Set([...rules.allergens, ...rules.disliked]));
   const forbiddenBlock = forbidden.length
@@ -147,7 +162,7 @@ function buildSystem(intake: IntakeForm, spec: string, dayRule: string): string 
         .join("\n")}\n`
     : "";
 
-  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.${forbiddenBlock}
+  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.${forbiddenBlock}${weeklyNote}
 
 You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON. Output MINIFIED JSON on a single line without indentation or unnecessary whitespace.
 
@@ -458,6 +473,100 @@ function hasAllergen(days: DietPlan["days"], rules: FoodRules): boolean {
   return violations(days, { allergens: rules.allergens, disliked: [] }).length > 0;
 }
 
+// ---------------------------------------------------------------------------
+// Day-of-week food rules (q260a-d) — e.g. no non-veg or eggs on Tuesdays.
+// The plan starts tomorrow (same convention as the PDF's date labels), so
+// "Day N" maps to a real weekday and restricted weekdays are enforced both in
+// the prompt and deterministically on the result.
+// ---------------------------------------------------------------------------
+
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Weekday name for each plan day ("Day 1" = tomorrow). */
+export function planWeekdays(): string[] {
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  return Array.from(
+    { length: 7 },
+    (_, i) => WEEKDAY_NAMES[new Date(start.getTime() + i * 86_400_000).getDay()]
+  );
+}
+
+// Foods that identify each avoided category in a meal item's name. Categories
+// without a reliable keyword list (fasting grains, "Other") are enforced by
+// the prompt only.
+const DAY_AVOID_TERMS: Record<string, string[]> = {
+  "Non-vegetarian food": [
+    "chicken", "fish", "mutton", "prawn", "shrimp", "seafood", "crab", "keema",
+    "meat", "lamb", "pork", "beef", "tuna", "salmon",
+  ],
+  Eggs: ["egg", "omelette", "omelet", "anda"],
+  "Onion & garlic": ["onion", "garlic"],
+  "All animal products": [
+    "chicken", "fish", "mutton", "prawn", "shrimp", "seafood", "crab", "keema",
+    "meat", "lamb", "pork", "beef", "egg", "omelette", "omelet", "milk", "curd",
+    "dahi", "paneer", "yogurt", "ghee", "butter", "cheese", "buttermilk", "lassi", "honey",
+  ],
+};
+
+interface DayRules {
+  days: string[];
+  avoided: string[];
+  details: string;
+  terms: string[];
+}
+
+function weekdayFoodRules(intake: IntakeForm): DayRules | null {
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  if (!answers || answers["q260a"] !== "Yes") return null;
+  const days = Array.isArray(answers["q260b"]) ? (answers["q260b"] as string[]) : [];
+  const avoided = Array.isArray(answers["q260c"]) ? (answers["q260c"] as string[]) : [];
+  const details = typeof answers["q260d"] === "string" ? (answers["q260d"] as string) : "";
+  if (!days.length || (!avoided.length && !details.trim())) return null;
+  const terms = Array.from(new Set(avoided.flatMap((c) => DAY_AVOID_TERMS[c] ?? [])));
+  return { days, avoided, details: details.trim(), terms };
+}
+
+/** Word-boundary match so "egg" flags "Egg bhurji" but not "Eggplant". */
+const matchesTerm = (food: string, term: string) =>
+  new RegExp(`\\b${term}s?\\b`, "i").test(food);
+
+function dayRuleViolations(days: DietPlan["days"], dr: DayRules, weekdays: string[]): string[] {
+  const found: string[] = [];
+  for (const day of days) {
+    const idx = parseInt(day.day.replace(/\D+/g, ""), 10);
+    const weekday = Number.isFinite(idx) && idx >= 1 && idx <= 7 ? weekdays[idx - 1] : "";
+    if (!dr.days.includes(weekday)) continue;
+    for (const meal of day.meals)
+      for (const item of meal.items)
+        if (dr.terms.some((t) => matchesTerm(item.food, t)))
+          found.push(
+            `${day.day} is a ${weekday} and "${item.food}" is not allowed (client avoids ${dr.avoided.join(", ")} on ${weekday})`
+          );
+  }
+  return found;
+}
+
+/** Last resort: drop items that break a weekday rule the model would not fix. */
+function stripDayRuleViolations(
+  days: DietPlan["days"],
+  dr: DayRules,
+  weekdays: string[]
+): DietPlan["days"] {
+  return days.map((day) => {
+    const idx = parseInt(day.day.replace(/\D+/g, ""), 10);
+    const weekday = Number.isFinite(idx) && idx >= 1 && idx <= 7 ? weekdays[idx - 1] : "";
+    if (!dr.days.includes(weekday)) return day;
+    return {
+      ...day,
+      meals: day.meals.map((meal) => {
+        const kept = meal.items.filter((item) => !dr.terms.some((t) => matchesTerm(item.food, t)));
+        return kept.length > 0 && kept.length < meal.items.length ? { ...meal, items: kept } : meal;
+      }),
+    };
+  });
+}
+
 /** Last resort: drop disliked items the model would not remove. */
 function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days"] {
   return days.map((day) => ({
@@ -481,6 +590,17 @@ function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days
 export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   const { intake, week, previousPlan } = ctx;
 
+  // ---- Day-of-week rules (e.g. no non-veg/eggs on Tuesdays)
+  const weekdays = planWeekdays();
+  const dayRules = weekdayFoodRules(intake);
+  const weeklyNote = dayRules
+    ? `\n\nWEEKLY DAY-SPECIFIC FOOD RULES (religious/cultural — must be respected exactly):\n` +
+      `This plan's calendar: ${weekdays.map((w, i) => `Day ${i + 1} = ${w}`).join(", ")}.\n` +
+      `On ${dayRules.days.join(" and ")} the client does NOT consume: ${dayRules.avoided.join(", ")}` +
+      (dayRules.details ? ` (${dayRules.details})` : "") +
+      `. Meals on those days must contain none of these in any form or dish name — use compliant alternatives with equivalent protein.\n`
+    : "";
+
   // ---- Part 1: plan overview + days 1-4
   const partOneMessages: ChatMessage[] = [
     {
@@ -488,7 +608,8 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
       content: buildSystem(
         intake,
         PART_ONE_SPEC,
-        '"days" must contain EXACTLY 4 entries named "Day 1" through "Day 4" (days 5-7 are requested separately).'
+        '"days" must contain EXACTLY 4 entries named "Day 1" through "Day 4" (days 5-7 are requested separately).',
+        weeklyNote
       ),
     },
     {
@@ -502,12 +623,17 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     },
   ];
   const rules = foodRules(intake);
+  const checkDays = (days: DietPlan["days"]) => [
+    ...violations(days, rules),
+    ...(dayRules ? dayRuleViolations(days, dayRules, weekdays) : []),
+  ];
   const partOne = await generateValidated(
     partOneMessages,
     PartOneSchema,
-    'exactly 4 days ("Day 1" to "Day 4")',
-    (p) => violations(p.days, rules)
+    'at least 4 days ("Day 1" to "Day 4")',
+    (p) => checkDays(p.days)
   );
+  partOne.days = pickDays(partOne.days, ["Day 1", "Day 2", "Day 3", "Day 4"]);
 
   // ---- Part 2: days 5-7, aware of days 1-4 for variety
   const partTwoMessages: ChatMessage[] = [
@@ -516,7 +642,8 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
       content: buildSystem(
         intake,
         PART_TWO_SPEC,
-        '"days" must contain EXACTLY 3 entries named "Day 5", "Day 6" and "Day 7".'
+        '"days" must contain EXACTLY 3 entries named "Day 5", "Day 6" and "Day 7".',
+        weeklyNote
       ),
     },
     {
@@ -531,11 +658,11 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   const partTwo = await generateValidated(
     partTwoMessages,
     PartTwoSchema,
-    'exactly 3 days ("Day 5" to "Day 7")',
-    (p) => violations(p.days, rules)
+    'at least 3 days ("Day 5" to "Day 7")',
+    (p) => checkDays(p.days)
   );
 
-  let days = [...partOne.days, ...partTwo.days];
+  let days = [...partOne.days, ...pickDays(partTwo.days, ["Day 5", "Day 6", "Day 7"])];
 
   // Belt and braces: the model was told, then corrected. An allergen surviving
   // that is a safety failure — refuse the plan rather than hand it to a client.
@@ -545,6 +672,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     );
   }
   days = stripDisliked(days, rules);
+  if (dayRules) days = stripDayRuleViolations(days, dayRules, weekdays);
 
   return DietPlanSchema.parse({ ...partOne, days });
 }

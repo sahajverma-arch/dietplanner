@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateDietPlan, DietPlanSchema, type DietPlan } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
 import { renderPlanPdf } from "@/lib/pdf";
+import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -58,6 +59,26 @@ export async function POST(request: Request) {
       intake = body.form as unknown as IntakeForm;
       if (!intake.fullName?.trim()) {
         return NextResponse.json({ error: "Client name is required" }, { status: 400 });
+      }
+
+      // Mandatory questions are enforced server-side too — the plan may only
+      // be generated from a complete counselling (legacy flat intakes without
+      // `answers` are not subject to this).
+      const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+      if (answers && typeof answers === "object") {
+        const missing = missingRequired(answers);
+        if (missing.length > 0) {
+          const preview = missing
+            .slice(0, 5)
+            .map((m) => `${m.sectionTitle} — ${m.label}`)
+            .join("; ");
+          return NextResponse.json(
+            {
+              error: `${missing.length} mandatory counselling question${missing.length > 1 ? "s are" : " is"} unanswered: ${preview}${missing.length > 5 ? " …" : ""}`,
+            },
+            { status: 400 }
+          );
+        }
       }
 
       const { data: client, error } = await supabase
