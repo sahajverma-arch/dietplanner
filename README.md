@@ -72,6 +72,33 @@ src/
   components/                       # forms, cards, plan viewer, PDF download
 ```
 
+## First counselling (LeanR clinical system)
+
+The intake is the full **LeanR First Clinical Nutrition & Fitness Counselling** —
+a 60–90 minute consultation, not a form. It lives as data in
+`src/lib/counselling/questions.ts` (sections A–AD, ~266 questions with probes,
+"why we ask" and portion prompts), so rewording a question never means touching UI
+code. `src/components/ClinicalCounsellingForm.tsx` renders whatever the schema says.
+
+- **Conditional branching** — questions and whole sections appear only when
+  activated (kidney/diabetes/PCOS/thyroid/liver/gout branches from Q41, muscle-gain
+  branch from the goal, women's health when relevant).
+- **Red flags** (`assessment.ts`) — chest pain, fainting, blood in stool, rapid
+  unexplained weight change, binge-eating pattern, pregnancy, renal disease… surface
+  live in the form and are passed to the AI as hard constraints.
+- **Counselling quality score** — the Part 11 100-point audit, computed live, so the
+  dietitian sees what is still missing before generating a plan.
+- **Dietitian assessment / plan decision matrix / PT handover** are sections of the
+  same form: diet structure, protein-carb-fat strategy, meal timing and the 14-day
+  priorities are *the dietitian's* decisions and the AI must follow them.
+- **Forbidden foods are enforced in code** (`nim.ts`): allergies, intolerances and
+  dislikes are listed explicitly in the prompt, checked against the returned meals,
+  fed back for correction, and — if an allergen still survives — the plan is refused
+  rather than shipped.
+
+Everything answered is stored in `clients.intake.answers`; a legacy projection keeps
+the `clients` columns and follow-up plans working unchanged.
+
 ## Today's Activity (ops sheet sync)
 
 Each dietitian's **Today's Activity** tab lists the counselling calls scheduled for

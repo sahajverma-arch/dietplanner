@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { FollowUpInput, IntakeForm } from "./types";
+import { aiProfile } from "./counselling/assessment";
+import type { Answers } from "./counselling/questions";
 
 // ---------------------------------------------------------------------------
 // Strict plan schema — everything the model returns is validated against this.
@@ -137,7 +139,15 @@ function compactDays(days: DietPlan["days"]): string {
 }
 
 function buildSystem(intake: IntakeForm, spec: string, dayRule: string): string {
-  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.
+  const rules = foodRules(intake);
+  const forbidden = Array.from(new Set([...rules.allergens, ...rules.disliked]));
+  const forbiddenBlock = forbidden.length
+    ? `\n\nFORBIDDEN FOODS — these must NEVER appear in any meal, in any form, dish or preparation (not even as part of a dish name):\n${forbidden
+        .map((f) => `- ${f}`)
+        .join("\n")}\n`
+    : "";
+
+  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.${forbiddenBlock}
 
 You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON. Output MINIFIED JSON on a single line without indentation or unnecessary whitespace.
 
@@ -153,45 +163,59 @@ Hard rules:
 6. ${dayRule}
 7. Keep food names and quantities short and specific. Use realistic household measures.
 8. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
-9. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.`;
+9. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
+
+LeanR counselling principles — the profile below is a full clinical assessment; use it:
+10. SAFETY FIRST. Obey every entry under "red_flags". Kidney disease → no generic high-protein plan and respect any prescribed protein/fluid/electrolyte restriction. Pregnancy/breastfeeding → no aggressive calorie deficit. Possible binge-eating → do NOT intensify restriction; keep the plan permissive and structured. A doctor's food restriction overrides everything else.
+11. BUILD AROUND THE CLIENT'S LIFE, NOT AGAINST IT. Keep every item in "non_negotiables_keep_in_plan" (e.g. morning tea, rice, roti, family dinner) and improve those meals instead of deleting them. Do not remove rice or roti by default.
+12. START FROM THE CURRENT DIET. Use "current_diet" — keep meals the client already eats where they are workable, and change what the dietitian flagged. Meal times must fit their wake/work/training/sleep times (shift workers get a wake-cycle structure, not a conventional breakfast/lunch/dinner).
+13. RESPECT PRACTICAL LIMITS: cooking time available, who cooks, kitchen access, budget, foods that are hard to find, meals the client cannot control, and travel.
+14. FOLLOW THE DIETITIAN. "dietitian_plan" carries their clinical decisions — diet structure, protein/carb/fat strategy, meal structure and the 14-day priorities. These override your own preferences.
+15. Protein: distribute it across meals (especially breakfast) using the sources this client actually accepts.`;
 }
 
 function profileText(ctx: PlanContext): string {
   const { intake, followup } = ctx;
-  const profile = {
-    name: intake.fullName,
-    age: intake.age,
-    gender: intake.gender,
-    height_cm: intake.heightCm,
-    current_weight_kg: intake.weightKg,
-    target_weight_kg: intake.targetWeightKg,
-    goal: intake.goal,
-    occupation: intake.occupation,
-    diet_type: intake.dietType,
-    preferred_cuisines: intake.cuisines,
-    meals_per_day: intake.mealsPerDay,
-    likes: intake.likes,
-    dislikes: intake.dislikes,
-    allergies: intake.allergies,
-    intolerances: intake.intolerances,
-    cooking_time_available: intake.cookingTime,
-    activity_level: intake.activityLevel,
-    exercise: intake.exercise,
-    sleep_hours: intake.sleepHours,
-    wake_time: intake.wakeTime,
-    bed_time: intake.bedTime,
-    water_intake_litres: intake.waterIntakeLitres,
-    smoking: intake.smoking,
-    alcohol: intake.alcohol,
-    eating_out_per_week: intake.eatingOutPerWeek,
-    work_schedule: intake.workSchedule,
-    medical_conditions: intake.conditions,
-    medications: intake.medications,
-    supplements: intake.supplements,
-    digestion_issues: intake.digestion,
-    recent_lab_notes: intake.labNotes,
-    dietitian_notes: intake.notes,
-  };
+
+  // Clients counselled with the LeanR clinical form carry the full assessment
+  // in `answers`; older/simpler intakes fall back to the flat fields.
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  const profile = answers
+    ? { name: intake.fullName, ...aiProfile(answers) }
+    : {
+        name: intake.fullName,
+        age: intake.age,
+        gender: intake.gender,
+        height_cm: intake.heightCm,
+        current_weight_kg: intake.weightKg,
+        target_weight_kg: intake.targetWeightKg,
+        goal: intake.goal,
+        occupation: intake.occupation,
+        diet_type: intake.dietType,
+        preferred_cuisines: intake.cuisines,
+        meals_per_day: intake.mealsPerDay,
+        likes: intake.likes,
+        dislikes: intake.dislikes,
+        allergies: intake.allergies,
+        intolerances: intake.intolerances,
+        cooking_time_available: intake.cookingTime,
+        activity_level: intake.activityLevel,
+        exercise: intake.exercise,
+        sleep_hours: intake.sleepHours,
+        wake_time: intake.wakeTime,
+        bed_time: intake.bedTime,
+        water_intake_litres: intake.waterIntakeLitres,
+        smoking: intake.smoking,
+        alcohol: intake.alcohol,
+        eating_out_per_week: intake.eatingOutPerWeek,
+        work_schedule: intake.workSchedule,
+        medical_conditions: intake.conditions,
+        medications: intake.medications,
+        supplements: intake.supplements,
+        digestion_issues: intake.digestion,
+        recent_lab_notes: intake.labNotes,
+        dietitian_notes: intake.notes,
+      };
 
   let text = JSON.stringify(profile, null, 2);
 
@@ -317,11 +341,13 @@ async function callNim(messages: ChatMessage[]): Promise<string> {
 async function generateValidated<T>(
   messages: ChatMessage[],
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-  expectation: string
+  expectation: string,
+  /** Semantic check on top of the schema (e.g. forbidden foods). */
+  check?: (value: T) => string[]
 ): Promise<T> {
   let lastError = "";
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     const content = await callNim(messages);
 
     let json: unknown;
@@ -343,22 +369,108 @@ async function generateValidated<T>(
     }
 
     const parsed = schema.safeParse(json);
-    if (parsed.success) return parsed.data;
-    lastError = parsed.error.issues
-      .slice(0, 8)
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("; ");
+    if (!parsed.success) {
+      lastError = parsed.error.issues
+        .slice(0, 8)
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ");
 
+      messages.push(
+        { role: "assistant", content },
+        {
+          role: "user",
+          content: `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected minified JSON object only — no other text. ${expectation}.`,
+        }
+      );
+      continue;
+    }
+
+    const issues = check?.(parsed.data) ?? [];
+    if (issues.length === 0) return parsed.data;
+
+    // Forbidden foods slipped in — name them and demand replacements.
+    lastError = issues.join("; ");
     messages.push(
       { role: "assistant", content },
       {
         role: "user",
-        content: `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected minified JSON object only — no other text. ${expectation}.`,
+        content:
+          `Your plan breaks the client's food rules: ${issues.join("; ")}. ` +
+          `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories. ` +
+          `Return the complete corrected minified JSON object only. ${expectation}.`,
       }
     );
   }
 
-  throw new Error(`AI returned an invalid diet plan after 2 attempts: ${lastError}`);
+  throw new Error(`AI returned an invalid diet plan after 3 attempts: ${lastError}`);
+}
+
+// ---------------------------------------------------------------------------
+// Forbidden foods. Allergies and dislikes are hard rules, but a model can still
+// slip one into a dish name ("Lauki sabzi" for a client who dislikes lauki), so
+// they are also enforced deterministically: named back to the model on retry,
+// and — for allergens — refused outright rather than shipped.
+// ---------------------------------------------------------------------------
+
+/** "Bottle gourd (lauki), karela" -> ["bottle gourd", "lauki", "karela"] */
+function splitFoodTerms(raw: string): string[] {
+  return (raw || "")
+    .split(/[,;\n/]|\band\b/i)
+    .flatMap((part) => part.split(/[()]/))
+    .map((t) => t.trim().toLowerCase().replace(/^(no|none|nil)$/i, ""))
+    // Two-character terms would match inside unrelated words.
+    .filter((t) => t.length > 2);
+}
+
+interface FoodRules {
+  allergens: string[];
+  disliked: string[];
+}
+
+function foodRules(intake: IntakeForm): FoodRules {
+  return {
+    allergens: [...splitFoodTerms(intake.allergies), ...splitFoodTerms(intake.intolerances)],
+    disliked: splitFoodTerms(intake.dislikes),
+  };
+}
+
+/** Forbidden terms appearing in the plan's actual meals (not in foods_to_avoid). */
+function violations(days: DietPlan["days"], rules: FoodRules): string[] {
+  const found = new Map<string, string>();
+  for (const day of days) {
+    for (const meal of day.meals) {
+      for (const item of meal.items) {
+        const food = item.food.toLowerCase();
+        for (const term of rules.allergens) {
+          if (food.includes(term)) found.set(term, `"${item.food}" contains the allergen/intolerance "${term}"`);
+        }
+        for (const term of rules.disliked) {
+          if (food.includes(term)) found.set(term, `"${item.food}" contains the disliked food "${term}"`);
+        }
+      }
+    }
+  }
+  return Array.from(found.values());
+}
+
+/** True when any allergen (not merely a dislike) is still present. */
+function hasAllergen(days: DietPlan["days"], rules: FoodRules): boolean {
+  return violations(days, { allergens: rules.allergens, disliked: [] }).length > 0;
+}
+
+/** Last resort: drop disliked items the model would not remove. */
+function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days"] {
+  return days.map((day) => ({
+    ...day,
+    meals: day.meals.map((meal) => {
+      const kept = meal.items.filter(
+        (item) => !rules.disliked.some((t) => item.food.toLowerCase().includes(t))
+      );
+      // A meal must keep at least one item — if everything was disliked the
+      // meal is left as-is and the dietitian edits it.
+      return kept.length > 0 && kept.length < meal.items.length ? { ...meal, items: kept } : meal;
+    }),
+  }));
 }
 
 /**
@@ -389,10 +501,12 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
         `\n\nReturn ONLY the JSON object.`,
     },
   ];
+  const rules = foodRules(intake);
   const partOne = await generateValidated(
     partOneMessages,
     PartOneSchema,
-    'exactly 4 days ("Day 1" to "Day 4")'
+    'exactly 4 days ("Day 1" to "Day 4")',
+    (p) => violations(p.days, rules)
   );
 
   // ---- Part 2: days 5-7, aware of days 1-4 for variety
@@ -417,11 +531,20 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   const partTwo = await generateValidated(
     partTwoMessages,
     PartTwoSchema,
-    'exactly 3 days ("Day 5" to "Day 7")'
+    'exactly 3 days ("Day 5" to "Day 7")',
+    (p) => violations(p.days, rules)
   );
 
-  return DietPlanSchema.parse({
-    ...partOne,
-    days: [...partOne.days, ...partTwo.days],
-  });
+  let days = [...partOne.days, ...partTwo.days];
+
+  // Belt and braces: the model was told, then corrected. An allergen surviving
+  // that is a safety failure — refuse the plan rather than hand it to a client.
+  if (hasAllergen(days, rules)) {
+    throw new Error(
+      "AI could not produce an allergen-safe plan (the client's allergen/intolerance kept appearing). Please regenerate."
+    );
+  }
+  days = stripDisliked(days, rules);
+
+  return DietPlanSchema.parse({ ...partOne, days });
 }
