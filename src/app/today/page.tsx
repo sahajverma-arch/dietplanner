@@ -90,11 +90,7 @@ export default async function TodayPage() {
                   <th className="px-3 py-3">Sheet Status</th>
                   <th className="px-3 py-3">Counselling Date</th>
                   <th className="px-3 py-3">Emp Code</th>
-                  <th className="px-3 py-3">First Call</th>
-                  <th className="px-3 py-3">Call Date</th>
-                  <th className="px-3 py-3">Talktime</th>
                   <th className="px-3 py-3">Plan Name</th>
-                  <th className="px-3 py-3">Type</th>
                   <th className="px-3 py-3">Status</th>
                   <th className="px-3 py-3 text-right">Action</th>
                 </tr>
@@ -119,17 +115,9 @@ export default async function TodayPage() {
                     <td className="px-3 py-3 text-zinc-400">{a.sheet_status ?? "—"}</td>
                     <td className="px-3 py-3 text-zinc-400">{date(a.counselling_date)}</td>
                     <td className="px-3 py-3 text-zinc-400">{a.emp_code}</td>
-                    <td className="px-3 py-3 text-zinc-400">
-                      {a.first_call ? `${date(a.first_call)} ${time(a.first_call)}` : "—"}
-                    </td>
-                    <td className="px-3 py-3 text-zinc-400">{date(a.call_date)}</td>
-                    <td className="px-3 py-3 text-zinc-400">
-                      {a.talktime ? `${Math.round(a.talktime / 60)} min` : "—"}
-                    </td>
                     <td className="max-w-[220px] truncate px-3 py-3 text-zinc-400" title={a.plan_name ?? ""}>
                       {a.plan_name ?? "—"}
                     </td>
-                    <td className="px-3 py-3 text-zinc-400">{a.plan_type ?? "—"}</td>
                     <td className="px-3 py-3">
                       {a.status === "completed" ? (
                         <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-400">
