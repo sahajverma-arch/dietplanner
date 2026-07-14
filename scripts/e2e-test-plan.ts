@@ -21,7 +21,7 @@ for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
 async function main() {
   const { toIntake, redFlags, audit } = await import("../src/lib/counselling/assessment");
   const { missingRequired } = await import("../src/lib/counselling/questions");
-  const { generateDietPlan, planWeekdays } = await import("../src/lib/nim");
+  const { generateDietPlan, planWeekdays, aiClinicalReview, isPauseDecision } = await import("../src/lib/nim");
   const { groundPlan } = await import("../src/lib/nutrition");
   const { renderPlanPdf } = await import("../src/lib/pdf");
   const { createClient } = await import("@supabase/supabase-js");
@@ -61,8 +61,23 @@ async function main() {
     console.log(`red flags: ${flags.length ? flags.map((f) => f.label).join("; ") : "none"}`);
     console.log(`audit score: ${score.score}/100 (${score.band})`);
 
+    // The same AI independent clinical review the API route runs before Week 1.
+    let review = null;
+    try {
+      review = await aiClinicalReview(intake);
+      console.log(`AI clinical review: ${review.decision}`);
+      if (review.strategy_adjustments.length)
+        console.log(`  adjustments: ${review.strategy_adjustments.join("; ")}`);
+      if (isPauseDecision(review)) {
+        console.log(`  PAUSED — missing: ${review.missing_information.join("; ")} — skipping plan`);
+        continue;
+      }
+    } catch (e) {
+      console.warn("AI clinical review unavailable:", e instanceof Error ? e.message.slice(0, 80) : e);
+    }
+
     console.log("generating plan (NVIDIA NIM, 2 calls)…");
-    let plan = await generateDietPlan({ intake, week: 1, previousPlan: null, followup: null });
+    let plan = await generateDietPlan({ intake, week: 1, previousPlan: null, followup: null, review });
     console.log(
       `plan: ${plan.daily_calories} kcal/day, P${plan.macros.protein_g} C${plan.macros.carbs_g} F${plan.macros.fat_g}, ${plan.days.length} days`
     );

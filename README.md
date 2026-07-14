@@ -72,29 +72,45 @@ src/
   components/                       # forms, cards, plan viewer, PDF download
 ```
 
-## First counselling (LeanR clinical system)
+## First counselling (LeanR Premium)
 
-The intake is the full **LeanR First Clinical Nutrition & Fitness Counselling** —
-a 60–90 minute consultation, not a form. It lives as data in
-`src/lib/counselling/questions.ts` (sections A–AD, ~266 questions with probes,
-"why we ask" and portion prompts), so rewording a question never means touching UI
-code. `src/components/ClinicalCounsellingForm.tsx` renders whatever the schema says.
+The intake is the **LeanR Premium Final New Client First Counselling** — a 55–65
+minute conversational consultation (Q1–Q105 in 12 sections). The dietitian asks the
+main question naturally, the client speaks, the dietitian mainly selects options.
+It lives as data in `src/lib/counselling/questions.ts`, so rewording a question
+never means touching UI code — `src/components/ClinicalCounsellingForm.tsx` renders
+whatever the schema says (single/multi chips with "select up to N" caps where click
+order doubles as rank, sliders, dates, and the Section 5 interactive meal timeline:
+time/food/preparation/source/added components per selected meal occasion).
 
-- **Conditional branching** — questions and whole sections appear only when
-  activated (kidney/diabetes/PCOS/thyroid/liver/gout branches from Q41, muscle-gain
-  branch from the goal, women's health when relevant).
-- **Red flags** (`assessment.ts`) — chest pain, fainting, blood in stool, rapid
-  unexplained weight change, binge-eating pattern, pregnancy, renal disease… surface
-  live in the form and are passed to the AI as hard constraints.
-- **Counselling quality score** — the Part 11 100-point audit, computed live, so the
-  dietitian sees what is still missing before generating a plan.
-- **Dietitian assessment / plan decision matrix / PT handover** are sections of the
-  same form: diet structure, protein-carb-fat strategy, meal timing and the 14-day
-  priorities are *the dietitian's* decisions and the AI must follow them.
+- **Conditional follow-ups** — numeric targets appear per selected target (Q5),
+  measurement fields per available data (Q15), safety follow-ups when a symptom is
+  selected (Q21), day-of-week food rules under cultural restrictions (Q38), the
+  hormonal section only where relevant (Q66), etc.
+- **Red flags** (`assessment.ts`) — Q21 urgent symptoms, severe allergy, disordered
+  eating patterns (Q60), pregnancy, kidney/liver disease, bariatric history,
+  under-fuelling (RED-S) signs… surface live in the form and are passed to the AI
+  as hard constraints.
+- **Counselling quality score** — a 100-point audit computed live, so the dietitian
+  sees what is still missing before generating a plan.
+- **Section 11 is the dietitian's professional hypothesis** (limiting factors,
+  targets, timeline, energy/protein/carb/fat/fibre/hydration strategy, diet
+  structure, lifestyle-fit score) — *not* automatically the final strategy.
+- **AI independent clinical review** (`nim.ts`): before every Week-1 plan the AI
+  analyses the complete client profile against that hypothesis and selects one
+  decision — Support / Support With Minor Modification / Significantly Modify /
+  AI-Led Alternative / **Pause** (missing information or safety concern; the route
+  returns 422, nothing is persisted and the counselling stays a draft). The decision
+  is stored in `diet_plans.ai_review` and shown on the client page.
+- **Final diet generation principles** (from the LeanR Premium spec) are hard-coded
+  into the system prompt: never plan from the goal/strategy/calories/weight alone,
+  smallest number of high-impact changes, protect favourite/cultural/household
+  foods, avoid unnecessary restriction, respect the dropout pattern and success
+  pattern, match complexity to readiness.
 - **Forbidden foods are enforced in code** (`nim.ts`): allergies, intolerances and
   dislikes are listed explicitly in the prompt, checked against the returned meals,
   fed back for correction, and — if an allergen still survives — the plan is refused
-  rather than shipped.
+  rather than shipped. Day-of-week exclusions (q38a–c) are enforced the same way.
 
 Everything answered is stored in `clients.intake.answers`; a legacy projection keeps
 the `clients` columns and follow-up plans working unchanged.
@@ -164,7 +180,9 @@ is missing or empty, plans generate exactly as before.
    key in `.env.local` as `SUPABASE_SERVICE_ROLE_KEY` and run `npm run seed:foods`
    (~7,900 rows, one-off; safe to re-run — it upserts).
 4. Run `supabase/migrations/0004_google_auth_admin.sql` (fitelo.co-only signups,
-   profile fields, admin role/policies).
+   profile fields, admin role/policies), then
+   `supabase/migrations/0006_leanr_premium_ai_review.sql` (stores the AI
+   independent clinical review on `diet_plans`).
 5. **Google sign-in** (one-time):
    1. In [Google Cloud Console](https://console.cloud.google.com) → APIs & Services →
       Credentials → **Create OAuth client ID** (type: Web application). Add the

@@ -6,7 +6,7 @@ import FollowUpForm from "@/components/FollowUpForm";
 import PlanView from "@/components/PlanView";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import RegenerateButton from "@/components/RegenerateButton";
-import { DietPlanSchema } from "@/lib/nim";
+import { AiReviewSchema, DietPlanSchema, isPauseDecision } from "@/lib/nim";
 import type { ClientRow, DietPlanRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +44,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const latest = planRows[0] ?? null;
   const parsedLatest = latest ? DietPlanSchema.safeParse(latest.plan) : null;
   const latestPlan = parsedLatest?.success ? parsedLatest.data : null;
+  const parsedReview = latest?.ai_review ? AiReviewSchema.safeParse(latest.ai_review) : null;
+  const aiReview = parsedReview?.success ? parsedReview.data : null;
 
   const facts: [string, string][] = [
     ["Age", client.age ? String(client.age) : "—"],
@@ -105,6 +107,48 @@ export default async function ClientPage({ params }: { params: { id: string } })
                   retry using the saved counselling data.
                 </p>
                 <RegenerateButton clientId={client.id} />
+              </div>
+            )}
+
+            {aiReview && latest && (
+              <div className="card">
+                <h2 className="text-base font-semibold">
+                  AI independent clinical review · Week {latest.week_number}
+                </h2>
+                <p
+                  className={`mt-1.5 inline-block rounded-full px-3 py-1 text-xs font-semibold ${
+                    isPauseDecision(aiReview)
+                      ? "bg-red-500/15 text-red-400"
+                      : "bg-brand/15 text-brand"
+                  }`}
+                >
+                  {aiReview.decision}
+                </p>
+                <p className="mt-2 text-sm text-zinc-400">{aiReview.reasoning}</p>
+                {aiReview.strategy_adjustments.length > 0 && (
+                  <div className="mt-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                      Strategy adjustments applied
+                    </h3>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-zinc-300">
+                      {aiReview.strategy_adjustments.map((s) => (
+                        <li key={s}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {aiReview.safety_concerns.length > 0 && (
+                  <div className="mt-3 rounded bg-red-500/10 px-3 py-2">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-red-400">
+                      Safety concerns respected
+                    </h3>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-zinc-300">
+                      {aiReview.safety_concerns.map((s) => (
+                        <li key={s}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
 

@@ -48,15 +48,16 @@ export default function ClinicalCounsellingForm({
   const set = (id: string, value: string | string[]) =>
     setAnswers((a) => ({ ...a, [id]: value }));
 
-  const toggle = (id: string, option: string) =>
+  // Selection order is preserved (click order = rank on "select up to N"
+  // questions); clicks beyond the question's max are ignored.
+  const toggle = (id: string, option: string, max?: number) =>
     setAnswers((a) => {
       const current = Array.isArray(a[id]) ? (a[id] as string[]) : [];
-      return {
-        ...a,
-        [id]: current.includes(option)
-          ? current.filter((v) => v !== option)
-          : [...current, option],
-      };
+      if (current.includes(option)) {
+        return { ...a, [id]: current.filter((v) => v !== option) };
+      }
+      if (max && current.length >= max) return a;
+      return { ...a, [id]: [...current, option] };
     });
 
   // Autosave — the call is live, nothing may be lost.
@@ -159,9 +160,10 @@ export default function ClinicalCounsellingForm({
       {/* Header */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold">First Clinical Counselling</h1>
+          <h1 className="text-xl font-bold">LeanR Premium — First Counselling</h1>
           <p className="text-sm text-zinc-400">
-            LeanR 60–90 min consultation · fill live during the call — everything autosaves.
+            55–65 min consultation · conversational — select options, don&apos;t read them out ·
+            everything autosaves.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -200,7 +202,7 @@ export default function ClinicalCounsellingForm({
       {/* Quality audit breakdown */}
       {showScore && (
         <div className="card mb-4">
-          <h3 className="mb-3 text-sm font-semibold">Counselling quality audit (Part 11)</h3>
+          <h3 className="mb-3 text-sm font-semibold">Counselling quality audit</h3>
           <div className="grid gap-2 sm:grid-cols-2">
             {score.categories.map((c) => (
               <div key={c.name} className="text-xs">
@@ -434,7 +436,7 @@ function Field({
   q: Question;
   answers: Answers;
   set: (id: string, v: string | string[]) => void;
-  toggle: (id: string, option: string) => void;
+  toggle: (id: string, option: string, max?: number) => void;
 }) {
   const value = answers[q.id];
   const text = typeof value === "string" ? value : "";
@@ -496,6 +498,10 @@ function Field({
         <input className="input" type="time" value={text} onChange={(e) => set(q.id, e.target.value)} />
       )}
 
+      {q.type === "date" && (
+        <input className="input" type="date" value={text} onChange={(e) => set(q.id, e.target.value)} />
+      )}
+
       {q.type === "textarea" && (
         <textarea
           className="input min-h-[80px]"
@@ -525,21 +531,34 @@ function Field({
       )}
 
       {q.type === "multi" && (
-        <div className="flex flex-wrap gap-1.5">
-          {q.options?.map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => toggle(q.id, o)}
-              className={`rounded-lg px-3 py-1.5 text-sm transition ${
-                chosen.includes(o)
-                  ? "bg-brand font-medium text-black"
-                  : "bg-zinc-900 text-zinc-400 ring-1 ring-zinc-700 hover:bg-zinc-800"
-              }`}
-            >
-              {o}
-            </button>
-          ))}
+        <div>
+          {q.max && (
+            <p className="mb-1.5 text-xs text-zinc-500">
+              Select up to {q.max} · {chosen.length} selected
+            </p>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {q.options?.map((o) => {
+              const active = chosen.includes(o);
+              const capped = Boolean(q.max && !active && chosen.length >= q.max);
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => toggle(q.id, o, q.max)}
+                  className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                    active
+                      ? "bg-brand font-medium text-black"
+                      : capped
+                        ? "cursor-not-allowed bg-zinc-900 text-zinc-600 ring-1 ring-zinc-800"
+                        : "bg-zinc-900 text-zinc-400 ring-1 ring-zinc-700 hover:bg-zinc-800"
+                  }`}
+                >
+                  {o}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

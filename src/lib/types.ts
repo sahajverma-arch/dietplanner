@@ -125,6 +125,8 @@ export interface DietPlanRow {
   week_number: number;
   source: "first_counselling" | "follow_up";
   plan: unknown;
+  /** AI independent clinical review of the dietitian hypothesis (week 1). */
+  ai_review: unknown | null;
   pdf_path: string | null;
   created_at: string;
 }

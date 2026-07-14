@@ -120,11 +120,87 @@ const PART_TWO_SPEC = `{
   ]
 }`;
 
+// ---------------------------------------------------------------------------
+// AI INDEPENDENT CLINICAL REVIEW (LeanR Premium, after Q105).
+// The dietitian's Section 11 answers are a professional hypothesis. Before any
+// diet is generated the AI independently analyses the complete client profile
+// and selects exactly one decision. "Pause" stops diet generation until the
+// dietitian supplies the missing information or a clinical review happens.
+// ---------------------------------------------------------------------------
+
+export const AI_REVIEW_DECISIONS = [
+  "Support Dietitian Strategy",
+  "Support Dietitian Strategy With Minor Modification",
+  "Significantly Modify Dietitian Strategy",
+  "Use AI-Led Alternative Clinical Nutrition Strategy",
+  "Pause Final Diet Generation and Request Clinical Review or Missing Information",
+] as const;
+
+export const AiReviewSchema = z.object({
+  decision: z.enum(AI_REVIEW_DECISIONS),
+  reasoning: z.string(),
+  strategy_adjustments: z.array(z.string()).default([]),
+  missing_information: z.array(z.string()).default([]),
+  safety_concerns: z.array(z.string()).default([]),
+});
+
+export type AiReview = z.infer<typeof AiReviewSchema>;
+
+export const isPauseDecision = (r: AiReview | null | undefined): boolean =>
+  r?.decision === "Pause Final Diet Generation and Request Clinical Review or Missing Information";
+
+const AI_REVIEW_SPEC = `{
+  "decision": string,               // EXACTLY one of the five allowed decisions, verbatim
+  "reasoning": string,              // 2-4 sentences: how the client evidence supports or contradicts the dietitian hypothesis
+  "strategy_adjustments": string[], // concrete changes to apply to the strategy (empty if fully supported)
+  "missing_information": string[],  // only for Pause: what is missing / needs clinical review
+  "safety_concerns": string[]       // clinical safety issues the plan must respect
+}`;
+
+const AI_REVIEW_SYSTEM = `You are the LeanR independent clinical nutrition reasoning system — a highly experienced clinical dietitian AI.
+
+A dietitian has completed the LeanR Premium first counselling. Their professional assessment (the "dietitian_hypothesis" block) is a professional HYPOTHESIS — not automatically the final strategy. You must independently analyse the COMPLETE client profile (goal, motivation, body and weight history, previous diets and their results, restriction-regain history, success pattern, medical conditions, medicines, blood reports, medical instructions, clinical symptoms, digestion, allergies, the actual full-day food intake, hidden intake, weekend and outside food, preferences, non-negotiables, cultural foods, cooking control, budget, training and recovery, protein pattern, under-fuelling indicators, routine, hunger, cravings, eating-behaviour risk, sleep, stress, hydration, hormonal considerations, travel, dropout pattern, coaching preferences, beliefs, readiness, confidence and every red flag) and test the hypothesis against it.
+
+Then select EXACTLY ONE decision:
+- "Support Dietitian Strategy" — the evidence supports it; strengthen and optimise it.
+- "Support Dietitian Strategy With Minor Modification" — mostly supported; small corrections needed.
+- "Significantly Modify Dietitian Strategy" — partially supported; important parts must change.
+- "Use AI-Led Alternative Clinical Nutrition Strategy" — significant client evidence contradicts the hypothesis; a better-supported alternative is required.
+- "Pause Final Diet Generation and Request Clinical Review or Missing Information" — important clinical information is missing or a safety concern (e.g. unresolved red flag, possible eating disorder, pregnancy with deficit plan, uncontrolled condition) makes diet generation unsafe right now.
+
+You do not compete with the dietitian and you do not blindly obey the dietitian — the combination of both inputs must create the strongest possible clinical nutrition strategy.
+
+Return ONLY one minified JSON object matching:
+${AI_REVIEW_SPEC}`;
+
+/**
+ * Runs the independent clinical review over the full client profile.
+ * Never throws for model unavailability at the call site's expense — the
+ * caller decides how a failed review is handled.
+ */
+export async function aiClinicalReview(intake: IntakeForm): Promise<AiReview> {
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  const profile = answers
+    ? { name: intake.fullName, ...aiProfile(answers) }
+    : { name: intake.fullName, intake };
+
+  const messages: ChatMessage[] = [
+    { role: "system", content: AI_REVIEW_SYSTEM },
+    {
+      role: "user",
+      content: `Complete client profile and dietitian hypothesis:\n${JSON.stringify(profile, null, 2)}\n\nReturn ONLY the JSON object.`,
+    },
+  ];
+  return generateValidated(messages, AiReviewSchema, "one decision object");
+}
+
 export interface PlanContext {
   intake: IntakeForm;
   week: number;
   previousPlan?: DietPlan | null;
   followup?: FollowUpInput | null;
+  /** Outcome of the AI independent clinical review (week 1). */
+  review?: AiReview | null;
 }
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -180,13 +256,16 @@ Hard rules:
 8. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
 9. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
 
-LeanR counselling principles — the profile below is a full clinical assessment; use it:
-10. SAFETY FIRST. Obey every entry under "red_flags". Kidney disease → no generic high-protein plan and respect any prescribed protein/fluid/electrolyte restriction. Pregnancy/breastfeeding → no aggressive calorie deficit. Possible binge-eating → do NOT intensify restriction; keep the plan permissive and structured. A doctor's food restriction overrides everything else.
-11. BUILD AROUND THE CLIENT'S LIFE, NOT AGAINST IT. Keep every item in "non_negotiables_keep_in_plan" (e.g. morning tea, rice, roti, family dinner) and improve those meals instead of deleting them. Do not remove rice or roti by default.
-12. START FROM THE CURRENT DIET. Use "current_diet" — keep meals the client already eats where they are workable, and change what the dietitian flagged. Meal times must fit their wake/work/training/sleep times (shift workers get a wake-cycle structure, not a conventional breakfast/lunch/dinner).
-13. RESPECT PRACTICAL LIMITS: cooking time available, who cooks, kitchen access, budget, foods that are hard to find, meals the client cannot control, and travel.
-14. FOLLOW THE DIETITIAN. "dietitian_plan" carries their clinical decisions — diet structure, protein/carb/fat strategy, meal structure and the 14-day priorities. These override your own preferences.
-15. Protein: distribute it across meals (especially breakfast) using the sources this client actually accepts.`;
+LeanR Premium diet generation principles — the profile below is a full clinical assessment; use all of it:
+10. NEVER generate the diet only from the client's goal, only from the dietitian's selected strategy, only from a calorie calculation, or only from current weight. Generate it from the COMPLETE client profile with independent clinical nutrition reasoning.
+11. SAFETY FIRST. Obey every entry under "red_flags" and every doctor instruction — a healthcare professional's restriction overrides everything else. Kidney condition → no generic high-protein plan; respect prescribed protein/fluid/electrolyte limits. Pregnancy/breastfeeding → no calorie deficit or aggressive protocol. Possible disordered eating or restriction-regain history → do NOT intensify restriction; keep the plan permissive and structured. Possible under-fuelling (RED-S signs) → prioritise fuelling and recovery, no deficit.
+12. THE DIETITIAN'S STRATEGY IS A PROFESSIONAL HYPOTHESIS ("dietitian_hypothesis"), independently tested by the AI clinical review. Follow the review decision and its strategy adjustments: strengthen a supported strategy, apply the listed modifications, or use the better-supported alternative. Do not compete with the dietitian; do not blindly obey the dietitian.
+13. SMALLEST NUMBER OF HIGH-IMPACT CHANGES. The first weekly diet is phase one of a long-term transformation — match the number of changes to "realistic_change_first_2_weeks" and the client's readiness and confidence scores. Preserve foods, meals and routines that are already working.
+14. START FROM THE ACTUAL FOOD DAY ("current_food_day" meal timeline). Keep workable meals where they are; change what the review and limiting factors flagged. Meal times must fit wake/work/training/sleep (shift workers get a wake-cycle structure, not a conventional breakfast/lunch/dinner).
+15. PROTECT favourite foods, non-negotiables, cultural and household foods where clinically appropriate ("food_rules"). Avoid unnecessary food restriction — do not remove rice or roti by default, and correct (don't reinforce) the client's fear-based food beliefs.
+16. AVOID THE CLIENT'S DROPOUT PATTERN ("success_dropout_coaching"): don't trigger the known dropout causes (excess restriction, repetitive food, heavy cooking, unrealistic weekend rules), build on the client's success pattern, and match diet complexity to their preferred structure and portion style.
+17. MUSCLE, TRAINING AND RECOVERY: consider muscle preservation, training performance and recovery. Distribute protein across meals (especially breakfast and around training) using sources this client actually accepts, respecting the protein barriers.
+18. RESPECT PRACTICAL LIMITS: who cooks, preparation control and capacity, kitchen facilities, budget, limited-access foods, meals the client cannot control, travel and social patterns. Design the diet for the client's ACTUAL life.`;
 }
 
 function profileText(ctx: PlanContext): string {
@@ -246,7 +325,7 @@ function profileText(ctx: PlanContext): string {
       },
       null,
       2
-    )}\nAdjust the plan based on progress, adherence and complaints.`;
+    )}\nFollow the LeanR weekly loop: Previous Strategy → Client Execution → Client Feedback → Result → Clinical Interpretation → Updated Strategy → Next Weekly Diet. Adjust the plan based on progress, adherence and complaints.`;
   }
 
   return text;
@@ -474,7 +553,7 @@ function hasAllergen(days: DietPlan["days"], rules: FoodRules): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Day-of-week food rules (q260a-d) — e.g. no non-veg or eggs on Tuesdays.
+// Day-of-week food rules (q38a–c) — e.g. no non-veg or eggs on Tuesdays.
 // The plan starts tomorrow (same convention as the PDF's date labels), so
 // "Day N" maps to a real weekday and restricted weekdays are enforced both in
 // the prompt and deterministically on the result.
@@ -518,10 +597,10 @@ interface DayRules {
 
 function weekdayFoodRules(intake: IntakeForm): DayRules | null {
   const answers = (intake as IntakeForm & { answers?: Answers }).answers;
-  if (!answers || answers["q260a"] !== "Yes") return null;
-  const days = Array.isArray(answers["q260b"]) ? (answers["q260b"] as string[]) : [];
-  const avoided = Array.isArray(answers["q260c"]) ? (answers["q260c"] as string[]) : [];
-  const details = typeof answers["q260d"] === "string" ? (answers["q260d"] as string) : "";
+  if (!answers) return null;
+  const days = Array.isArray(answers["q38a"]) ? (answers["q38a"] as string[]) : [];
+  const avoided = Array.isArray(answers["q38b"]) ? (answers["q38b"] as string[]) : [];
+  const details = typeof answers["q38c"] === "string" ? (answers["q38c"] as string) : "";
   if (!days.length || (!avoided.length && !details.trim())) return null;
   const terms = Array.from(new Set(avoided.flatMap((c) => DAY_AVOID_TERMS[c] ?? [])));
   return { days, avoided, details: details.trim(), terms };
@@ -588,7 +667,19 @@ function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days
  * limits of NVIDIA's shared NIM endpoints.
  */
 export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
-  const { intake, week, previousPlan } = ctx;
+  const { intake, week, previousPlan, review } = ctx;
+
+  // ---- Outcome of the AI independent clinical review, woven into the prompt
+  const reviewNote = review
+    ? `\n\nAI INDEPENDENT CLINICAL REVIEW (already performed — the plan must follow it):\n` +
+      `Decision: ${review.decision}\nReasoning: ${review.reasoning}\n` +
+      (review.strategy_adjustments.length
+        ? `Strategy adjustments to apply:\n${review.strategy_adjustments.map((s) => `- ${s}`).join("\n")}\n`
+        : "") +
+      (review.safety_concerns.length
+        ? `Safety concerns the plan must respect:\n${review.safety_concerns.map((s) => `- ${s}`).join("\n")}\n`
+        : "")
+    : "";
 
   // ---- Day-of-week rules (e.g. no non-veg/eggs on Tuesdays)
   const weekdays = planWeekdays();
@@ -609,7 +700,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
         intake,
         PART_ONE_SPEC,
         '"days" must contain EXACTLY 4 entries named "Day 1" through "Day 4" (days 5-7 are requested separately).',
-        weeklyNote
+        weeklyNote + reviewNote
       ),
     },
     {
@@ -643,7 +734,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
         intake,
         PART_TWO_SPEC,
         '"days" must contain EXACTLY 3 entries named "Day 5", "Day 6" and "Day 7".',
-        weeklyNote
+        weeklyNote + reviewNote
       ),
     },
     {

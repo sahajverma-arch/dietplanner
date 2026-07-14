@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { generateDietPlan, DietPlanSchema, type DietPlan } from "@/lib/nim";
+import {
+  aiClinicalReview,
+  DietPlanSchema,
+  generateDietPlan,
+  isPauseDecision,
+  type AiReview,
+  type DietPlan,
+} from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
@@ -53,6 +60,35 @@ export async function POST(request: Request) {
   let source: "first_counselling" | "follow_up";
   let followup: FollowUpInput | null = null;
   let previousPlan: DietPlan | null = null;
+  let aiReview: AiReview | null = null;
+
+  // The AI independently reviews the complete client profile + the dietitian's
+  // hypothesis before any Week-1 diet is generated (LeanR Premium). A failed
+  // review call never blocks generation; a PAUSE decision does.
+  const runReview = async (form: IntakeForm): Promise<AiReview | null> => {
+    try {
+      return await aiClinicalReview(form);
+    } catch (e) {
+      console.warn(
+        "AI clinical review unavailable — generating without it:",
+        e instanceof Error ? e.message : e
+      );
+      return null;
+    }
+  };
+  const pauseResponse = (review: AiReview, extra: Record<string, unknown> = {}) =>
+    NextResponse.json(
+      {
+        error:
+          "AI clinical review paused diet generation — " +
+          [...review.missing_information, ...review.safety_concerns].join("; ") +
+          (review.reasoning ? ` (${review.reasoning})` : ""),
+        paused: true,
+        aiReview: review,
+        ...extra,
+      },
+      { status: 422 }
+    );
 
   try {
     if (body.type === "first") {
@@ -79,6 +115,12 @@ export async function POST(request: Request) {
             { status: 400 }
           );
         }
+
+        // Independent clinical review BEFORE the client record is created —
+        // on a pause nothing is persisted and the counselling stays a draft,
+        // so the dietitian can address the gaps and resubmit.
+        aiReview = await runReview(intake);
+        if (aiReview && isPauseDecision(aiReview)) return pauseResponse(aiReview);
       }
 
       const { data: client, error } = await supabase
@@ -170,11 +212,16 @@ export async function POST(request: Request) {
         // regenerate: retry the first plan when initial generation failed
         week = latest ? latest.week_number : 1;
         source = latest ? "follow_up" : "first_counselling";
+
+        if (source === "first_counselling") {
+          aiReview = await runReview(intake);
+          if (aiReview && isPauseDecision(aiReview)) return pauseResponse(aiReview, { clientId });
+        }
       }
     }
 
     // ---- AI generation (server-side; NVIDIA_API_KEY never leaves the server)
-    let plan = await generateDietPlan({ intake, week, previousPlan, followup });
+    let plan = await generateDietPlan({ intake, week, previousPlan, followup, review: aiReview });
 
     // ---- Ground macros in the foods reference table (INDB + USDA). Never
     // fatal: if the table isn't seeded yet, the model estimates are kept.
@@ -226,6 +273,7 @@ export async function POST(request: Request) {
         source,
         plan,
         pdf_path: pdfPath,
+        ai_review: aiReview,
       })
       .select("id")
       .single();
