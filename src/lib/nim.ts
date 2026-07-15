@@ -345,7 +345,12 @@ function compactDays(days: DietPlan["days"]): string {
 
 function buildSystem(intake: IntakeForm, spec: string, dayRule: string, weeklyNote = ""): string {
   const rules = foodRules(intake);
-  const forbidden = Array.from(new Set([...rules.allergens, ...rules.disliked]));
+  // Diet-type exclusions (egg for vegetarians, all animal products for
+  // vegans, …) sit in the same prominent block as allergens — rule 1 alone
+  // was not enough to stop "boiled egg" appearing in a vegetarian plan.
+  const forbidden = Array.from(
+    new Set([...rules.allergens, ...rules.disliked, ...(DIET_TYPE_TERMS[intake.dietType] ?? [])])
+  );
   const forbiddenBlock = forbidden.length
     ? `\n\nFORBIDDEN FOODS — these must NEVER appear in any meal, in any form, dish or preparation (not even as part of a dish name):\n${forbidden
         .map((f) => `- ${f}`)
