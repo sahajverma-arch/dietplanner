@@ -816,6 +816,41 @@ const DIET_TYPE_TERMS: Record<string, string[]> = {
   eggetarian: DAY_AVOID_TERMS["Non-vegetarian food"],
 };
 
+/**
+ * Client-facing "foods to avoid": the model tends to echo the whole forbidden
+ * block — synonym expansion and diet-type terms included — which turns the PDF
+ * section into a page of noise (a vegetarian doesn't need "pork" listed).
+ * Keep the client's own typed allergens/intolerances/dislikes plus any other
+ * clinical entries the model added; drop synonyms and diet-pattern terms; cap.
+ */
+function cleanFoodsToAvoid(entries: string[], intake: IntakeForm): string[] {
+  const primary = [
+    ...splitFoodTerms(intake.allergies),
+    ...splitFoodTerms(intake.intolerances),
+    ...splitFoodTerms(intake.dislikes),
+  ];
+  const dietTerms = new Set((DIET_TYPE_TERMS[intake.dietType] ?? []).map((t) => t.toLowerCase()));
+  const synonymTerms = new Set(
+    Object.values(ALLERGEN_SYNONYMS)
+      .flat()
+      .map((s) => s.trim().toLowerCase())
+  );
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of entries) {
+    const entry = raw.trim();
+    const low = entry.toLowerCase();
+    if (!entry || seen.has(low)) continue;
+    const isPrimary = primary.some((p) => low === p || low.includes(p));
+    if (!isPrimary && (dietTerms.has(low) || synonymTerms.has(low))) continue;
+    seen.add(low);
+    out.push(entry);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function dietTypeViolations(days: DietPlan["days"], dietType: string): string[] {
   const terms = DIET_TYPE_TERMS[dietType] ?? [];
   const found = new Map<string, string>();
@@ -991,5 +1026,9 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   days = stripDietTypeViolations(days, intake.dietType);
   if (dayRules) days = stripDayRuleViolations(days, dayRules, weekdays);
 
-  return DietPlanSchema.parse({ ...partOne, days });
+  return DietPlanSchema.parse({
+    ...partOne,
+    days,
+    foods_to_avoid: cleanFoodsToAvoid(partOne.foods_to_avoid, intake),
+  });
 }

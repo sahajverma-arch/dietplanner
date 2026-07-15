@@ -87,7 +87,9 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   legendDot: { width: 6, height: 6, borderRadius: 3 },
   legendLabel: { fontSize: 8, fontFamily: "Helvetica-Bold" },
-  disclaimer: { fontSize: 7, color: FAINT },
+  // flex + right-align so the note wraps in its own space instead of running
+  // into the legend labels.
+  disclaimer: { flex: 1, fontSize: 7, color: FAINT, textAlign: "right", marginLeft: 16 },
 
   summary: {
     backgroundColor: YELLOW_PALE,
@@ -238,6 +240,13 @@ function MacroHeaderCells() {
   );
 }
 
+/** "8:30" -> "08:30" so meals sort correctly; missing times go last. */
+function mealSortKey(time: string): string {
+  const t = (time || "").trim();
+  if (!t) return "99:99";
+  return /^\d:/.test(t) ? `0${t}` : t;
+}
+
 function DayTable({
   day,
   label,
@@ -246,9 +255,14 @@ function DayTable({
   label: string;
 }) {
   const sums = daySums(day);
+  // Display in clock order — the model sometimes appends late additions
+  // (e.g. an afternoon tea) after the last meal.
+  const meals = [...day.meals].sort((a, b) =>
+    mealSortKey(a.time).localeCompare(mealSortKey(b.time))
+  );
   return (
     <View style={styles.dayBlock}>
-      <View style={styles.dayHeader} minPresenceAhead={90}>
+      <View style={styles.dayHeader} wrap={false} minPresenceAhead={120}>
         <Text style={styles.dayTitle}>{label}</Text>
         <Text style={styles.dayMacros}>
           {r(sums.cal)} kcal  |  P {r(sums.p)}g  |  C {r(sums.c)}g  |  F {r(sums.f)}g
@@ -263,7 +277,7 @@ function DayTable({
           <Text style={[styles.th, styles.num, { width: W_PCT }]}>Cal%</Text>
         </View>
 
-        {day.meals.map((meal, mi) => (
+        {meals.map((meal, mi) => (
           <View key={mi} style={styles.tdRow} wrap={false}>
             <Text style={[styles.td, styles.tdTime]}>{meal.time || "—"}</Text>
             <Text style={[styles.td, styles.tdMeal]}>{meal.name}</Text>
@@ -445,18 +459,22 @@ function PlanDocument({
         {/* Weekly summary */}
         <WeeklySummary plan={plan} startDateIso={startDateIso} />
 
-        {/* Guidelines */}
+        {/* Guidelines — hydration gets its own bullet, so model guidelines
+            that repeat it are dropped; cap keeps the section tight. */}
         {plan.guidelines.length > 0 && (
           <View>
             <Text style={styles.sectionTitle} minPresenceAhead={60}>
               Guidelines
             </Text>
-            {plan.guidelines.map((g, i) => (
-              <View key={i} style={styles.bullet} wrap={false}>
-                <Text style={styles.bulletDot}>•</Text>
-                <Text style={styles.bulletText}>{g}</Text>
-              </View>
-            ))}
+            {plan.guidelines
+              .filter((g) => !plan.hydration || !/hydrat|\bwater\b/i.test(g))
+              .slice(0, 6)
+              .map((g, i) => (
+                <View key={i} style={styles.bullet} wrap={false}>
+                  <Text style={styles.bulletDot}>•</Text>
+                  <Text style={styles.bulletText}>{g}</Text>
+                </View>
+              ))}
             {plan.hydration ? (
               <View style={styles.bullet} wrap={false}>
                 <Text style={styles.bulletDot}>•</Text>
