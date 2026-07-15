@@ -106,6 +106,8 @@ const UNIT_GRAMS: Record<string, number> = {
   katori: 150,
   bowl: 250,
   cup: 200,
+  "tea cup": 150,
+  mug: 300,
   glass: 250,
   plate: 250,
   tbsp: 15,
@@ -122,7 +124,50 @@ const COUNT_UNITS = new Set(["piece", "pc", "no", "unit", "serving", "portion"])
 // Household vessels: when the matched food has its own measured serving
 // weight (INDB dishes do), that beats the generic gram map — "1 cup poha"
 // means one serving of poha (55 g), not 200 g of it.
-const VESSEL_UNITS = new Set(["cup", "bowl", "small bowl", "katori", "plate", "glass", "tea cup"]);
+const VESSEL_UNITS = new Set(["cup", "bowl", "small bowl", "katori", "plate", "glass", "tea cup", "mug"]);
+
+// Volume vessels whose generic gram value assumes dense cooked food (~1 g/ml).
+// Light, dry or airy foods weigh a fraction of that per vessel — the main
+// source of large grounding over-estimates ("½ cup roasted chana" is ~45 g,
+// not 100 g). First matching pattern wins; unlisted foods keep factor 1.
+const VOLUME_VESSELS = new Set(["cup", "tea cup", "bowl", "katori", "plate", "glass", "mug"]);
+const DENSITY_FACTORS: { pattern: RegExp; factor: number }[] = [
+  { pattern: /makhana|foxnut|murmura|puffed|popcorn/i, factor: 0.12 },
+  { pattern: /roasted\s+(chana|gram)|chana\s+roasted|namkeen|chivda|mixture|bhel/i, factor: 0.3 },
+  { pattern: /cornflakes|flakes|muesli|granola|chips|wafers?/i, factor: 0.35 },
+  { pattern: /salad|lettuce|raw\s+greens|coriander|mint\s+leaves/i, factor: 0.35 },
+  { pattern: /sprouts?/i, factor: 0.55 },
+  { pattern: /almond|cashew|walnut|pistachio|pista|peanut|groundnut|\bnuts?\b|seeds?\b/i, factor: 0.6 },
+];
+
+const densityFactor = (text: string): number =>
+  DENSITY_FACTORS.find((d) => d.pattern.test(text))?.factor ?? 1;
+
+// "1 small banana", "2 large bowls" — size adjectives scale the weight.
+const SIZE_FACTORS: Record<string, number> = { small: 0.8, medium: 1, large: 1.3, big: 1.3 };
+
+// Typical piece weights (g) for countable foods the databases often have no
+// serving weight for ("2 rotis" on a USDA match, "4 almonds", "1 apple").
+// Deliberately conservative, and always bounded by the divergence guards.
+const PIECE_GRAMS: { pattern: RegExp; grams: number }[] = [
+  { pattern: /phulka/i, grams: 30 },
+  { pattern: /\b(roti|chapati|chappati)\b/i, grams: 40 },
+  { pattern: /paratha|parantha/i, grams: 60 },
+  { pattern: /\b(puri|poori)\b/i, grams: 25 },
+  { pattern: /idli/i, grams: 40 },
+  { pattern: /dosa/i, grams: 90 },
+  { pattern: /chilla|cheela|pancake/i, grams: 55 },
+  { pattern: /\beggs?\b|omelette|omelet/i, grams: 50 },
+  { pattern: /biscuits?|cookies?/i, grams: 10 },
+  { pattern: /\bdates?\b|khajur/i, grams: 8 },
+  { pattern: /almonds?|badam/i, grams: 1.2 },
+  { pattern: /cashews?|kaju/i, grams: 1.6 },
+  { pattern: /walnut/i, grams: 3 },
+  { pattern: /banana/i, grams: 100 },
+  { pattern: /apple|pear|orange|mosambi|peach|sweet\s+lime/i, grams: 150 },
+  { pattern: /guava|amrud|kiwi|plum|sapota|chikoo/i, grams: 90 },
+  { pattern: /mango/i, grams: 200 },
+];
 
 const VULGAR: Record<string, number> = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3 };
 
@@ -163,10 +208,18 @@ function normalizeUnit(text: string): string {
 /**
  * Resolves an item quantity to grams, preferring the matched food's own
  * serving weight (e.g. INDB knows one parantha is 56 g) over generic
- * household measures. Returns null when nothing sensible can be derived.
+ * household measures. Generic vessel measures are scaled by the food's
+ * density class, size adjectives scale the result, and countable foods fall
+ * back to typical piece weights. Returns null when nothing sensible can be
+ * derived.
  */
-function toGrams(qty: { count: number; unit: string }, food: FoodMatch): number | null {
-  const { count, unit } = qty;
+function toGrams(
+  qty: { count: number; unit: string },
+  food: FoodMatch,
+  itemFood: string
+): number | null {
+  const { count } = qty;
+  let { unit } = qty;
   if (!count || count <= 0) return null;
 
   // Absolute mass/volume units (treat ml as ~1 g/ml for cooked foods/liquids);
@@ -177,6 +230,15 @@ function toGrams(qty: { count: number; unit: string }, food: FoodMatch): number 
   // Everything below is a count of servings/household measures.
   if (count > 40) return null;
 
+  // "1 small banana", "2 large bowls" — strip the size word, keep its factor.
+  let sizeFactor = 1;
+  const size = unit.match(/^(small|medium|large|big)\b\s*/);
+  if (size) {
+    sizeFactor = SIZE_FACTORS[size[1]] ?? 1;
+    unit = unit.slice(size[0].length).trim();
+  }
+
+  const text = `${itemFood} ${food.name}`.toLowerCase();
   const servingUnit = (food.serving_unit || "").toLowerCase().replace(/s$/, "");
   const foodName = food.name.toLowerCase();
 
@@ -190,13 +252,24 @@ function toGrams(qty: { count: number; unit: string }, food: FoodMatch): number 
       unit === servingUnit ||
       (unit.length >= 3 && (foodName.includes(unit) || servingUnit.includes(unit))))
   ) {
-    return count * food.serving_g;
+    return count * food.serving_g * sizeFactor;
   }
 
-  if (UNIT_GRAMS[unit]) return count * UNIT_GRAMS[unit];
+  // Generic volume vessels scale by food density; spoons/slices don't.
+  if (UNIT_GRAMS[unit]) {
+    const density = VOLUME_VESSELS.has(unit) ? densityFactor(text) : 1;
+    return count * UNIT_GRAMS[unit] * density * sizeFactor;
+  }
+
+  // Counted pieces without a database serving weight ("2 rotis", "4 almonds",
+  // "1 apple") — use the typical piece weight.
+  if (unit === "" || COUNT_UNITS.has(unit) || (unit.length >= 3 && text.includes(unit))) {
+    const piece = PIECE_GRAMS.find((p) => p.pattern.test(text));
+    if (piece) return count * piece.grams * sizeFactor;
+  }
 
   // Unknown unit ("1 stick", "2 nos") — fall back to the serving weight.
-  if (food.serving_g) return count * food.serving_g;
+  if (food.serving_g) return count * food.serving_g * sizeFactor;
   return null;
 }
 
@@ -284,7 +357,7 @@ export async function groundPlan(
             continue;
           }
           stats.matched_items++;
-          const grams = toGrams(parseQuantity(item.quantity), match);
+          const grams = toGrams(parseQuantity(item.quantity), match, item.food);
           if (grams == null || (match.kcal * grams) / 100 > ITEM_KCAL_MAX) {
             complete = false;
             continue;
