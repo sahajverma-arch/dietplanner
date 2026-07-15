@@ -555,7 +555,13 @@ async function generateValidated<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   expectation: string,
   /** Semantic check on top of the schema (e.g. forbidden foods). */
-  check?: (value: T) => string[]
+  check?: (value: T) => string[],
+  /**
+   * Quality check that triggers a corrective retry but never fails the whole
+   * generation (e.g. day calories off target) — on the final attempt the plan
+   * is accepted with a warning instead of thrown away.
+   */
+  softCheck?: (value: T) => string[]
 ): Promise<T> {
   let lastError = "";
 
@@ -598,23 +604,56 @@ async function generateValidated<T>(
     }
 
     const issues = check?.(parsed.data) ?? [];
-    if (issues.length === 0) return parsed.data;
+    const soft = softCheck?.(parsed.data) ?? [];
+    if (issues.length === 0 && soft.length === 0) return parsed.data;
+    if (issues.length === 0 && attempt === 3) {
+      console.warn(`plan accepted with unresolved quality issues: ${soft.join("; ")}`);
+      return parsed.data;
+    }
 
-    // Forbidden foods slipped in — name them and demand replacements.
-    lastError = issues.join("; ");
+    // Rule violations — name them and demand a corrected plan.
+    lastError = [...issues, ...soft].join("; ");
+    const fixes = [
+      issues.length
+        ? `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories.`
+        : "",
+      soft.length
+        ? `Adjust meal portions and items so every day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories".`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     messages.push(
       { role: "assistant", content },
       {
         role: "user",
         content:
-          `Your plan breaks the client's food rules: ${issues.join("; ")}. ` +
-          `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories. ` +
+          `Your plan violates the client's requirements: ${lastError}. ${fixes} ` +
           `Return the complete corrected minified JSON object only. ${expectation}.`,
       }
     );
   }
 
   throw new Error(`AI returned an invalid diet plan after 3 attempts: ${lastError}`);
+}
+
+/**
+ * Days whose meals add up too far from the daily calorie target (soft check:
+ * the model is asked to fix portions, but an off-target plan is still shipped
+ * rather than discarded — the dietitian reviews every plan anyway).
+ */
+function calorieIssues(days: DietPlan["days"], target: number): string[] {
+  if (!Number.isFinite(target) || target <= 0) return [];
+  const out: string[] = [];
+  for (const day of days) {
+    const sum = day.meals.reduce((s, m) => s + (m.calories || 0), 0);
+    if (sum > 0 && Math.abs(sum - target) / target > 0.2) {
+      out.push(
+        `${day.day}'s meals add up to ~${Math.round(sum)} kcal but the daily target is ${Math.round(target)} kcal`
+      );
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -831,7 +870,8 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     partOneMessages,
     PartOneSchema,
     'at least 4 days ("Day 1" to "Day 4")',
-    (p) => checkDays(p.days)
+    (p) => checkDays(p.days),
+    (p) => calorieIssues(p.days, p.daily_calories)
   );
   partOne.days = pickDays(partOne.days, ["Day 1", "Day 2", "Day 3", "Day 4"]);
 
@@ -859,7 +899,8 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     partTwoMessages,
     PartTwoSchema,
     'at least 3 days ("Day 5" to "Day 7")',
-    (p) => checkDays(p.days)
+    (p) => checkDays(p.days),
+    (p) => calorieIssues(p.days, partOne.daily_calories)
   );
 
   let days = [...partOne.days, ...pickDays(partTwo.days, ["Day 5", "Day 6", "Day 7"])];
