@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "@/components/AppHeader";
+import ClientSummary from "@/components/ClientSummary";
 import FollowUpForm from "@/components/FollowUpForm";
 import PlanView from "@/components/PlanView";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
@@ -47,15 +48,6 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const parsedReview = latest?.ai_review ? AiReviewSchema.safeParse(latest.ai_review) : null;
   const aiReview = parsedReview?.success ? parsedReview.data : null;
 
-  const facts: [string, string][] = [
-    ["Age", client.age ? String(client.age) : "—"],
-    ["Gender", client.gender || "—"],
-    ["Height", client.height_cm ? `${client.height_cm} cm` : "—"],
-    ["Weight", client.weight_kg ? `${client.weight_kg} kg` : "—"],
-    ["Diet", client.diet_type || "—"],
-    ["Goal", client.goal || "—"],
-  ];
-
   return (
     <div className="min-h-screen">
       <AppHeader email={user.email ?? ""} />
@@ -80,16 +72,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
           </div>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {facts.map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                {label}
-              </div>
-              <div className="truncate text-sm font-semibold capitalize">{value}</div>
-            </div>
-          ))}
-        </div>
+        <ClientSummary client={client} />
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
