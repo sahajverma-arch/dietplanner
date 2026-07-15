@@ -161,7 +161,7 @@ const S1: Section = {
       options: [
         "Recent weight gain", "Recent fat gain", "Clothes fitting differently",
         "Unhappy with current body shape", "Low confidence", "Low energy", "Poor fitness",
-        "Reduced strength", "Reduced stamina", "Poor workout performance",
+        "Reduced strength", "Reduced stamina", "Poor workout performance", "Poor recovery",
         "Health report concern", "Doctor recommendation", "Diagnosed health condition",
         "Upcoming wedding", "Upcoming event", "Travel or holiday", "Pregnancy planning",
         "Post-pregnancy transformation", "Sports goal", "Previous failed attempts",
@@ -385,14 +385,16 @@ const S2: Section = {
     },
     {
       id: "q12", n: 12, tag: "core", type: "multi",
-      label: "Which diet or weight-management approaches have you tried before?",
+      label: "Which diet, weight-management or fitness approaches have you tried before?",
       options: [
         "Calorie counting", "Very-low-calorie diet", "Low-carbohydrate diet", "Keto",
         "Intermittent fasting", "OMAD", "High-protein diet", "Low-fat diet",
         "Detox or juice diet", "Meal replacement", "Commercial weight-loss programme",
         "Dietitian plan", "Social-media diet", "Self-designed diet", "Meal skipping",
         "Sugar elimination", "Rice elimination", "Roti elimination", "Portion control",
-        "Exercise-only approach", "Weight-loss medicine", "No structured approach", "Other",
+        "Gym", "Personal Trainer", "Running or cardio", "Home workout",
+        "Exercise-only approach", "Weight-loss medicine", "Supplements or fat burner",
+        "Mass gainer", "No structured approach", "Other",
       ],
     },
     {
@@ -566,16 +568,18 @@ const S3: Section = {
         NO_CONDITION, "Diabetes", "Prediabetes", "Insulin resistance", "PCOS or PCOD",
         "Hypothyroidism", "Hyperthyroidism", "Other thyroid condition", "High blood pressure",
         "High cholesterol", "High triglycerides", "Fatty liver", "Cardiovascular condition",
-        "Kidney condition", "Liver condition", "GERD or reflux", "IBS", "IBD",
-        "Crohn's disease", "Ulcerative colitis", "Coeliac disease", "Anaemia",
+        "Kidney condition", "Kidney stones", "Liver condition", "GERD or reflux",
+        "Chronic acidity or gastritis", "IBS", "IBD", "Crohn's disease", "Ulcerative colitis",
+        "Coeliac disease", "Gallstones", "Gallbladder removed", "Anaemia",
         "Vitamin D deficiency", "Vitamin B12 deficiency", "Iron deficiency",
-        "Gout or high uric acid", "Arthritis", "Autoimmune condition",
-        "Professionally diagnosed eating disorder", "Other",
+        "Gout or high uric acid", "Sleep apnoea", "Arthritis",
+        "Osteoporosis or bone condition", "Autoimmune condition", "Hormonal condition",
+        "Professionally diagnosed eating disorder", "Cancer history", "Other",
       ],
     },
     {
       id: "q17a", tag: "clinical", type: "single", label: "Overall current status of the condition(s)",
-      options: ["Controlled", "Improving", "Stable", "Uncontrolled", "Under investigation", "Not sure"],
+      options: ["Controlled", "Improving", "Stable", "Partially controlled", "Uncontrolled", "Under investigation", "Not sure"],
       showIf: (a) => hasOther(a, "q17", [NO_CONDITION]),
     },
     {
@@ -629,7 +633,7 @@ const S3: Section = {
         "CBC or haemoglobin", "Fasting glucose", "HbA1c", "Fasting insulin", "Lipid profile",
         "Thyroid profile", "Liver function", "Kidney function", "Vitamin D", "Vitamin B12",
         "Iron or ferritin", "Uric acid", "Hormonal or reproductive reports", "Other",
-        "Reports available but client is unsure", "No recent reports",
+        "Reports available but client is unsure", "Can arrange reports", "No recent reports",
       ],
     },
     {
@@ -913,7 +917,7 @@ const S5: Section = {
         "No major change", "Wake later", "Skip breakfast", "Delayed meals", "Fewer meals",
         "Larger meals", "Restaurant food", "Delivery food", "More snacks", "More sweets",
         "More alcohol", "Family meals", "Social events", "Less protein", "Less water",
-        "No fixed pattern", "Other",
+        "Late-night eating", "No fixed pattern", "Other",
       ],
     },
     {
@@ -987,6 +991,23 @@ const S6: Section = {
         "East Asian", "South-East Asian", "European or Western", "African", "Latin American",
         "Mixed or international", "Other",
       ],
+    },
+    {
+      id: "q34a", tag: "core", type: "text", label: "Country of residence",
+      placeholder: "e.g. India",
+    },
+    {
+      id: "q34b", tag: "core", type: "text", label: "City",
+      placeholder: "e.g. Chandigarh",
+    },
+    {
+      id: "q34c", tag: "planning", type: "multi",
+      label: "Which staple foods are normally part of your routine?",
+      options: [
+        "Roti", "Rice", "Paratha", "Bread", "Oats", "Poha", "Upma", "Idli", "Dosa",
+        "Millet", "Pasta", "Noodles", "Potato", "Other",
+      ],
+      why: "Staples anchor the plan — improved, not replaced.",
     },
     {
       id: "q35", n: 35, tag: "planning", type: "textarea",
@@ -1077,6 +1098,8 @@ const S6: Section = {
         "Batch cook 1–2 times weekly", "Household cook can make changes", "Carry meals",
         "Carry snacks only", "Work refrigerator available", "Work microwave available",
         "Cannot carry food", "Very little preparation time", "Not willing to add cooking",
+        "Maximum 5 minutes additional preparation", "10–15 minutes additional preparation",
+        "20–30 minutes additional preparation",
         "Limited additional cooking acceptable", "Significant meal preparation acceptable",
       ],
     },
@@ -1138,6 +1161,11 @@ const S7: Section = {
     {
       id: "q44c", tag: "fitness", type: "single", label: "Training time",
       options: ["Early morning", "Morning", "Afternoon", "Evening", "Night", "Variable"],
+      showIf: isTraining,
+    },
+    {
+      id: "q44g", tag: "fitness", type: "single", label: "Training location",
+      options: ["Gym", "Home", "Outdoor", "Mixed"],
       showIf: isTraining,
     },
     {
@@ -1347,6 +1375,10 @@ const S8: Section = {
       note: "Leave blank if unknown.",
     },
     {
+      id: "q54e", tag: "core", type: "single", label: "Commute",
+      options: ["No commute", "Less than 30 minutes", "30–60 minutes", "1–2 hours", "More than 2 hours"],
+    },
+    {
       id: "q55", n: 55, tag: "core", type: "multi", max: 3,
       label: "Which times or situations are hardest for you to manage food?",
       options: [
@@ -1389,7 +1421,7 @@ const S8: Section = {
       options: [
         "Sweets or mithai", "Chocolate", "Bakery foods", "Fried foods", "Salty snacks",
         "Chips or namkeen", "Fast food", "Carbohydrate-rich foods", "Sugary drinks",
-        "Late-night food", "No strong cravings", "Other",
+        "Tea or coffee", "Late-night food", "No strong cravings", "Other",
       ],
     },
     {
@@ -1398,6 +1430,11 @@ const S8: Section = {
         "Hunger", "Stress", "Boredom", "Poor sleep", "Menstrual cycle", "Previous restriction",
         "Social situation", "Food cues", "Work pressure", "Habit", "Post-workout", "Other",
       ],
+      showIf: (a) => hasOther(a, "q58", ["No strong cravings"]),
+    },
+    {
+      id: "q58b", tag: "conditional", type: "single", label: "Common craving time",
+      options: ["Morning", "Afternoon", "Evening", "Late night", "Post-workout", "Variable"],
       showIf: (a) => hasOther(a, "q58", ["No strong cravings"]),
     },
     {
@@ -1509,6 +1546,11 @@ const S9: Section = {
       showIf: (a) => hasOther(a, "q64", ["None"]),
     },
     {
+      id: "q64c", tag: "conditional", type: "single", label: "Sugar added to caffeine drinks",
+      options: ["No", "Yes", "Sometimes"],
+      showIf: (a) => hasOther(a, "q64", ["None"]),
+    },
+    {
       id: "q64b", tag: "conditional", type: "single", label: "Last caffeine of the day",
       options: ["Before 12 PM", "12–3 PM", "3–6 PM", "6–9 PM", "After 9 PM", "Variable"],
       showIf: (a) => hasOther(a, "q64", ["None"]),
@@ -1524,6 +1566,11 @@ const S9: Section = {
     {
       id: "q65a", tag: "conditional", type: "single", label: "Frequency",
       options: ["Daily", "4–6 times weekly", "2–3 times weekly", "Weekly", "Monthly", "Occasionally"],
+      showIf: (a) => hasOther(a, "q65", ["None", "Prefer not to answer"]),
+    },
+    {
+      id: "q65b", tag: "conditional", type: "multi", label: "Typical situation",
+      options: ["Routine use", "Social", "Weekend", "Stress-related", "Travel", "Other"],
       showIf: (a) => hasOther(a, "q65", ["None", "Prefer not to answer"]),
     },
     {
@@ -1560,6 +1607,11 @@ const S9: Section = {
         "Eat whatever is available", "Struggle with protein", "Eat late",
         "Order familiar foods", "Carry snacks", "Manage reasonably well",
       ],
+      showIf: (a) => hasOther(a, "q67", ["Rarely affected"]),
+    },
+    {
+      id: "q67b", tag: "conditional", type: "single", label: "How often?",
+      options: ["Rarely", "1–2 times per month", "Weekly", "Multiple times per week", "Frequent traveller"],
       showIf: (a) => hasOther(a, "q67", ["Rarely affected"]),
     },
   ],
@@ -1663,8 +1715,13 @@ const S10: Section = {
       label: "How much change feels realistic during the first two weeks?",
       options: [
         "1–2 small changes", "3 focused changes", "Moderate routine restructuring",
-        "Highly structured plan", "Need professional guidance",
+        "Highly structured plan", "Need a very flexible approach", "Need professional guidance",
       ],
+    },
+    {
+      id: "q74a", tag: "core", type: "textarea",
+      label: "Is there anything important about your health, food, routine, training or goal that we have not discussed?",
+      placeholder: "Client's own words — leave blank if nothing.",
     },
     {
       id: "q75", n: 75, tag: "core", type: "scale10",
@@ -1700,6 +1757,12 @@ const S11: Section = {
   intro:
     "IMPORTANT: these answers are your professional hypothesis, not automatically the final LeanR nutrition strategy. The AI independently analyses the complete client data before accepting, modifying or replacing it.",
   questions: [
+    {
+      id: "ds1", tag: "planning", type: "textarea",
+      label: "Your professional one-sentence understanding of this client",
+      placeholder:
+        "“This client primarily needs ___ while improving ___ without unnecessarily changing ___.”",
+    },
     {
       id: "q76", n: 76, tag: "planning", type: "multi", max: 5,
       label: "Main factors currently limiting the client's progress",
@@ -1910,8 +1973,9 @@ const S11: Section = {
       options: [
         "Controlled energy deficit", "Mild energy deficit", "Maintenance or recomposition",
         "Mild energy surplus", "Controlled energy surplus",
-        "Intake stabilisation before deficit or surplus", "Performance-fuelling priority",
-        "Clinical stabilisation priority", "Unsure — AI clinical review required",
+        "Intake stabilisation before deficit or surplus", "Correct excessive restriction first",
+        "Performance-fuelling priority", "Clinical stabilisation priority",
+        "Unsure — AI clinical review required",
       ],
     },
     {
@@ -2056,8 +2120,8 @@ const S11: Section = {
       label: "Diet structure you believe will fit the client best",
       options: [
         "Fixed structured diet", "Two options per meal", "Multiple meal options",
-        "Flexible food exchange", "Portion-based plan", "Hybrid structure",
-        "Unsure — AI should determine",
+        "Flexible food exchange", "Portion-based plan", "Habit-first plan",
+        "Macro-guided plan", "Hybrid structure", "Unsure — AI should determine",
       ],
     },
     {
@@ -2072,6 +2136,22 @@ const S11: Section = {
         "Favourite foods not sufficiently protected", "Family compatibility", "Work routine", "Other",
       ],
       showIf: (a) => scaleAtMost(a, "q101", 7),
+    },
+    {
+      id: "ds2", tag: "clinical", type: "textarea",
+      label: "AI hard constraints — non-negotiable rules the AI must follow (one per line)",
+      placeholder: "e.g. protein max 60 g/day per nephrologist; no fasting protocols; fluid cap 1.5 L",
+      note: "Hard constraints override every other strategy choice except a doctor's instruction.",
+    },
+    {
+      id: "ds3", tag: "planning", type: "textarea",
+      label: "Foods the AI must not force — with the nutritional objective needing an alternative",
+      placeholder: "e.g. client refuses paneer → protein objective via dal/soy; no raw salad → vegetables cooked",
+    },
+    {
+      id: "ds4", tag: "planning", type: "textarea",
+      label: "Special instruction to AI (optional)",
+      placeholder: "Anything the AI must know that no structured field captures.",
     },
   ],
 };

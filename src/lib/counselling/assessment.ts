@@ -646,7 +646,10 @@ export function aiProfile(a: Answers): Block {
 
   put("food_rules", clean({
     diet_pattern: val(a, "q33"),
+    country: val(a, "q34a"),
+    city: val(a, "q34b"),
     household_cuisines: list(a, "q34"),
+    household_staples: list(a, "q34c"),
     allergies_never_include: allergenList(a),
     allergy_severity: val(a, "q27a"),
     intolerances_avoid: list(a, "q26").filter((v) => !["No repeated discomfort", "Other"].includes(v)),
@@ -680,6 +683,7 @@ export function aiProfile(a: Answers): Block {
     days_per_week: val(a, "q44a"),
     session_duration: val(a, "q44b"),
     training_time: val(a, "q44c"),
+    training_location: val(a, "q44g"),
     experience: val(a, "q44d"),
     intensity: val(a, "q44e"),
     primary_training_goal: val(a, "q44f"),
@@ -713,12 +717,14 @@ export function aiProfile(a: Answers): Block {
     meal_breaks: val(a, "q54b"),
     daily_activity: val(a, "q54c"),
     average_steps: val(a, "q54d"),
+    commute: val(a, "q54e"),
     hardest_food_situations: list(a, "q55").filter((v) => v !== "No specific time"),
     hardest_reasons: list(a, "q55a"),
     hunger_pattern: val(a, "q56"),
     appetite: list(a, "q57").filter((v) => v !== "No concern"),
     cravings: list(a, "q58").filter((v) => v !== "No strong cravings"),
     craving_triggers: list(a, "q58a"),
+    craving_time: val(a, "q58b"),
     stress_eating: list(a, "q59").filter((v) => v !== "No major effect"),
     eating_pattern_risk: list(a, "q60").filter((v) => v !== "None"),
     eating_risk_safety_selection: val(a, "q60a"),
@@ -738,14 +744,17 @@ export function aiProfile(a: Answers): Block {
     caffeine_products: list(a, "q64").filter((v) => v !== "None"),
     caffeine_servings_per_day: val(a, "q64a"),
     last_caffeine: val(a, "q64b"),
+    caffeine_sugar_added: val(a, "q64c"),
     alcohol_nicotine_tobacco: list(a, "q65").filter((v) => !["None", "Prefer not to answer"].includes(v)),
     alcohol_tobacco_frequency: val(a, "q65a"),
+    alcohol_tobacco_situation: list(a, "q65b"),
     hormonal_reproductive: list(a, "q66").filter(
       (v) => !["Nothing relevant", "Not applicable", "Prefer not to answer"].includes(v)
     ),
     hormonal_medical_care: val(a, "q66a"),
     travel_social_situations: list(a, "q67").filter((v) => v !== "Rarely affected"),
     travel_social_effect: list(a, "q67a"),
+    travel_social_frequency: val(a, "q67b"),
   }));
 
   put("success_dropout_coaching", clean({
@@ -763,8 +772,13 @@ export function aiProfile(a: Answers): Block {
   }));
 
   // The dietitian's professional hypothesis (Section 11) — the AI must
-  // independently test this, not blindly obey it.
+  // independently test this, not blindly obey it. Hard constraints (ds2) are
+  // the exception: they are non-negotiable rules, not part of the hypothesis.
   put("dietitian_hypothesis", clean({
+    case_understanding: val(a, "ds1"),
+    ai_hard_constraints: val(a, "ds2"),
+    foods_ai_must_not_force: val(a, "ds3"),
+    special_instruction_to_ai: val(a, "ds4"),
     limiting_factors_ranked: list(a, "q76"),
     minimum_changes: list(a, "q77"),
     foods_habits_to_protect: val(a, "q78"),
@@ -817,6 +831,7 @@ export function aiProfile(a: Answers): Block {
     main_concern: val(a, "q103a"),
     direction_modified_after_discussion: list(a, "q104").filter((v) => v !== "No"),
     final_confidence_1_10: val(a, "q105"),
+    important_information_not_discussed: val(a, "q74a"),
   }));
 
   return profile;
