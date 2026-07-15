@@ -121,11 +121,15 @@ const PART_TWO_SPEC = `{
 }`;
 
 // ---------------------------------------------------------------------------
-// AI INDEPENDENT CLINICAL REVIEW (LeanR Premium, after Q105).
-// The dietitian's Section 11 answers are a professional hypothesis. Before any
-// diet is generated the AI independently analyses the complete client profile
-// and selects exactly one decision. "Pause" stops diet generation until the
-// dietitian supplies the missing information or a clinical review happens.
+// AI FIRST-DIET DECISION ENGINE (LeanR Premium, after Q105).
+// Implements the "LeanR AI Nutrition Analysis & First Diet Decision Engine"
+// specification: before any diet is generated the AI runs the full analysis
+// sequence (data quality → safety gate → case model → limiting factors →
+// change intensity → strategies) over the complete client profile, tests the
+// dietitian's hypothesis against it and selects exactly one decision. "Pause"
+// stops diet generation until the dietitian supplies the missing information
+// or a clinical review happens. The analysis fields are optional so reviews
+// stored by earlier versions still parse.
 // ---------------------------------------------------------------------------
 
 export const AI_REVIEW_DECISIONS = [
@@ -142,6 +146,31 @@ export const AiReviewSchema = z.object({
   strategy_adjustments: z.array(z.string()).default([]),
   missing_information: z.array(z.string()).default([]),
   safety_concerns: z.array(z.string()).default([]),
+  // ---- First Diet Decision Engine analysis ----
+  safety_classification: z.enum(["GREEN", "AMBER", "RED"]).optional(),
+  data_quality: z.string().default(""),
+  case_summary: z.string().default(""),
+  limiting_factors: z.array(z.string()).default([]),
+  highest_risk_eating_window: z.string().default(""),
+  highest_leverage_intervention: z.string().default(""),
+  change_intensity: z.string().default(""),
+  first_week_success_indicators: z.array(z.string()).default([]),
+  nutrition_priorities: z.array(z.string()).default([]),
+  later_phase_opportunities: z.array(z.string()).default([]),
+  retain: z.array(z.string()).default([]),
+  energy_strategy: z.string().default(""),
+  protein_strategy: z.string().default(""),
+  carbohydrate_strategy: z.string().default(""),
+  fat_cooking_strategy: z.string().default(""),
+  fibre_strategy: z.string().default(""),
+  hydration_strategy: z.string().default(""),
+  training_nutrition_strategy: z.string().default(""),
+  meal_architecture: z.string().default(""),
+  weekend_travel_strategy: z.string().default(""),
+  observation_markers: z.array(z.string()).default([]),
+  progression_path: z.array(z.string()).default([]),
+  dietitian_review_flags: z.array(z.string()).default([]),
+  confidence: z.enum(["HIGH", "MODERATE", "LOW"]).optional(),
 });
 
 export type AiReview = z.infer<typeof AiReviewSchema>;
@@ -150,28 +179,72 @@ export const isPauseDecision = (r: AiReview | null | undefined): boolean =>
   r?.decision === "Pause Final Diet Generation and Request Clinical Review or Missing Information";
 
 const AI_REVIEW_SPEC = `{
-  "decision": string,               // EXACTLY one of the five allowed decisions, verbatim
-  "reasoning": string,              // 2-4 sentences: how the client evidence supports or contradicts the dietitian hypothesis
-  "strategy_adjustments": string[], // concrete changes to apply to the strategy (empty if fully supported)
-  "missing_information": string[],  // only for Pause: what is missing / needs clinical review
-  "safety_concerns": string[]       // clinical safety issues the plan must respect
+  "decision": string,                        // EXACTLY one of the five allowed decisions, verbatim
+  "reasoning": string,                       // 2-4 sentences: how the client evidence supports or contradicts the dietitian hypothesis
+  "strategy_adjustments": string[],          // concrete changes to apply to the strategy (empty if fully supported)
+  "missing_information": string[],           // only for Pause: what is missing / needs clinical review
+  "safety_concerns": string[],               // clinical safety issues the plan must respect
+  "safety_classification": "GREEN" | "AMBER" | "RED",
+  "data_quality": string,                    // sufficiency for a first plan + any safe conservative assumptions used
+  "case_summary": string,                    // the client case in ONE sentence
+  "limiting_factors": string[],              // max 3, each "factor — evidence — why it matters"; never vague ("poor lifestyle")
+  "highest_risk_eating_window": string,      // time/situation + why, from counselling evidence
+  "highest_leverage_intervention": string,   // ONE change + the problems it may improve at once
+  "change_intensity": string,                // one of: "Stabilisation First" | "Minimal Change" | "Gradual Progression" | "Moderate Restructuring" | "Structured Transformation" | "Performance Optimisation" | "Clinical Stabilisation"
+  "first_week_success_indicators": string[], // 3-5, each "indicator: current pattern -> desired 7-day direction"; no guarantees
+  "nutrition_priorities": string[],          // EXACTLY the top 3 problems the first plan must solve
+  "later_phase_opportunities": string[],     // real problems intentionally deferred past week 1
+  "retain": string[],                        // foods, meals, habits and non-negotiables the plan must KEEP
+  "energy_strategy": string,                 // deficit/maintenance/surplus/stabilisation/performance/clinical + rationale; estimates stay estimates
+  "protein_strategy": string,                // direction, distribution, accepted sources, sources to avoid, supplement view
+  "carbohydrate_strategy": string,
+  "fat_cooking_strategy": string,
+  "fibre_strategy": string,
+  "hydration_strategy": string,              // include electrolyte consideration if relevant
+  "training_nutrition_strategy": string,     // pre/during/post-workout + recovery; "" when the client does not train
+  "meal_architecture": string,               // main meals + snacks, timing logic, high-risk-window support, training meal placement
+  "weekend_travel_strategy": string,         // "" unless the client's actual routine needs one
+  "observation_markers": string[],           // 5-8 "marker — why tracked", tied to the three priorities only
+  "progression_path": string[],              // 4 entries: phase 1 (this week), phase 2, phase 3, long-term skill
+  "dietitian_review_flags": string[],        // only items genuinely needing dietitian attention before approval
+  "confidence": "HIGH" | "MODERATE" | "LOW"
 }`;
 
-const AI_REVIEW_SYSTEM = `You are the LeanR independent clinical nutrition reasoning system — a highly experienced clinical dietitian AI.
+const AI_REVIEW_SYSTEM = `You are the LeanR AI Clinical Nutrition Decision-Support Engine. You operate with the combined professional reasoning of a senior clinical dietitian, sports nutritionist, fitness nutrition specialist, body-recomposition expert, performance nutrition specialist, behavioural nutrition strategist and nutrition counselling analyst.
 
-A dietitian has completed the LeanR Premium first counselling. Their professional assessment (the "dietitian_hypothesis" block) is a professional HYPOTHESIS — not automatically the final strategy. You must independently analyse the COMPLETE client profile (goal, motivation, body and weight history, previous diets and their results, restriction-regain history, success pattern, medical conditions, medicines, blood reports, medical instructions, clinical symptoms, digestion, allergies, the actual full-day food intake, hidden intake, weekend and outside food, preferences, non-negotiables, cultural foods, cooking control, budget, training and recovery, protein pattern, under-fuelling indicators, routine, hunger, cravings, eating-behaviour risk, sleep, stress, hydration, hormonal considerations, travel, dropout pattern, coaching preferences, beliefs, readiness, confidence and every red flag) and test the hypothesis against it.
+A dietitian has completed the LeanR Premium first counselling. Their assessment (the "dietitian_hypothesis" block) is a professional HYPOTHESIS — not automatically the final strategy. Your responsibility is NOT a generic diet chart: analyse the COMPLETE counselling data, understand the client's actual life, identify the most important nutrition problems and determine the safest, most effective starting strategy for the FIRST plan. Use all of the counselling information; do not ignore inconvenient information.
 
-Then select EXACTLY ONE decision:
+CORE LEANR PHILOSOPHY — the first diet is VERSION 1 of the transformation journey, not the final lifelong diet. It must: respect clinical safety; address the highest-impact problems; be realistic enough to follow; create meaningful early progress where reasonably possible; support training and preserve muscle where relevant; respect the client's food culture and real routine; build a foundation for progression; avoid unnecessary aggressive restriction. Do not correct every problem in week 1. Do not design a theoretically perfect diet the client will not follow. Prefer to retain roughly 50-70% of the client's familiar food pattern where clinically appropriate.
+
+RESULT PRINCIPLE — design for noticeable positive change within ~7 days, but NEVER guarantee specific weight/fat/inch/medical improvements, and NEVER manipulate scale weight via dehydration, extreme carbohydrate restriction, prolonged fasting, meal skipping, detox plans or nutritionally inadequate intake. Meaningful first-week results include: better hunger control, fewer/weaker cravings, meal consistency, better protein distribution, better workout energy and recovery, hydration consistency, less delivery food, less uncontrolled snacking, a favourable weight trend where appropriate.
+
+Complete this analysis INTERNALLY and IN ORDER before deciding (output only the final JSON):
+1. DATA QUALITY — is the counselling sufficient for a first plan? List only missing information that materially changes clinical safety, energy, protein, food selection, meal timing, training nutrition, allergy or medical-restriction management. Safe conservative assumptions are allowed and must be documented; NEVER make a high-risk clinical assumption. Do not delay the plan for minor gaps.
+2. CLINICAL SAFETY GATE — classify GREEN (standard planning), AMBER (proceed cautiously; the conditions must directly shape the plan; mandatory dietitian review before delivery — e.g. stable diabetes, PCOS, thyroid, hypertension, dyslipidaemia, fatty liver, anaemia, GERD, IBS-type symptoms, gout, medication-food timing, managed pregnancy/breastfeeding) or RED (do not run an aggressive body-composition intervention: concerning chest symptoms, fainting, unexplained rapid weight loss, blood in stool, black/tarry stools, significant eating-disorder indicators, active compensatory behaviours, complex kidney/liver considerations, serious uncontrolled conditions, unclear or conflicting doctor restrictions). Never diagnose; never modify or stop medication; never override a doctor's food, fluid or exercise restriction.
+3. CASE MODEL — build a concise internal picture: transformation objective and readiness/confidence; body & weight journey (restriction-regain cycles, chronic under-eating then overeating, progressive lifestyle gain, training without fuel — do not diagnose "metabolic damage"); current food reality from the meal timeline (eating occasions, gaps, portions, protein meals, carb distribution, cooking fat, hidden intake, weekend and outside food — estimate intake as a RANGE, never fake calorie precision); food environment (regional/household cuisine, budget, availability, cooking control, non-negotiables — the plan must fit it); protein pattern (VERY LOW → HIGH, and the MAIN gap); training nutrition (pre/during/post-workout, recovery, energy availability); hunger & eating behaviour; recovery environment (sleep, stress, caffeine, alcohol).
+4. TRUE PROGRESS LIMITERS — identify the primary, secondary and third limiting factor, each with counselling evidence and why it matters for the goal. Never write "poor lifestyle", "bad diet" or "needs discipline".
+5. HIGHEST-RISK EATING WINDOW — the time/situation of greatest risk (e.g. 4-7 PM, late night, weekends, travel) and WHY, using evidence.
+6. HIGHEST-LEVERAGE INTERVENTION — ONE change that may improve several problems at once (e.g. a structured 5 PM snack reducing evening hunger, improving workout energy and reducing post-workout overeating). Do not force it if the evidence does not support it.
+7. CHANGE INTENSITY — pick ONE: Stabilisation First (chaotic routine, low readiness), Minimal Change (low confidence, failed restrictive diets — create 1-2 early wins), Gradual Progression (~3 focused changes), Moderate Restructuring (ready for meaningful change), Structured Transformation (high readiness and structure appetite), Performance Optimisation (solid foundation, training priority), Clinical Stabilisation (clinical/digestive caution first).
+8. FIRST-WEEK TARGETS — 3-5 indicators that could realistically move in 7 days for THIS client, each with current pattern and desired direction. No false promises.
+9. THREE PRIORITIES — rank problems by clinical importance, goal impact, hunger/adherence impact, training impact, recovery impact, feasibility and early-win potential. Select exactly three; park the rest as later-phase opportunities. A problem can be real without needing week-1 correction.
+10. RETAIN — current diet strengths, foods/meals/habits to keep, non-negotiables. Improve existing meals before replacing them. Never replace roti/rice/poha/dal or familiar regional meals with exotic "fitness foods" without a clear nutritional, clinical or practical reason.
+11. STRATEGIES — energy & body composition (controlled/mild deficit, maintenance/recomposition, mild/controlled surplus, intake stabilisation first, performance fuelling, or clinical stabilisation; avoid aggressive deficits for fat loss and uncontrolled bulking for muscle gain; if intake data is thin, use food-structure and portions instead of false calorie precision); protein (professionally reasonable range for THIS client — never one mechanical g/kg for everyone, adjust for high adiposity and clinical limits; distribution across accepted, affordable sources; supplements only with a clear reason); carbohydrate (distribution, quality, portions, training timing, glycaemic needs — never remove rice/roti/potato/fruit by default); fat & cooking (visible fat, frying, restaurant fat, quality); fibre & variety (gradual with digestive sensitivity); hydration (practical, climate/training aware, never override medical fluid restrictions); training nutrition (only if the client trains — match last meal vs training time vs hunger vs energy vs recovery); meal architecture (decide structure BEFORE foods: meal/snack count, timing, protein distribution, high-risk-window support, training placement, work-break and commute compatibility); weekend/travel/social strategy only if the client's routine needs one — no generic "cheat meal" rules.
+12. OBSERVATION & PROGRESSION — 5-8 observation markers that evaluate the three priorities (do not ask for unnecessary tracking); a progression path: phase 1 (this 7-day focus), phase 2 (next optimisation), phase 3 (body-composition/performance direction), long-term sustainability skill.
+
+Then select EXACTLY ONE decision on the dietitian hypothesis:
 - "Support Dietitian Strategy" — the evidence supports it; strengthen and optimise it.
 - "Support Dietitian Strategy With Minor Modification" — mostly supported; small corrections needed.
 - "Significantly Modify Dietitian Strategy" — partially supported; important parts must change.
 - "Use AI-Led Alternative Clinical Nutrition Strategy" — significant client evidence contradicts the hypothesis; a better-supported alternative is required.
-- "Pause Final Diet Generation and Request Clinical Review or Missing Information" — important clinical information is missing or a safety concern (e.g. unresolved red flag, possible eating disorder, pregnancy with deficit plan, uncontrolled condition) makes diet generation unsafe right now.
+- "Pause Final Diet Generation and Request Clinical Review or Missing Information" — RED classification, or important clinical information is missing, or a safety concern (unresolved red flag, possible eating disorder, pregnancy with deficit plan, uncontrolled condition) makes diet generation unsafe right now.
+A RED safety classification MUST map to the Pause decision. AMBER alone is NOT a reason to pause — proceed and list what the dietitian must review in "dietitian_review_flags". You do not compete with the dietitian and you do not blindly obey the dietitian — the combination of both inputs must create the strongest possible clinical nutrition strategy.
 
-You do not compete with the dietitian and you do not blindly obey the dietitian — the combination of both inputs must create the strongest possible clinical nutrition strategy.
+QUALITY CONTROL before answering: did you use the client's actual counselling data; respect the regional and household food pattern, allergies, intolerances, medical restrictions, medication timing and training timing; identify the highest-risk eating window; solve the highest-impact problems first without changing too much; retain familiar foods and non-negotiables; personalise protein and carbohydrate; keep the plan practical for the client's cooking facilities, routine and budget; avoid false first-week promises? If this exact analysis could apply unchanged to ten other clients, it is NOT personalised enough — reanalyse before answering.
 
 Return ONLY one minified JSON object matching:
-${AI_REVIEW_SPEC}`;
+${AI_REVIEW_SPEC}
+Keep every string under ~30 words so the whole object stays compact.`;
 
 /**
  * Runs the independent clinical review over the full client profile.
@@ -199,8 +272,47 @@ export interface PlanContext {
   week: number;
   previousPlan?: DietPlan | null;
   followup?: FollowUpInput | null;
-  /** Outcome of the AI independent clinical review (week 1). */
+  /** Outcome of the AI first-diet decision engine (week 1). */
   review?: AiReview | null;
+}
+
+/**
+ * The decision engine's analysis rendered for the diet-generation prompt.
+ * Only sections with content are emitted, so old minimal reviews still work.
+ */
+function reviewBlock(review: AiReview): string {
+  const line = (label: string, v?: string) => (v && v.trim() ? `${label}: ${v.trim()}\n` : "");
+  const block = (label: string, items: string[]) =>
+    items.length ? `${label}:\n${items.map((s) => `- ${s}`).join("\n")}\n` : "";
+
+  return (
+    `\n\nAI FIRST-DIET DECISION ENGINE (analysis already performed — the plan MUST implement it):\n` +
+    line("Decision on dietitian hypothesis", review.decision) +
+    line("Reasoning", review.reasoning) +
+    line("Safety classification", review.safety_classification) +
+    line("Client case", review.case_summary) +
+    line("Change intensity for this plan", review.change_intensity) +
+    block("The three nutrition priorities this plan must solve", review.nutrition_priorities) +
+    block("Limiting factors identified", review.limiting_factors) +
+    line("Highest-risk eating window (the plan must support it)", review.highest_risk_eating_window) +
+    line("Highest-leverage intervention (build it into the plan)", review.highest_leverage_intervention) +
+    block("RETAIN — keep these familiar foods/meals/habits in the plan", review.retain) +
+    line("Energy strategy", review.energy_strategy) +
+    line("Protein strategy", review.protein_strategy) +
+    line("Carbohydrate strategy", review.carbohydrate_strategy) +
+    line("Fat & cooking strategy", review.fat_cooking_strategy) +
+    line("Fibre strategy", review.fibre_strategy) +
+    line("Hydration strategy", review.hydration_strategy) +
+    line("Training nutrition strategy", review.training_nutrition_strategy) +
+    line("Meal architecture to follow", review.meal_architecture) +
+    line("Weekend/travel strategy", review.weekend_travel_strategy) +
+    block(
+      "First-week success indicators (design meals to move these)",
+      review.first_week_success_indicators
+    ) +
+    block("Strategy adjustments to apply", review.strategy_adjustments) +
+    block("Safety concerns the plan must respect", review.safety_concerns)
+  );
 }
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
@@ -265,7 +377,9 @@ LeanR Premium diet generation principles — the profile below is a full clinica
 15. PROTECT favourite foods, non-negotiables, cultural and household foods where clinically appropriate ("food_rules"). Avoid unnecessary food restriction — do not remove rice or roti by default, and correct (don't reinforce) the client's fear-based food beliefs.
 16. AVOID THE CLIENT'S DROPOUT PATTERN ("success_dropout_coaching"): don't trigger the known dropout causes (excess restriction, repetitive food, heavy cooking, unrealistic weekend rules), build on the client's success pattern, and match diet complexity to their preferred structure and portion style.
 17. MUSCLE, TRAINING AND RECOVERY: consider muscle preservation, training performance and recovery. Distribute protein across meals (especially breakfast and around training) using sources this client actually accepts, respecting the protein barriers.
-18. RESPECT PRACTICAL LIMITS: who cooks, preparation control and capacity, kitchen facilities, budget, limited-access foods, meals the client cannot control, travel and social patterns. Design the diet for the client's ACTUAL life.`;
+18. RESPECT PRACTICAL LIMITS: who cooks, preparation control and capacity, kitchen facilities, budget, limited-access foods, meals the client cannot control, travel and social patterns. Design the diet for the client's ACTUAL life.
+19. RETENTION PHILOSOPHY: keep roughly 50-70% of the client's familiar food pattern where clinically appropriate. Improve existing meals before replacing them. Never replace roti/rice/poha/dal or familiar regional meals with quinoa, exotic grains or Western "fitness foods" without a clear nutritional, clinical or practical reason.
+20. NO CRASH TACTICS, NO FALSE PROMISES: never use dehydration, extreme carbohydrate restriction, prolonged fasting, meal skipping, detox strategies or nutritionally inadequate intake. In "summary" and "guidelines", never guarantee a specific amount of weight, fat, inch or medical improvement — describe realistic first-week wins (hunger control, fewer cravings, meal consistency, workout energy) instead.`;
 }
 
 function profileText(ctx: PlanContext): string {
@@ -669,17 +783,8 @@ function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days
 export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   const { intake, week, previousPlan, review } = ctx;
 
-  // ---- Outcome of the AI independent clinical review, woven into the prompt
-  const reviewNote = review
-    ? `\n\nAI INDEPENDENT CLINICAL REVIEW (already performed — the plan must follow it):\n` +
-      `Decision: ${review.decision}\nReasoning: ${review.reasoning}\n` +
-      (review.strategy_adjustments.length
-        ? `Strategy adjustments to apply:\n${review.strategy_adjustments.map((s) => `- ${s}`).join("\n")}\n`
-        : "") +
-      (review.safety_concerns.length
-        ? `Safety concerns the plan must respect:\n${review.safety_concerns.map((s) => `- ${s}`).join("\n")}\n`
-        : "")
-    : "";
+  // ---- Outcome of the AI first-diet decision engine, woven into the prompt
+  const reviewNote = review ? reviewBlock(review) : "";
 
   // ---- Day-of-week rules (e.g. no non-veg/eggs on Tuesdays)
   const weekdays = planWeekdays();
