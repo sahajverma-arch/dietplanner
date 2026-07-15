@@ -20,6 +20,19 @@ const MEAL_KCAL_MAX = 2500;
 // A single item above this is a wrong match, a bad quantity, or a source-data
 // outlier (a few INDB rows have implausible values) — fall back to AI estimate.
 const ITEM_KCAL_MAX = 600;
+// Grounding refines the model estimate — it must not radically rewrite it.
+// A grounded meal diverging beyond BOTH bounds from the AI estimate almost
+// always means a wrong gram resolution (e.g. the generic 200 g "cup" applied
+// to a light dry snack like roasted chana or makhana), so the AI estimate is
+// kept for that meal.
+const DIVERGENCE_ABS_KCAL = 150;
+const DIVERGENCE_MAX_RATIO = 1.6;
+const DIVERGENCE_MIN_RATIO = 0.5;
+// Day-level backstop: several individually-plausible corrections can still
+// accumulate. If grounding leaves a day further than this from the plan's
+// calorie target while the model's own design was closer, the whole day keeps
+// the model estimates — grounding must refine a day, not push it off target.
+const DAY_TARGET_TOLERANCE = 0.2;
 
 interface FoodMatch {
   query: string;
@@ -248,7 +261,12 @@ export async function groundPlan(
   const grounded: DietPlan = {
     ...plan,
     days: plan.days.map((day) => {
-      const meals = day.meals.map((meal) => {
+      type Candidate = {
+        meal: (typeof day.meals)[number];
+        grounded: (typeof day.meals)[number] | null;
+        sources: FoodMatch["source"][];
+      };
+      const candidates: Candidate[] = day.meals.map((meal) => {
         stats.total_meals++;
         stats.total_items += meal.items.length;
 
@@ -278,18 +296,54 @@ export async function groundPlan(
           mealSources.push(match.source);
         }
 
-        if (!complete || kcal < MEAL_KCAL_MIN || kcal > MEAL_KCAL_MAX) return meal;
+        if (!complete || kcal < MEAL_KCAL_MIN || kcal > MEAL_KCAL_MAX)
+          return { meal, grounded: null, sources: [] };
 
-        stats.grounded_meals++;
-        for (const s of mealSources) stats.sources[s]++;
+        // Too far from the AI estimate (both absolutely and proportionally) —
+        // the gram resolution is probably wrong; keep the model's numbers.
+        const estimate = meal.calories || 0;
+        if (
+          estimate >= MEAL_KCAL_MIN &&
+          Math.abs(kcal - estimate) > DIVERGENCE_ABS_KCAL &&
+          (kcal > estimate * DIVERGENCE_MAX_RATIO || kcal < estimate * DIVERGENCE_MIN_RATIO)
+        ) {
+          return { meal, grounded: null, sources: [] };
+        }
+
         return {
-          ...meal,
-          calories: Math.round(kcal),
-          protein_g: Math.round(protein),
-          carbs_g: Math.round(carbs),
-          fat_g: Math.round(fat),
+          meal,
+          grounded: {
+            ...meal,
+            calories: Math.round(kcal),
+            protein_g: Math.round(protein),
+            carbs_g: Math.round(carbs),
+            fat_g: Math.round(fat),
+          },
+          sources: mealSources,
         };
       });
+
+      // Day-level backstop against accumulated drift.
+      const target = plan.daily_calories;
+      const modelSum = day.meals.reduce((s, m) => s + (m.calories || 0), 0);
+      const groundedSum = candidates.reduce(
+        (s, c) => s + ((c.grounded ?? c.meal).calories || 0),
+        0
+      );
+      let acceptDay = true;
+      if (Number.isFinite(target) && target > 0 && modelSum > 0) {
+        const groundedDev = Math.abs(groundedSum - target) / target;
+        const modelDev = Math.abs(modelSum - target) / target;
+        acceptDay = groundedDev <= DAY_TARGET_TOLERANCE || groundedDev <= modelDev;
+      }
+
+      const meals = candidates.map((c) => (acceptDay && c.grounded ? c.grounded : c.meal));
+      if (acceptDay)
+        for (const c of candidates)
+          if (c.grounded) {
+            stats.grounded_meals++;
+            for (const s of c.sources) stats.sources[s]++;
+          }
 
       return {
         ...day,

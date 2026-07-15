@@ -678,9 +678,35 @@ interface FoodRules {
   disliked: string[];
 }
 
+// Indian-English/Hindi names and common aliases for allergens. "Peanut" typed
+// by the dietitian must also forbid "groundnut sabzi" — the model uses these
+// names interchangeably, so the safety scan must too.
+const ALLERGEN_SYNONYMS: Record<string, string[]> = {
+  peanut: ["groundnut", "moongphali", "moongfali", "singdana"],
+  groundnut: ["peanut", "moongphali", "moongfali", "singdana"],
+  milk: ["doodh"],
+  curd: ["dahi", "yogurt", "yoghurt"],
+  egg: ["anda", "omelette", "omelet"],
+  wheat: ["atta", "gehun"],
+  soy: ["soya", "tofu"],
+  sesame: ["til ", "tahini", "gingelly"],
+  "tree nut": ["almond", "cashew", "walnut", "pistachio", "hazelnut", "badam", "kaju", "akhrot", "pista"],
+  "tree nuts": ["almond", "cashew", "walnut", "pistachio", "hazelnut", "badam", "kaju", "akhrot", "pista"],
+};
+
+/** Expands allergen terms with their known synonyms. */
+function withSynonyms(terms: string[]): string[] {
+  const out = new Set(terms);
+  for (const t of terms) for (const syn of ALLERGEN_SYNONYMS[t] ?? []) out.add(syn);
+  return Array.from(out);
+}
+
 function foodRules(intake: IntakeForm): FoodRules {
   return {
-    allergens: [...splitFoodTerms(intake.allergies), ...splitFoodTerms(intake.intolerances)],
+    allergens: withSynonyms([
+      ...splitFoodTerms(intake.allergies),
+      ...splitFoodTerms(intake.intolerances),
+    ]),
     disliked: splitFoodTerms(intake.dislikes),
   };
 }
@@ -690,11 +716,17 @@ function violations(days: DietPlan["days"], rules: FoodRules): string[] {
   const found = new Map<string, string>();
   for (const day of days) {
     for (const meal of day.meals) {
+      // Allergens are scanned across the WHOLE meal — name, notes, items and
+      // quantities — a "groundnut oil" note is as unsafe as a peanut item.
+      const mealText = [meal.name, meal.notes, ...meal.items.flatMap((i) => [i.food, i.quantity])]
+        .join(" · ")
+        .toLowerCase();
+      for (const term of rules.allergens) {
+        if (mealText.includes(term))
+          found.set(term, `${day.day} ${meal.name} mentions the allergen/intolerance "${term}"`);
+      }
       for (const item of meal.items) {
         const food = item.food.toLowerCase();
-        for (const term of rules.allergens) {
-          if (food.includes(term)) found.set(term, `"${item.food}" contains the allergen/intolerance "${term}"`);
-        }
         for (const term of rules.disliked) {
           if (food.includes(term)) found.set(term, `"${item.food}" contains the disliked food "${term}"`);
         }
@@ -766,6 +798,43 @@ function weekdayFoodRules(intake: IntakeForm): DayRules | null {
 /** Word-boundary match so "egg" flags "Egg bhurji" but not "Eggplant". */
 const matchesTerm = (food: string, term: string) =>
   new RegExp(`\\b${term}s?\\b`, "i").test(food);
+
+// ---------------------------------------------------------------------------
+// Diet-type enforcement. "VEGETARIAN: no eggs" is rule 1 of the prompt, but a
+// corrective retry ("add breakfast protein") can still slip an egg in — so the
+// diet pattern is enforced deterministically like allergens and day rules.
+// ---------------------------------------------------------------------------
+
+const DIET_TYPE_TERMS: Record<string, string[]> = {
+  vegan: DAY_AVOID_TERMS["All animal products"],
+  vegetarian: [...DAY_AVOID_TERMS["Non-vegetarian food"], ...DAY_AVOID_TERMS["Eggs"]],
+  eggetarian: DAY_AVOID_TERMS["Non-vegetarian food"],
+};
+
+function dietTypeViolations(days: DietPlan["days"], dietType: string): string[] {
+  const terms = DIET_TYPE_TERMS[dietType] ?? [];
+  const found = new Map<string, string>();
+  for (const day of days)
+    for (const meal of day.meals)
+      for (const item of meal.items)
+        for (const t of terms)
+          if (matchesTerm(item.food, t))
+            found.set(t, `"${item.food}" is not allowed — the client is ${dietType}`);
+  return Array.from(found.values());
+}
+
+/** Last resort: drop items that break the diet pattern (meal keeps ≥1 item). */
+function stripDietTypeViolations(days: DietPlan["days"], dietType: string): DietPlan["days"] {
+  const terms = DIET_TYPE_TERMS[dietType] ?? [];
+  if (terms.length === 0) return days;
+  return days.map((day) => ({
+    ...day,
+    meals: day.meals.map((meal) => {
+      const kept = meal.items.filter((item) => !terms.some((t) => matchesTerm(item.food, t)));
+      return kept.length > 0 && kept.length < meal.items.length ? { ...meal, items: kept } : meal;
+    }),
+  }));
+}
 
 function dayRuleViolations(days: DietPlan["days"], dr: DayRules, weekdays: string[]): string[] {
   const found: string[] = [];
@@ -864,6 +933,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
   const rules = foodRules(intake);
   const checkDays = (days: DietPlan["days"]) => [
     ...violations(days, rules),
+    ...dietTypeViolations(days, intake.dietType),
     ...(dayRules ? dayRuleViolations(days, dayRules, weekdays) : []),
   ];
   const partOne = await generateValidated(
@@ -913,6 +983,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     );
   }
   days = stripDisliked(days, rules);
+  days = stripDietTypeViolations(days, intake.dietType);
   if (dayRules) days = stripDayRuleViolations(days, dayRules, weekdays);
 
   return DietPlanSchema.parse({ ...partOne, days });
