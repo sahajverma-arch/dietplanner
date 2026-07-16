@@ -34,153 +34,212 @@
 <div class="cover">
   <div>
     <h1><span class="brand">LEANR</span> Diet Platform</h1>
-    <div class="sub">Technical Documentation · v1.0 · 10 July 2026</div>
+    <div class="sub">Technical Documentation · v2.1 · 16 July 2026</div>
   </div>
   <img src="../public/logo.png" alt="LEANR by Fitelo">
 </div>
 
 <h2>1. Architecture Overview</h2>
 <pre>
-Browser (dietitian)
+Browser (dietitian, @fitelo.co Google sign-in)
    │  cookie session (@supabase/ssr)
    ▼
 <span class="y">Next.js 14 App Router</span> — Vercel
    ├─ Server Components ──────────► <span class="y">Supabase Postgres</span> (RLS on every table)
    ├─ middleware.ts (auth gate + token refresh)
-   └─ POST /api/generate-plan
-        ├─► <span class="y">NVIDIA NIM</span> chat completions (2 calls: days 1-4 + days 5-7)
-        ├─► @react-pdf/renderer → PDF buffer
-        └─► <span class="y">Supabase Storage</span> (private bucket, signed URLs)
+   ├─ POST /api/generate-plan   (first / followup / regenerate)
+   │    ├─► <span class="y">NVIDIA NIM</span> — AI independent clinical review (1 call)
+   │    │      Pause? → 422, nothing persisted, draft kept
+   │    ├─► <span class="y">NVIDIA NIM</span> — plan generation (2 calls: days 1-4 + 5-7)
+   │    │      deterministic checks: forbidden foods · allergens · day rules
+   │    ├─► <span class="y">Postgres RPC</span> match_foods_batch — INDB/USDA grounding
+   │    └─► diet_plans row saved as <span class="y">status = 'draft'</span> — preview only, no PDF
+   │
+   ├─ Human-in-the-loop review (client page, any number of rounds)
+   │    ├─ "revise": dietitian's written instructions → regenerate the draft
+   │    │      (same enforcement + grounding; instructions stored in revisions)
+   │    └─ "approve": @react-pdf/renderer → PDF buffer
+   │           └─► <span class="y">Supabase Storage</span> (private bucket) → status = 'final'
+   └─ POST /api/sync-counselling ◄─ <span class="y">QStash</span> daily cron (x-cron-secret)
+          Google Sheet "Raw_Counselling" → counselling_appointments
 </pre>
-<p>All database and storage writes execute <em>as the signed-in user</em> via the cookie-bound Supabase client — there is no service-role key anywhere, so Row Level Security is the single source of authorization.</p>
+<p>App reads/writes execute <em>as the signed-in user</em> via the cookie-bound Supabase client, so Row Level Security is the source of authorization. The service-role key exists only server-side for the sheet sync and the one-off food seeding script.</p>
 
 <h3>Stack</h3>
 <table>
   <tr><th>Layer</th><th>Technology</th></tr>
   <tr><td>Frontend / SSR</td><td>Next.js 14 (App Router), TypeScript, Tailwind CSS (dark LEANR theme, brand yellow <code>#FFED00</code>)</td></tr>
-  <tr><td>Auth / DB / Files</td><td>Supabase — Postgres + Auth + Storage, <code>@supabase/ssr</code> cookie sessions</td></tr>
+  <tr><td>Auth / DB / Files</td><td>Supabase — Postgres (+ <code>pg_trgm</code>) + Auth (Google OAuth, fitelo.co-only) + Storage, <code>@supabase/ssr</code> cookie sessions</td></tr>
   <tr><td>AI</td><td>NVIDIA NIM OpenAI-compatible endpoint — default <code>meta/llama-3.1-70b-instruct</code>, configurable + automatic fallback</td></tr>
+  <tr><td>Food data</td><td>INDB (Indian Nutrient Databank, ICMR-NIN IFCT-based, 1,014 recipes) + USDA SR Legacy (6,781 foods, CC0) seeded into <code>public.foods</code></td></tr>
+  <tr><td>Scheduling</td><td>Upstash QStash daily schedule → sheet sync endpoint</td></tr>
   <tr><td>PDF</td><td><code>@react-pdf/renderer</code> server-side (<code>renderToBuffer</code>)</td></tr>
   <tr><td>Hosting</td><td>Vercel (Node runtime; generate route <code>maxDuration = 300</code>)</td></tr>
 </table>
 
 <h2>2. Repository Structure</h2>
 <pre>
-supabase/migrations/0001_init.sql   tables + RLS + signup trigger + storage bucket/policies
-scripts/render-sample-pdf.tsx       dev utility: render the PDF layout without calling the AI
+supabase/migrations/
+  0001_init.sql                     tables + RLS + signup trigger + storage bucket/policies
+  0002_foods.sql                    foods reference table + fuzzy-match function
+  0003_match_ranking.sql            blended match scoring (exact / INDB preference / raw rules)
+  0004_google_auth_admin.sql        fitelo.co-only signups, profile fields, admin role/policies
+  0005_counselling_activity.sql     counselling_appointments (ops sheet sync)
+  0006_leanr_premium_ai_review.sql  diet_plans.ai_review (AI clinical review storage)
+  0007_plan_review.sql              diet_plans.status/starts_on/revisions (draft review loop)
+scripts/
+  seed-foods.mjs                    seeds public.foods from scripts/data/*.json
+  e2e-test-plan.ts                  counselling → review → plan → grounding → PDF, headless
+  test-clinical-counselling.mts     QA: flags, audit, AI profile, review decision, adherence checks
+  test-clients.ts                   PRIYA / RAHUL fixtures (answer every mandatory question)
+  seed-ui-test-draft.ts             plants a filled counselling as the signed-in dietitian's draft
+  test-revision-loop.ts             draft → dietitian instructions → revised draft, with checks
 src/
   middleware.ts                     session refresh + redirect unauthenticated → /login
   app/
-    login/page.tsx                  sign in / sign up
-    page.tsx                        dashboard (client cards, + New Counselling)
-    counselling/new/page.tsx        first-counselling form (loads draft server-side)
-    clients/[id]/page.tsx           client detail: latest plan, history, follow-up form
-    api/generate-plan/route.ts      the generation pipeline (see §5)
-    auth/signout/route.ts
+    page.tsx                        dashboard (client cards + Today's Activity)
+    today/page.tsx                  scheduled counselling calls per dietitian emp code
+    counselling/new/page.tsx        LeanR Premium counselling (loads draft / appointment seed)
+    clients/[id]/page.tsx           draft review panel, latest plan, AI review card, history, follow-up
+    admin/page.tsx                  read-only cross-dietitian view + manual sheet sync
+    onboarding/page.tsx             employee code + phone capture after first Google login
+    api/generate-plan/route.ts      review + generation pipeline (see §6)
+    api/sync-counselling/route.ts   sheet → counselling_appointments upsert (QStash)
   lib/
-    nim.ts                          NIM client, prompts, Zod schemas, fallback/timeout logic
+    counselling/questions.ts        LeanR Premium bank Q1–Q105 as data (see §4)
+    counselling/assessment.ts       red flags · 100-pt audit · toIntake() · aiProfile()
+    nim.ts                          NIM client, review + plan prompts, Zod schemas, enforcement
+    nutrition.ts                    plan grounding against public.foods (one RPC per plan)
     pdf.tsx                         premium macro-report PDF document
-    logo.ts                         logo as base64 data URI (embedded in PDFs)
     supabase/{client,server}.ts     browser / server Supabase factories
     types.ts                        IntakeForm, FollowUpInput, row types
-  components/                       CounsellingForm (autosave), FollowUpForm, PlanView,
-                                    ClientCard, AppHeader, DownloadPdfButton, RegenerateButton
+  components/                       ClinicalCounsellingForm (schema renderer + autosave),
+                                    PlanReviewControls (draft revise/approve), FollowUpForm,
+                                    PlanView, ClientCard, SyncSheetButton, …
 </pre>
 
 <h2>3. Data Model</h2>
 <table>
   <tr><th>Table</th><th>Purpose</th><th>Key columns</th></tr>
-  <tr><td><code>profiles</code></td><td>One row per dietitian; auto-created by trigger <code>on_auth_user_created</code></td><td><code>id (= auth.users.id)</code>, <code>full_name</code></td></tr>
-  <tr><td><code>clients</code></td><td>Clients owned by a dietitian; full intake retained</td><td><code>dietitian_id</code>, basics columns, <code>intake JSONB</code></td></tr>
-  <tr><td><code>diet_plans</code></td><td>One row per generated weekly plan</td><td><code>client_id</code>, <code>week_number</code>, <code>source</code> (first_counselling | follow_up), <code>plan JSONB</code>, <code>pdf_path</code></td></tr>
+  <tr><td><code>profiles</code></td><td>One row per dietitian; auto-created by trigger; fitelo.co domain enforced</td><td><code>id (= auth.users.id)</code>, <code>full_name</code>, <code>employee_code</code>, <code>phone</code>, <code>role</code> (dietitian | admin)</td></tr>
+  <tr><td><code>clients</code></td><td>Clients owned by a dietitian; the full counselling rides in <code>intake.answers</code></td><td><code>dietitian_id</code>, basics columns, <code>intake JSONB</code></td></tr>
+  <tr><td><code>diet_plans</code></td><td>One row per weekly plan; created as a <strong>draft preview</strong>, becomes <code>final</code> (with PDF) only on dietitian approval</td><td><code>client_id</code>, <code>week_number</code>, <code>source</code>, <code>status</code> (draft | final), <code>plan JSONB</code>, <code>ai_review JSONB</code>, <code>starts_on</code> (Day 1, fixed at generation), <code>revisions JSONB</code> (dietitian instructions applied, oldest first), <code>pdf_path</code></td></tr>
   <tr><td><code>followups</code></td><td>Weekly check-in used to generate the next plan</td><td><code>client_id</code>, <code>week_number</code>, <code>weight_kg</code>, <code>adherence</code>, <code>data JSONB</code></td></tr>
-  <tr><td><code>form_drafts</code></td><td>Live autosave of the counselling form</td><td><code>unique (dietitian_id, kind)</code>, <code>data JSONB</code></td></tr>
+  <tr><td><code>form_drafts</code></td><td>Live autosave of the counselling (answers + source appointment)</td><td><code>unique (dietitian_id, kind)</code>, <code>data JSONB</code></td></tr>
+  <tr><td><code>foods</code></td><td>Nutrition reference — INDB + USDA rows, per-100 g nutrients + household serving weights</td><td><code>name</code>, <code>source</code>, <code>kcal/protein/carbs/fat per 100 g</code>, <code>serving_weights JSONB</code></td></tr>
+  <tr><td><code>counselling_appointments</code></td><td>Ops sheet mirror + workflow status</td><td><code>client_code</code>, <code>emp_code</code>, <code>scheduled_on</code>, sheet columns, <code>status</code>, <code>client_id</code></td></tr>
 </table>
-<p><strong>RLS:</strong> every table has <code>FOR ALL USING (dietitian_id = auth.uid()) WITH CHECK (dietitian_id = auth.uid())</code> (profiles: <code>id = auth.uid()</code>). <strong>Storage:</strong> private bucket <code>diet-pdfs</code>; object paths are <code>&lt;dietitian_id&gt;/&lt;client_id&gt;/week-N-&lt;ts&gt;.pdf</code> and policies require the first folder segment to equal <code>auth.uid()</code>. Downloads use 1-hour signed URLs created client-side (RLS applies).</p>
+<p><strong>RLS:</strong> per-dietitian tables use <code>dietitian_id = auth.uid()</code>; appointments match <code>profiles.employee_code = emp_code</code> (column-grant limits dietitian updates to workflow columns); admin read via <code>is_admin()</code>. <strong>Storage:</strong> private bucket <code>diet-pdfs</code>, paths <code>&lt;dietitian_id&gt;/&lt;client_id&gt;/week-N-&lt;ts&gt;.pdf</code>, policies require the first folder segment to equal <code>auth.uid()</code>; downloads via 1-hour signed URLs.</p>
 
-<h2>4. Authentication Flow</h2>
+<h2>4. Counselling Engine (<code>src/lib/counselling/</code>)</h2>
+<p>The first counselling is the <strong>LeanR Premium Final New Client First Counselling</strong> — Q1–Q105 in 12 sections (goal &amp; motivation · body history · medical safety · digestion · actual food day · preferences &amp; feasibility · training/protein/recovery · routine &amp; behaviour · lifestyle · success/dropout/coaching · dietitian assessment · client discussion), 55–65 minutes, conversational option-select. It is entirely <strong>schema-as-data</strong> in <code>questions.ts</code>; <code>ClinicalCounsellingForm.tsx</code> renders whatever the schema says, so rewording or adding a question never touches UI code.</p>
 <ul>
-  <li><code>src/middleware.ts</code> runs on every request: refreshes the Supabase session cookie and redirects unauthenticated users to <code>/login</code> (and authenticated users away from it).</li>
-  <li>Server components and route handlers build a per-request client via <code>lib/supabase/server.ts</code> (cookie-bound). The browser uses <code>lib/supabase/client.ts</code>.</li>
-  <li>Signup passes <code>full_name</code> in user metadata; a <code>SECURITY DEFINER</code> trigger copies it into <code>profiles</code>.</li>
+  <li><strong>Question types:</strong> text, textarea, number, time, date, single, multi (with optional <code>max</code> — "select up to N", click order doubles as rank), 1–10 sliders.</li>
+  <li><strong>Conditional visibility:</strong> <code>showIf(answers)</code> per question — numeric targets appear per selected Q5 target, safety follow-ups on Q21 symptoms, day-of-week rules under Q38, the hormonal section only where relevant, training detail only when training.</li>
+  <li><strong>Meal timeline (Q28):</strong> selecting a meal occasion generates its <code>q28_&lt;occasion&gt;_{time,food,prep,source,extras}</code> fields — a structured 24-hour recall.</li>
+  <li><strong>Mandatory gate:</strong> <code>missingRequired()</code> (visibility-aware) blocks generation in the UI and again in the API.</li>
+  <li><strong><code>assessment.ts</code>:</strong> <code>redFlags()</code> — urgent Q21 symptoms, severe allergy, disordered-eating risk (Q60), pregnancy, renal/bariatric, RED-S under-fuelling, each marked escalate vs caution; <code>audit()</code> — 100-point quality rubric across 11 categories, computed live; <code>toIntake()</code> — legacy projection keeping the clients table and follow-ups unchanged; <code>aiProfile()</code> — the 14-block clinical profile the AI analyses (including <code>dietitian_hypothesis</code> = Section 11 and <code>red_flags</code>).</li>
 </ul>
 
-<h2>5. AI Generation Pipeline (<code>src/lib/nim.ts</code>)</h2>
-<p>The shared NIM serving functions cap completions at roughly 2k tokens — a full 7-day plan with per-meal macros does not fit in one response. The plan is therefore generated in <strong>two calls</strong> and merged:</p>
-<ol>
-  <li><strong>Part 1</strong> — overview (summary, daily calories, macro targets, guidelines, hydration, foods to avoid) + days 1–4.</li>
-  <li><strong>Part 2</strong> — days 5–7; the prompt includes a compact listing of days 1–4 meals so menus vary, plus the part-1 calorie/macro targets for consistency.</li>
-</ol>
-<p>Each call goes through the same hardened path:</p>
+<h2>5. AI Pipeline (<code>src/lib/nim.ts</code>)</h2>
+<h3>5.1 Independent clinical review (before every Week-1 plan)</h3>
+<p>Per the LeanR Premium spec, the dietitian's Section 11 strategy is a <em>professional hypothesis</em>. <code>aiClinicalReview()</code> sends the complete profile and receives a Zod-validated decision object:</p>
+<pre>{ "decision": "Support Dietitian Strategy" | "… With Minor Modification" |
+              "Significantly Modify Dietitian Strategy" |
+              "Use AI-Led Alternative Clinical Nutrition Strategy" |
+              "Pause Final Diet Generation and Request Clinical Review or Missing Information",
+  "reasoning": string, "strategy_adjustments": string[],
+  "missing_information": string[], "safety_concerns": string[] }</pre>
+<p>A <strong>Pause</strong> aborts generation (HTTP 422) <em>before</em> the client row is created, so the counselling remains an editable draft. Any other decision is woven into the plan prompts and stored in <code>diet_plans.ai_review</code>. A failed review call degrades to generation-without-review (never blocks the dietitian).</p>
+<h3>5.2 Plan generation</h3>
+<p>The shared NIM endpoints cap completions around 2k tokens, so the 7-day plan is generated in <strong>two calls</strong> (overview + days 1–4, then days 5–7 seeing days 1–4 for variety) and merged. Each call is hardened: <code>response_format: json_object</code> with graceful degradation, 120 s per-call timeout, automatic fallback model on transient failures, Zod validation with corrective retries. Truncation is handled explicitly — unparseable output <em>and</em> "valid JSON but too few days" (constrained decoding closing the object at the completion cap) both trigger a brevity-focused retry instead of echoing the broken response; if the primary model still cannot produce a valid plan after 3 attempts, the whole conversation is <strong>rerun once on the fallback model</strong> before failing.</p>
+<p><strong>Revision rounds:</strong> when the dietitian requests changes on a draft (§7), <code>generateDietPlan()</code> receives the current draft plus the written instructions. The prompt marks the instructions as mandatory (second only to allergies and medical safety) and directs the model to revise the existing draft — keeping everything not mentioned — rather than start over. <code>starts_on</code> is passed through so weekday-specific rules keep their original Day-1 mapping across revision rounds.</p>
+<p>The system prompt encodes the <strong>Final Diet Generation Principles</strong>: never plan from the goal / dietitian strategy / calorie maths / weight alone; obey red flags and doctor instructions; follow the review decision; smallest number of high-impact changes matched to readiness; start from the actual food day; protect favourites, non-negotiables and cultural foods; avoid unnecessary restriction; avoid the client's dropout pattern; fuel muscle, training and recovery; design for the client's actual life.</p>
+<h3>5.3 Deterministic enforcement (not left to the model)</h3>
 <ul>
-  <li><strong>Constrained decoding:</strong> <code>response_format: {type: "json_object"}</code>; degrades gracefully (one retry without it) if a model rejects the parameter, same for <code>max_tokens</code> above a model's cap.</li>
-  <li><strong>Timeout:</strong> <code>AbortSignal.timeout(120s)</code> per call — never waits on NVIDIA's multi-minute gateway 504s.</li>
-  <li><strong>Fallback model:</strong> any transient failure (timeout, 429, 5xx, network) retries once on <code>NVIDIA_FALLBACK_MODEL</code> (default <code>meta/llama-3.1-8b-instruct</code>).</li>
-  <li><strong>Validation:</strong> responses are parsed (code-fence tolerant) and validated with Zod (<code>PartOneSchema</code> / <code>PartTwoSchema</code>; merged result re-validated against <code>DietPlanSchema</code> — exactly 7 days). One corrective retry feeds validation errors back; truncated responses instead get a fresh brevity instruction (the broken output is <em>not</em> echoed back).</li>
-  <li><strong>Hard rules in the system prompt:</strong> diet-type enforcement (vegan/veg/eggetarian/non-veg), absolute exclusion of allergies/intolerances/dislikes, adaptation to medical conditions, per-meal macros that sum to daily totals (±5%).</li>
+  <li><strong>Forbidden foods:</strong> allergens + intolerances + dislikes are listed in the prompt <em>and</em> scanned in the returned meals; violations are named back for correction; surviving dislikes are stripped; a surviving <strong>allergen aborts the plan</strong>.</li>
+  <li><strong>Day-of-week rules (q38a–c):</strong> "Day N" maps to real weekdays via <code>starts_on</code> (Day 1 = tomorrow, fixed at generation so revision rounds and the approval-time PDF agree); restricted weekdays are checked term-by-term (non-veg, eggs, onion/garlic, all animal products) and violations stripped as a last resort.</li>
+  <li><strong>Every revision round re-runs all of the above</strong> — a dietitian instruction can never reintroduce an allergen, diet-type violation or day-rule breach, and the revised plan is re-grounded against the foods table.</li>
 </ul>
+<h3>5.4 Nutrition grounding (<code>src/lib/nutrition.ts</code>)</h3>
+<p>All item names go to Postgres in <strong>one RPC</strong> (<code>match_foods_batch</code>: <code>pg_trgm</code> fuzzy matching, blended scoring with a preference for INDB), quantities like "2 rotis" / "1 katori" / "150 g" resolve to grams via household serving weights, and a meal's macros are replaced <em>only when every item matched and resolved</em>. Non-fatal by design: an empty foods table just keeps model estimates.</p>
 
-<h3>Plan JSON contract (stored in <code>diet_plans.plan</code>)</h3>
-<pre>{ "summary": string, "daily_calories": number,
-  "macros": {"protein_g": n, "carbs_g": n, "fat_g": n},
-  "guidelines": string[], "hydration": string, "foods_to_avoid": string[],
-  "days": [ 7 × { "day": "Day N", "total_calories": n, "meals": [
-    { "name": "Breakfast", "time": "08:00",
-      "items": [{"food": string, "quantity": string}], "notes": string,
-      "calories": n, "protein_g": n, "carbs_g": n, "fat_g": n } ] } ] }</pre>
-
-<h2>6. API Reference — <code>POST /api/generate-plan</code></h2>
-<p>Auth: session cookie (401 otherwise). Runtime: Node, <code>maxDuration 300</code>. Three request variants:</p>
+<h2>6. API Reference</h2>
+<h3><code>POST /api/generate-plan</code> (auth: session cookie · Node · maxDuration 300)</h3>
 <table>
   <tr><th>Body</th><th>Behaviour</th></tr>
-  <tr><td><code>{"type":"first","form": IntakeForm}</code></td><td>Creates the client, generates Week 1, renders + stores PDF, inserts plan row, clears the autosaved draft. Returns <code>{clientId, planId, week}</code>.</td></tr>
-  <tr><td><code>{"type":"followup","clientId","followup": FollowUpInput}</code></td><td>Inserts the follow-up row, updates client weight, generates week <code>latest+1</code> seeing the previous menu.</td></tr>
-  <tr><td><code>{"type":"regenerate","clientId"}</code></td><td>Retries generation from stored intake (used when a first generation failed after the client was saved).</td></tr>
+  <tr><td><code>{"type":"first","form": ClinicalIntake, "appointmentId"?}</code></td><td>Server-side mandatory gate → AI clinical review (Pause → <strong>422</strong> <code>{error, paused, aiReview}</code>, nothing persisted) → create client → generate → ground → insert plan as <strong>draft</strong> (+<code>ai_review</code>, <code>starts_on</code>) → mark appointment Completed → clear draft. Returns <code>{clientId, planId, week, status:"draft"}</code>. No PDF yet.</td></tr>
+  <tr><td><code>{"type":"followup","clientId","followup"}</code></td><td>Inserts the follow-up, updates client weight, generates week <code>latest+1</code> as a <strong>draft</strong> using the LeanR weekly loop and last week's menu.</td></tr>
+  <tr><td><code>{"type":"regenerate","clientId"}</code></td><td>Retries from stored intake as a <strong>draft</strong>; re-runs the AI review when retrying a Week-1 plan.</td></tr>
+  <tr><td><code>{"type":"revise","planId","instructions"}</code></td><td>Human-in-the-loop round on a draft: rebuilds the original context (intake, AI review, previous week's plan, follow-up data), regenerates with the dietitian's instructions marked mandatory, re-runs enforcement + grounding, <strong>updates the same row</strong> and appends <code>{instructions, at}</code> to <code>revisions</code>. Draft only — an approved plan returns <strong>409</strong>.</td></tr>
+  <tr><td><code>{"type":"approve","planId"}</code></td><td>Renders the PDF from the reviewed plan (dates from <code>starts_on</code>), uploads to storage, sets <code>status = 'final'</code> + <code>pdf_path</code>. No model calls (~2 s). Draft only — <strong>409</strong> otherwise.</td></tr>
 </table>
-<p><strong>Errors:</strong> 400 invalid body · 401 unauthenticated · 404 unknown client · 502 with <code>{error, clientId?}</code> when generation/PDF/storage fails — the UI uses <code>clientId</code> to route to the client page where retry is offered. The PDF filename pattern is <code>week-N-&lt;timestamp&gt;.pdf</code>; plan start date is the day after generation (day labels on the PDF are real dates).</p>
+<p><strong>Errors:</strong> 400 invalid body/gate · 401 unauthenticated · 404 unknown client/plan · 409 plan already approved · 422 review pause or unparseable stored draft · 502 <code>{error, clientId?}</code> on generation/PDF/storage failure (the UI routes to the client page where retry is offered).</p>
+<div class="note"><strong>Long-request behaviour:</strong> generation is a synchronous request (1–3 min typically; longer when the primary model is congested and per-call timeouts cascade). If the browser connection drops mid-request, the server still finishes and saves the draft — refresh the client page instead of resubmitting the counselling form, which would create a duplicate client.</div>
+<h3><code>POST /api/sync-counselling</code></h3>
+<p>Guarded by <code>CRON_SECRET</code> (<code>x-cron-secret</code> header or <code>?secret=</code>). Reads the Raw_Counselling sheet (Google service account preferred, CSV-export fallback), upserts <code>counselling_appointments</code> on <code>(client_code, emp_code, scheduled_on)</code> touching only sheet columns — workflow status survives re-syncs. Triggered daily by QStash and manually from <code>/admin</code>.</p>
 
-<h2>7. PDF Rendering (<code>src/lib/pdf.tsx</code>)</h2>
+<h2>7. Human-in-the-Loop Plan Review (<code>PlanReviewControls</code>)</h2>
+<p>Every generated plan — first counselling, follow-up or regenerate — is stored as a <strong>draft preview</strong> and shown on the client page under an amber "Draft preview — needs your review" panel. The dietitian inspects the full plan (meals, macros, repetition, timing) before anything reaches the client. The panel offers:</p>
 <ul>
-  <li>Premium macro-report layout: black header band with client name + LEANR logo (embedded data URI from <code>lib/logo.ts</code>), macro target cards, color legend, per-day tables (Time | Meal | Foods | Calories | Protein | Carbs | Fat | Cal%), highlighted Daily Total rows, Weekly Summary with P%/C%/F%, guidelines, foods to avoid, and a two-line disclaimer footer on every page.</li>
+  <li><strong>Free-text change instructions</strong> — e.g. <em>"too much paneer, vary the protein sources; keep protein near 90 g; Day 3 dinner lighter"</em> — sent with <code>type:"revise"</code>. The AI revises the existing draft (not a fresh plan), the same safety enforcement and grounding re-run, and the round is appended to the plan's <code>revisions</code> history, displayed as "Changes already applied". Unlimited rounds.</li>
+  <li><strong>Approve &amp; create PDF</strong> — <code>type:"approve"</code> renders and stores the final PDF and flips the row to <code>final</code>; the download button appears in plan history.</li>
+</ul>
+<p>Rationale: generated diets occasionally repeat foods across the week or overshoot protein; the review checkpoint puts the dietitian's judgement between the model and the client, with their corrections applied by the AI in ~1–2 minutes instead of manual re-editing. Plan history marks unapproved rows "Draft — in review"; drafts have no PDF and never reach a client. The counselling form's autosaved draft is still cleared at generation time (the counselling itself succeeded); plan-level iteration happens entirely on the client page.</p>
+
+<h2>8. PDF Rendering (<code>src/lib/pdf.tsx</code>)</h2>
+<ul>
+  <li>Rendered <strong>at approval time</strong> from the reviewed plan; day dates come from the stored <code>starts_on</code>, so what the dietitian approved is exactly what the PDF shows.</li>
+  <li>Premium macro-report layout: black header band with client name + LEANR logo, macro target cards, per-day tables (Time | Meal | Foods | Calories | Protein | Carbs | Fat | Cal%), highlighted Daily Total rows, Weekly Summary with P%/C%/F%, guidelines, foods to avoid, real dates per day, and a two-line disclaimer footer on every page.</li>
   <li>Daily totals, Cal% and the weekly summary are <em>computed from meal data</em>, never trusted from the model.</li>
-  <li><code>next.config.mjs</code> marks <code>@react-pdf/renderer</code> as a server external package (required for the Node runtime bundle).</li>
-  <li>Preview the layout without the AI: <code>npx tsx scripts/render-sample-pdf.tsx out.pdf</code>.</li>
+  <li>Preview without the AI: <code>npx tsx scripts/render-sample-pdf.tsx out.pdf</code>.</li>
 </ul>
 
-<h2>8. Autosave Design</h2>
-<p><code>CounsellingForm</code> debounces every state change (1.2s) into an upsert on <code>form_drafts</code> keyed by <code>(dietitian_id, kind)</code>, with a live Saving/Saved/Failed indicator. The draft is fetched server-side on page load (no flash) and deleted only after a successful generation, so a failed generation or closed tab never loses call notes.</p>
+<h2>9. Autosave Design</h2>
+<p><code>ClinicalCounsellingForm</code> debounces every change (1.2 s) into an upsert on <code>form_drafts</code> keyed by <code>(dietitian_id, kind)</code>, storing answers + the source appointment id, with a live Saving/Saved/Failed indicator. The draft restores server-side on load (only for the same appointment) and is deleted exclusively after successful generation — a failed generation, review Pause, or closed tab never loses call notes.</p>
 
-<h2>9. Environment Variables</h2>
+<h2>10. Environment Variables</h2>
 <table>
   <tr><th>Variable</th><th>Scope</th><th>Notes</th></tr>
-  <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td>client + server</td><td>Supabase project URL</td></tr>
-  <tr><td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>client + server</td><td>Safe to expose — RLS enforces access</td></tr>
-  <tr><td><code>NVIDIA_API_KEY</code></td><td><strong>server only</strong></td><td>From build.nvidia.com; never sent to the browser</td></tr>
-  <tr><td><code>NVIDIA_MODEL</code></td><td>server, optional</td><td>Default <code>meta/llama-3.1-70b-instruct</code>; <code>mistralai/mistral-small-4-119b-2603</code> is a fast, strong alternative when the default is congested</td></tr>
-  <tr><td><code>NVIDIA_FALLBACK_MODEL</code></td><td>server, optional</td><td>Default <code>meta/llama-3.1-8b-instruct</code>; used automatically on transient failures</td></tr>
-  <tr><td><code>NVIDIA_NIM_URL</code></td><td>server, optional</td><td>Default <code>https://integrate.api.nvidia.com/v1/chat/completions</code></td></tr>
+  <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code> / <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>client + server</td><td>RLS makes the anon key safe to expose</td></tr>
+  <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td><strong>server only</strong></td><td>Sheet sync + <code>npm run seed:foods</code>; never in the browser</td></tr>
+  <tr><td><code>NVIDIA_API_KEY</code></td><td><strong>server only</strong></td><td>From build.nvidia.com</td></tr>
+  <tr><td><code>NVIDIA_MODEL</code> / <code>NVIDIA_FALLBACK_MODEL</code> / <code>NVIDIA_NIM_URL</code></td><td>server, optional</td><td>Defaults: llama-3.1-70b / llama-3.1-8b / integrate.api.nvidia.com. Current config: <code>mistral-small-4</code> primary (fast; occasional malformed JSON is handled by validation retries) with <code>llama-3.1-70b</code> fallback (reliable but congestion-prone). The fallback covers transient errors <em>and</em> persistent validation failures.</td></tr>
+  <tr><td><code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code> / <code>GOOGLE_SERVICE_ACCOUNT_KEY</code></td><td>server only</td><td>Sheets API read access to Raw_Counselling (share sheet as Viewer)</td></tr>
+  <tr><td><code>COUNSELLING_SHEET_ID</code> / <code>COUNSELLING_SHEET_RANGE</code> / <code>COUNSELLING_SHEET_CSV_URL</code></td><td>server only</td><td>Range defaults to <code>Raw_Counselling</code>; CSV URL is the link-viewable fallback</td></tr>
+  <tr><td><code>CRON_SECRET</code></td><td>server only</td><td>Shared secret QStash sends to the sync endpoint</td></tr>
 </table>
 
-<h2>10. Setup &amp; Deployment</h2>
+<h2>11. Setup &amp; Deployment</h2>
 <ol>
-  <li><strong>Supabase:</strong> create a project; run <code>supabase/migrations/0001_init.sql</code> in the SQL Editor (creates all tables, RLS, trigger, bucket, policies). Recommended: disable "Confirm email" under Authentication → Sign In / Providers → Email (the built-in mailer is rate-limited to ~2 emails/hour).</li>
-  <li><strong>Local:</strong> <code>npm install</code> → copy <code>.env.example</code> to <code>.env.local</code> and fill the three keys → <code>npm run dev</code>.</li>
-  <li><strong>Vercel:</strong> import the GitHub repo, set the env vars, deploy; then add the Vercel domain to Supabase Authentication → URL Configuration.</li>
+  <li><strong>Supabase:</strong> run migrations <code>0001</code> → <code>0007</code> in order in the SQL Editor (tables, RLS, trigger, bucket/policies, foods matching, Google-auth constraints, appointments, <code>ai_review</code>, draft-review columns).</li>
+  <li><strong>Food data:</strong> put the service-role key in <code>.env.local</code>, run <code>npm run seed:foods</code> (~7,900 rows; idempotent upsert).</li>
+  <li><strong>Google sign-in:</strong> create an OAuth client in Google Cloud Console, add Supabase's redirect URI, enable the Google provider in Supabase Auth.</li>
+  <li><strong>Local:</strong> <code>npm install</code> → fill <code>.env.local</code> from <code>.env.example</code> → <code>npm run dev</code>.</li>
+  <li><strong>Vercel:</strong> import the repo, set env vars, deploy; add the domain to Supabase Auth URL configuration; create the QStash daily schedule (POST <code>/api/sync-counselling</code>, cron <code>30 0 * * *</code>, secret header).</li>
+  <li><strong>QA:</strong> <code>npx tsx scripts/test-clinical-counselling.mts</code> (flags → audit → review → plan → adherence checks), <code>npx tsx scripts/e2e-test-plan.ts</code> (two clients → PDFs in <code>test-output/</code>) and <code>npx tsx scripts/test-revision-loop.ts</code> (draft → written instructions → revised draft, with protein/variety checks).</li>
 </ol>
 
-<h2>11. Operations &amp; Troubleshooting</h2>
+<h2>12. Operations &amp; Troubleshooting</h2>
 <table>
   <tr><th>Symptom</th><th>Cause / fix</th></tr>
-  <tr><td>Generation slow or 502 with "NVIDIA NIM … failed (504)"</td><td>Shared free NIM endpoint congested. The fallback model usually still succeeds; optionally set <code>NVIDIA_MODEL</code> to a healthier model. Retry from the client page — intake is never lost.</td></tr>
-  <tr><td>"AI returned an invalid diet plan after 2 attempts"</td><td>Rare double validation failure — retry. Persistent cases: check the model supports <code>response_format</code> and ~2k-token outputs per half-plan.</td></tr>
-  <tr><td>"Email rate limit exceeded" on signup</td><td>Supabase's built-in mailer (~2/hour). Disable Confirm email, or delete the stuck unconfirmed user and retry.</td></tr>
-  <tr><td>PDF download does nothing</td><td>Pop-up blocked, or storage policies missing — re-run the migration section for <code>storage.objects</code> policies.</td></tr>
-  <tr><td>401 from NIM</td><td>Bad/missing <code>NVIDIA_API_KEY</code>.</td></tr>
+  <tr><td>422 "AI clinical review paused diet generation"</td><td>Working as designed — the review found missing information or a safety concern. The counselling is still a draft: address the listed gaps (or the flagged risk) and resubmit.</td></tr>
+  <tr><td>Generation slow or 502 "NVIDIA NIM … failed (504)"</td><td>Shared free NIM endpoint congested. The fallback model usually succeeds; optionally point <code>NVIDIA_MODEL</code> at a healthier model. Retry from the client page — intake is never lost.</td></tr>
+  <tr><td>Browser shows a network error mid-generation</td><td>The server finishes independently — refresh the client page after a minute; the draft usually appears. Do <em>not</em> resubmit the counselling form (creates a duplicate client).</td></tr>
+  <tr><td>"AI (model) returned an invalid diet plan after 3 attempts"</td><td>Model returned malformed/truncated JSON repeatedly; the run already retried with brevity demands and once on the fallback model. Usually transient — regenerate; if persistent, switch <code>NVIDIA_MODEL</code>.</td></tr>
+  <tr><td>Plan stuck as "Draft — in review"</td><td>Working as designed — the dietitian hasn't approved it. Open the client page, revise or approve from the amber panel.</td></tr>
+  <tr><td>Insert fails with unknown column <code>status</code> / <code>starts_on</code> / <code>revisions</code></td><td>Migration <code>0007_plan_review.sql</code> not yet applied.</td></tr>
+  <tr><td>"AI could not produce an allergen-safe plan"</td><td>The allergen kept reappearing across corrective retries, so the plan was refused. Regenerate; persistent cases usually mean an over-broad allergen term.</td></tr>
+  <tr><td>"N mandatory counselling questions unanswered"</td><td>Server-side gate — open the sections marked in red; required questions are visibility-aware.</td></tr>
+  <tr><td>Plan macros look like model estimates</td><td>Foods table empty/missing or items didn't match — check <code>npm run seed:foods</code> ran and the grounding log line (<code>nutrition grounding: X/Y meals</code>).</td></tr>
+  <tr><td>Insert fails with unknown column <code>ai_review</code></td><td>Migration <code>0006_leanr_premium_ai_review.sql</code> not yet applied.</td></tr>
+  <tr><td>Today's Activity empty</td><td>Dietitian's <code>employee_code</code> doesn't match the sheet's Emp Code, or the sync hasn't run — trigger it from <code>/admin</code>.</td></tr>
+  <tr><td>PDF download does nothing</td><td>Pop-up blocked, or storage policies missing — re-run the <code>storage.objects</code> policy section of 0001.</td></tr>
 </table>
 
-<div class="note"><strong>Security summary:</strong> no service-role key in the codebase; all reads/writes ride the user's JWT through RLS; the private bucket is only reachable through per-user policies and short-lived signed URLs; the only server-held secret is the NVIDIA key.</div>
+<div class="note"><strong>Security summary:</strong> app traffic rides the user's JWT through RLS; the service-role key is confined to the sync endpoint and local seeding; the private bucket is only reachable through per-user policies and short-lived signed URLs; signups are domain-locked to fitelo.co; the NVIDIA key, sheet credentials and cron secret live server-side only.</div>
 
-<div class="footer">LEANR Diet Platform · Technical Documentation v1.0 · 10 July 2026 · LEANR by Fitelo</div>
+<div class="footer">LEANR Diet Platform · Technical Documentation v2.1 · 16 July 2026 · LEANR by Fitelo</div>
 
 </body>
 </html>

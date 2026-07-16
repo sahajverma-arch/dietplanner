@@ -35,99 +35,114 @@
 <div class="cover">
   <div>
     <h1><span class="brand">LEANR</span> Diet Platform</h1>
-    <div class="sub">Product Requirements Document (PRD) · v1.0 · 10 July 2026</div>
+    <div class="sub">Product Requirements Document (PRD) · v2.0 · 14 July 2026</div>
   </div>
   <img src="../public/logo.png" alt="LEANR by Fitelo">
 </div>
 
 <table class="meta-table">
-  <tr><td>Product</td><td>LEANR Diet Platform — AI-assisted diet counselling &amp; weekly plan management for dietitians</td></tr>
+  <tr><td>Product</td><td>LEANR Diet Platform — AI-assisted clinical diet counselling &amp; weekly plan management for dietitians</td></tr>
   <tr><td>Owner</td><td>LEANR by Fitelo (rayan.ranaut@fitelo.co)</td></tr>
-  <tr><td>Status</td><td>v1.0 shipped — live at github.com/sahajverma-arch/dietplanner</td></tr>
-  <tr><td>Platforms</td><td>Web (desktop-first, responsive) · Vercel + Supabase + NVIDIA NIM</td></tr>
+  <tr><td>Status</td><td>v2.0 shipped — live at github.com/sahajverma-arch/dietplanner</td></tr>
+  <tr><td>Platforms</td><td>Web (desktop-first, responsive) · Vercel + Supabase + NVIDIA NIM + QStash</td></tr>
+  <tr><td>v2.0 highlights</td><td>LeanR Premium counselling (Q1–Q105) · AI independent clinical review · INDB/USDA nutrition grounding · Google Workspace login · ops-sheet sync (Today's Activity) · admin module</td></tr>
 </table>
 
 <h2>1. Overview</h2>
-<p>Dietitians run 45–50 minute first-counselling calls where they collect a client's food preferences, lifestyle, and medical history — then spend significant additional time manually composing a personalised 1-week diet chart, formatting it, and repeating a lighter version of this every week per client. The LEANR Diet Platform removes the composition and formatting work: the dietitian fills a structured form live during the call, and the platform generates a restriction-aware, macro-annotated 7-day plan as a branded, client-ready PDF in about a minute. Weekly follow-ups take a short check-in form and produce the next week's adjusted plan.</p>
+<p>Dietitians run a 55–65 minute first-counselling call where they collect a client's goals, medical history, actual food day, preferences, training and behaviour patterns — then traditionally spend significant additional time manually composing a personalised 1-week diet chart, formatting it, and repeating a lighter version weekly per client. The LEANR Diet Platform removes the composition and formatting work while <em>raising</em> the clinical bar: the dietitian fills the structured <strong>LeanR Premium counselling</strong> live during the call (option-select, conversational — options are not read out), records their professional strategy hypothesis, and the platform's AI <strong>independently reviews</strong> that hypothesis against the complete client profile before generating a restriction-aware, macro-annotated 7-day plan whose numbers are grounded in the ICMR-NIN/INDB and USDA food databases — delivered as a branded, client-ready PDF in about a minute. Weekly follow-ups take a short check-in and produce the next adjusted week.</p>
 
 <h2>2. Goals &amp; Non-Goals</h2>
 <h3>Goals</h3>
 <ul>
-  <li>Cut per-client plan preparation time from hours to minutes while keeping the dietitian in control of all inputs.</li>
-  <li>Guarantee plans respect hard constraints: diet type (veg / non-veg / vegan / eggetarian), allergies, intolerances, dislikes, and medical conditions.</li>
-  <li>Produce a premium, client-shareable PDF with per-meal calories and macros, daily totals, and a weekly summary.</li>
-  <li>Zero data leakage between dietitians — every record is isolated at the database level.</li>
-  <li>Never lose intake data: the counselling form autosaves continuously during the live call.</li>
+  <li>Cut per-client plan preparation time from hours to minutes while keeping the dietitian in clinical control.</li>
+  <li>Run the full <strong>LeanR Premium Final New Client First Counselling</strong> (Q1–Q105, 12 sections) as a live, schema-driven form with conditional follow-ups, mandatory-question gating, live red flags and a 100-point counselling quality audit.</li>
+  <li><strong>Guarantee</strong> plans respect hard constraints: diet pattern (veg / non-veg / vegan / eggetarian / Jain), allergies (zero tolerance), intolerances, dislikes, doctor instructions, day-of-week religious food rules, and medical conditions.</li>
+  <li>Treat the dietitian's strategy as a <strong>professional hypothesis</strong>: the AI independently analyses the complete client profile and supports, modifies, replaces, or pauses it — never blindly obeys, never competes.</li>
+  <li>Ground every plan's calories and macros in credible food databases (INDB — ICMR-NIN IFCT-based; USDA SR Legacy) instead of model estimates.</li>
+  <li>Produce a premium, client-shareable PDF with per-meal calories/macros, daily totals and a weekly summary.</li>
+  <li>Fit the ops workflow: each dietitian's scheduled counselling calls (from the ops Google Sheet) appear in-app with a one-click "Start Counselling" that pre-fills the client and closes the loop on completion.</li>
+  <li>Zero data leakage between dietitians; never lose intake data mid-call (continuous autosave).</li>
 </ul>
-<h3>Non-Goals (v1)</h3>
+<h3>Non-Goals (v2)</h3>
 <ul>
   <li>No client-facing portal or login — the dietitian is the only user; plans reach clients as PDFs.</li>
-  <li>No payment/subscription management, scheduling, or CRM features.</li>
-  <li>No medical diagnosis — the AI adapts plans to stated conditions but the dietitian reviews every plan.</li>
+  <li>No payment/subscription management or CRM features.</li>
+  <li>No medical diagnosis — the AI flags risks and adapts plans, but the dietitian reviews every plan and owns escalation.</li>
 </ul>
 
 <h2>3. Users</h2>
-<p><strong>Primary persona — the practising dietitian.</strong> Handles 20–100 active clients, runs multiple counselling calls per day, needs to capture details fast mid-conversation, and sends every client a weekly chart. Values speed, correctness of restrictions, and a professional-looking deliverable carrying the LEANR brand.</p>
+<p><strong>Primary — the practising dietitian</strong> (signs in with a <span class="pill">@fitelo.co</span> Google account; onboarding captures employee code and phone for ops mapping). Handles 20–100 active clients, runs multiple counselling calls per day from the Today's Activity schedule, needs to capture details fast mid-conversation, and sends every client a weekly chart.</p>
+<p><strong>Secondary — the admin.</strong> Read-only visibility across dietitians (clients, plans, activity) plus a manual "Sync sheet now" control.</p>
 
 <h2>4. User Journeys</h2>
 <h3>4.1 First counselling (during the call)</h3>
 <ol>
-  <li>Dietitian signs in and clicks <strong>+ New Counselling</strong>.</li>
-  <li>Fills the 5-section form (Basics · Food Preferences · Lifestyle · Medical · Notes) while talking; every change autosaves with a visible "Saved" indicator. Closing the tab and returning restores the draft.</li>
-  <li>Clicks <strong>Generate Week 1 Diet Plan</strong>. The AI composes the plan (~1 min), the PDF is stored, and the person becomes a saved client. The dietitian lands on the client's page with the plan and its downloadable PDF.</li>
+  <li>Dietitian signs in with Google and opens <strong>Today's Activity</strong> — their scheduled calls for the day, synced nightly from the ops sheet — and clicks <strong>Start Counselling</strong> on a row (client code and name pre-fill), or starts a blank <strong>+ New Counselling</strong>.</li>
+  <li>Runs the LeanR Premium counselling conversationally, mainly selecting options: goal &amp; deeper motivation, body history, medical safety, digestion, the actual food day (interactive meal timeline), preferences &amp; feasibility, training/protein/recovery, behaviour, lifestyle, dropout risk &amp; coaching profile. Red flags and the quality score update live; everything autosaves.</li>
+  <li>Records the professional assessment (Section 11 — limiting factors, targets, timeline, energy/protein/carb/fat strategy, diet structure, lifestyle-fit score) and the client strategy discussion (Section 12).</li>
+  <li>Clicks <strong>Generate Week 1 Diet Plan</strong>. The AI first runs its <strong>independent clinical review</strong> — on a Pause decision (missing information / safety concern) nothing is saved, the reasons are shown, and the counselling stays a draft to fix and resubmit. Otherwise the plan is generated honouring the review, grounded against the food database, rendered to PDF and stored; the person becomes a saved client and the appointment is marked Completed.</li>
 </ol>
 <h3>4.2 Weekly follow-up</h3>
 <ol>
-  <li>Dietitian opens the client card, records weight, adherence, energy, hunger, complaints, and notes.</li>
-  <li>Clicks <strong>Generate Week N Plan</strong> — the AI sees the full intake, the check-in, and last week's menu (for variety) and produces the adjusted week with a fresh PDF added to the plan history.</li>
+  <li>Dietitian opens the client page, records weight, adherence, energy, hunger, complaints and notes.</li>
+  <li>Clicks <strong>Generate Week N Plan</strong> — the AI follows the LeanR weekly loop (Previous Strategy → Execution → Feedback → Result → Interpretation → Updated Strategy → Next Weekly Diet), sees last week's menu for variety, and produces the adjusted week with a fresh PDF in the plan history.</li>
 </ol>
 
 <h2>5. Functional Requirements</h2>
 <table class="req">
   <tr><th>ID</th><th>Requirement</th><th>Notes</th></tr>
-  <tr><td class="id">FR-1</td><td>Email/password authentication; a dietitian profile is created automatically on signup.</td><td>Supabase Auth + DB trigger</td></tr>
-  <tr><td class="id">FR-2</td><td>Dashboard lists the dietitian's own clients as cards (goal, diet type, weight, current week, last plan date) with a "+ New Counselling" action.</td><td>RLS-scoped query</td></tr>
-  <tr><td class="id">FR-3</td><td>Multi-section first-counselling form: basics, food preferences (incl. diet type, likes/dislikes/allergies/intolerances), lifestyle, medical (condition checklist, medications, labs), free-text notes.</td><td>5 tabs, single state</td></tr>
-  <tr><td class="id">FR-4</td><td>The counselling form autosaves continuously (debounced ≤2s) server-side and restores on reload; the draft is cleared only after successful plan generation.</td><td>form_drafts table</td></tr>
-  <tr><td class="id">FR-5</td><td>On submit, a strict-JSON 7-day plan is generated server-side honouring all restrictions, with per-meal calories, protein, carbs and fat.</td><td>NVIDIA NIM + Zod validation</td></tr>
-  <tr><td class="id">FR-6</td><td>Every plan is rendered as a branded PDF (macro-report format: per-day meal tables, daily totals, weekly summary) stored in private cloud storage and downloadable via expiring signed URLs.</td><td>@react-pdf/renderer</td></tr>
-  <tr><td class="id">FR-7</td><td>Submitting a first counselling converts the person into a saved client; intake is retained in full for future weeks.</td><td>clients.intake JSONB</td></tr>
-  <tr><td class="id">FR-8</td><td>Weekly follow-up form (weight, adherence, energy, hunger, complaints, notes) generates the next week's plan; client weight is kept current.</td><td>followups table</td></tr>
-  <tr><td class="id">FR-9</td><td>Client page shows the latest plan inline (meals, macros, guidelines), the full plan history with PDF downloads, and the follow-up form.</td><td></td></tr>
-  <tr><td class="id">FR-10</td><td>If generation fails after the client is saved, the intake is preserved and a one-click retry is offered on the client page.</td><td>regenerate endpoint</td></tr>
+  <tr><td class="id">FR-1</td><td>Google Workspace sign-in restricted to <strong>@fitelo.co</strong>; onboarding collects employee code + phone; profiles carry an admin role for the read-only admin module.</td><td>Supabase Auth (Google OAuth), migration 0004</td></tr>
+  <tr><td class="id">FR-2</td><td>Dashboard lists the dietitian's own clients as cards; <strong>Today's Activity</strong> tab lists their scheduled counselling calls (matched by employee code) with sheet status and a Start Counselling action.</td><td>RLS-scoped; QStash daily sync</td></tr>
+  <tr><td class="id">FR-3</td><td>The first counselling is the <strong>LeanR Premium bank (Q1–Q105, 12 sections)</strong> defined as data: conditional follow-ups, "select up to N" caps where click order = rank, sliders, dates, and the Section 5 interactive meal timeline (time / food+quantity / preparation / source / added components per selected occasion).</td><td>Schema-driven; UI renders the schema</td></tr>
+  <tr><td class="id">FR-4</td><td>Continuous autosave (debounced ≤2 s) with restore on reload; the draft is cleared only after successful plan generation. Drafts started from an appointment restore only for that appointment.</td><td>form_drafts table</td></tr>
+  <tr><td class="id">FR-5</td><td><strong>Mandatory-question gate:</strong> a plan can only be generated once every required question (per section, visibility-aware) is answered — enforced in the UI and again server-side.</td><td>REQUIRED_IDS</td></tr>
+  <tr><td class="id">FR-6</td><td><strong>Live clinical red flags</strong> (urgent symptoms, severe allergy, disordered-eating patterns, pregnancy, renal disease, under-fuelling/RED-S…) surface during the call, distinguish escalations from cautions, and are passed to the AI as hard constraints.</td><td>assessment.ts rules</td></tr>
+  <tr><td class="id">FR-7</td><td><strong>Counselling quality audit</strong> — a live 100-point score across 11 categories showing exactly what is still missing.</td><td>Doubles as progress</td></tr>
+  <tr><td class="id">FR-8</td><td><strong>AI independent clinical review</strong> before every Week-1 plan: the AI analyses the complete profile against the dietitian's hypothesis and selects exactly one decision — Support / Support With Minor Modification / Significantly Modify / AI-Led Alternative / <strong>Pause</strong>. A Pause returns the missing information, persists nothing, and keeps the counselling as a draft. The decision is stored with the plan and shown on the client page.</td><td>diet_plans.ai_review (migration 0006)</td></tr>
+  <tr><td class="id">FR-9</td><td>On generation, a strict-JSON 7-day plan honours all restrictions with per-meal calories/protein/carbs/fat; <strong>forbidden foods are additionally enforced in code</strong> — violations are fed back for correction, surviving dislikes are stripped, and a surviving allergen causes the plan to be refused rather than shipped.</td><td>NVIDIA NIM + Zod + deterministic checks</td></tr>
+  <tr><td class="id">FR-10</td><td><strong>Day-of-week food rules</strong> (e.g. no non-veg/eggs on Tuesdays &amp; Thursdays) map plan days to real weekdays and are enforced in both the prompt and code.</td><td>q38a–c</td></tr>
+  <tr><td class="id">FR-11</td><td><strong>Nutrition grounding:</strong> after generation, every meal's macros are recomputed from the INDB + USDA foods table (fuzzy match, household-measure gram weights); a meal keeps model estimates only when not all items match. Grounding failure never blocks a plan.</td><td>match_foods_batch RPC, pg_trgm</td></tr>
+  <tr><td class="id">FR-12</td><td>Every plan renders as a branded PDF (per-day meal tables, daily totals, weekly summary, disclaimer) stored in private storage, downloadable via expiring signed URLs.</td><td>@react-pdf/renderer</td></tr>
+  <tr><td class="id">FR-13</td><td>Generating the first plan converts the person into a saved client, retains the full counselling in the intake, and marks the source appointment Completed with a link to the client.</td><td>clients.intake JSONB</td></tr>
+  <tr><td class="id">FR-14</td><td>Weekly follow-up (weight, adherence, energy, hunger, complaints, notes) generates the next week's plan and keeps client weight current.</td><td>followups table</td></tr>
+  <tr><td class="id">FR-15</td><td>If generation fails after the client is saved, the intake is preserved and one-click retry (re-running the AI review) is offered on the client page.</td><td>regenerate endpoint</td></tr>
+  <tr><td class="id">FR-16</td><td>Ops sheet sync: the Raw_Counselling Google Sheet is upserted daily into the appointments table via a secret-protected endpoint (QStash schedule); workflow columns survive re-syncs; admins can trigger a manual sync.</td><td>/api/sync-counselling</td></tr>
 </table>
 
 <h2>6. Non-Functional Requirements</h2>
 <table class="req">
   <tr><th>ID</th><th>Requirement</th></tr>
-  <tr><td class="id">NFR-1</td><td><strong>Isolation:</strong> Postgres Row Level Security on every table (<span class="pill">dietitian_id = auth.uid()</span>) and folder-scoped storage policies; one dietitian can never read another's data, even with the public API key.</td></tr>
-  <tr><td class="id">NFR-2</td><td><strong>Secrets:</strong> the NVIDIA API key is server-side only and never shipped to the browser.</td></tr>
-  <tr><td class="id">NFR-3</td><td><strong>Performance:</strong> plan generation typically completes in ≤90 seconds; hard cap 300 seconds with explicit failure and retry path.</td></tr>
-  <tr><td class="id">NFR-4</td><td><strong>Resilience:</strong> per-call AI timeouts, automatic fallback model when the primary is congested, constrained JSON decoding, schema validation with one corrective retry, and split (two-call) generation to respect provider output limits.</td></tr>
-  <tr><td class="id">NFR-5</td><td><strong>Data safety:</strong> no intake data loss on network failure, generation failure, or tab close (autosaved drafts + preserved clients).</td></tr>
-  <tr><td class="id">NFR-6</td><td><strong>Deployability:</strong> single-command Vercel deploy; entire database provisioned by one SQL migration.</td></tr>
+  <tr><td class="id">NFR-1</td><td><strong>Isolation:</strong> Postgres Row Level Security on every table (<span class="pill">dietitian_id = auth.uid()</span>; appointments matched by employee code) and folder-scoped storage policies; one dietitian can never read another's data, even with the public API key. Admin access is read-only via policy.</td></tr>
+  <tr><td class="id">NFR-2</td><td><strong>Clinical safety:</strong> an allergen surviving all corrective retries aborts the plan; escalated red flags are always visible before generation; a doctor's instruction overrides plan design; Pause decisions block generation until resolved.</td></tr>
+  <tr><td class="id">NFR-3</td><td><strong>Secrets:</strong> the NVIDIA API key, service-role key (scripts/sync only) and sheet credentials are server-side only.</td></tr>
+  <tr><td class="id">NFR-4</td><td><strong>Performance:</strong> review + generation typically ≤120 s; hard cap 300 s with explicit failure and retry path.</td></tr>
+  <tr><td class="id">NFR-5</td><td><strong>Resilience:</strong> per-call AI timeouts, automatic fallback model, constrained JSON decoding, schema validation with corrective retries, split (two-call) generation, non-fatal grounding, and a review failure degrading to generation-without-review rather than blocking the dietitian.</td></tr>
+  <tr><td class="id">NFR-6</td><td><strong>Data safety:</strong> no intake loss on network failure, generation failure, Pause, or tab close (autosaved drafts + preserved clients).</td></tr>
+  <tr><td class="id">NFR-7</td><td><strong>Deployability:</strong> single-command Vercel deploy; database provisioned by sequential SQL migrations (0001–0006); food data seeded by one script.</td></tr>
 </table>
 
 <h2>7. Success Metrics</h2>
 <ul>
-  <li>Median time from "form complete" to "PDF in hand" ≤ 2 minutes (target ~1 minute).</li>
+  <li>Median time from "counselling complete" to "PDF in hand" ≤ 2.5 minutes (review + generation + grounding + render).</li>
   <li>≥ 95% of generation attempts produce a valid plan (including automatic retries/fallback).</li>
-  <li>Zero cross-tenant data access incidents.</li>
-  <li>Zero reported intake-data losses during live calls.</li>
+  <li>100% of shipped plans free of client allergens (enforced — refusal instead of shipping).</li>
+  <li>≥ 80% of meals grounded in the reference food database.</li>
+  <li>Zero cross-tenant data access incidents; zero reported intake-data losses during live calls.</li>
 </ul>
 
-<h2>8. Future Scope (v2 candidates)</h2>
+<h2>8. Future Scope (v3 candidates)</h2>
 <ul>
+  <li><strong>Blood-report upload → AI extraction → dietitian verification</strong> (the flow the LeanR Premium spec prefers for Q20).</li>
+  <li><strong>Retrieval into the prompt (RAG):</strong> feed candidate foods from the reference DB (filtered by cuisine, diet pattern, restrictions) into generation so every item matches the database.</li>
   <li>WhatsApp/email delivery of the weekly PDF directly to the client.</li>
-  <li>Meal-level swap suggestions ("replace this meal") without regenerating the full week.</li>
-  <li>Client progress analytics (weight trend, adherence history) on the client page.</li>
-  <li>Plan templates and a dietitian-editable food database for tighter macro accuracy.</li>
-  <li>Multi-dietitian clinics with team/admin roles.</li>
+  <li>Meal-level swap suggestions without regenerating the full week.</li>
+  <li>Client progress analytics (weight trend, adherence history) and searchable food selectors in the counselling form.</li>
+  <li>Multi-dietitian clinic roles beyond read-only admin.</li>
 </ul>
 
-<div class="note"><strong>Review policy:</strong> every AI-generated plan is presented to the dietitian before it reaches a client; the PDF footer states the plan was generated with AI assistance and reviewed by the dietitian, and is not a substitute for medical advice.</div>
+<div class="note"><strong>Review policy:</strong> the dietitian's Section 11 strategy is a professional hypothesis; the AI independently tests it and every AI-generated plan is presented to the dietitian before it reaches a client. The PDF footer states the plan was generated with AI assistance and reviewed by the dietitian, and is not a substitute for medical advice.</div>
 
-<div class="footer">LEANR Diet Platform · Product Requirements Document v1.0 · 10 July 2026 · LEANR by Fitelo</div>
+<div class="footer">LEANR Diet Platform · Product Requirements Document v2.0 · 14 July 2026 · LEANR by Fitelo</div>
 
 </body>
 </html>
