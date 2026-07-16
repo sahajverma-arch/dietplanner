@@ -5,6 +5,7 @@ import AppHeader from "@/components/AppHeader";
 import ClientSummary from "@/components/ClientSummary";
 import FollowUpForm from "@/components/FollowUpForm";
 import PlanView from "@/components/PlanView";
+import PlanReviewControls from "@/components/PlanReviewControls";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import RegenerateButton from "@/components/RegenerateButton";
 import { AiReviewSchema, DietPlanSchema, isPauseDecision } from "@/lib/nim";
@@ -47,6 +48,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const latestPlan = parsedLatest?.success ? parsedLatest.data : null;
   const parsedReview = latest?.ai_review ? AiReviewSchema.safeParse(latest.ai_review) : null;
   const aiReview = parsedReview?.success ? parsedReview.data : null;
+  const latestIsDraft = latest?.status === "draft" && latestPlan !== null;
 
   return (
     <div className="min-h-screen">
@@ -76,11 +78,20 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
+            {latestIsDraft && latest && (
+              <PlanReviewControls
+                planId={latest.id}
+                weekNumber={latest.week_number}
+                revisions={Array.isArray(latest.revisions) ? latest.revisions : []}
+              />
+            )}
+
             {latestPlan && latest ? (
               <PlanView
                 plan={latestPlan}
                 weekNumber={latest.week_number}
                 createdAt={formatDate(latest.created_at)}
+                draft={latestIsDraft}
               />
             ) : (
               <div className="card text-center">
@@ -212,7 +223,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
                           {formatDate(p.created_at)}
                         </div>
                       </div>
-                      {p.pdf_path && <DownloadPdfButton path={p.pdf_path} />}
+                      {p.status === "draft" ? (
+                        <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-400">
+                          Draft — in review
+                        </span>
+                      ) : (
+                        p.pdf_path && <DownloadPdfButton path={p.pdf_path} />
+                      )}
                     </li>
                   ))}
                 </ul>

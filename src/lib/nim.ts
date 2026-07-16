@@ -276,6 +276,10 @@ export interface PlanContext {
   followup?: FollowUpInput | null;
   /** Outcome of the AI first-diet decision engine (week 1). */
   review?: AiReview | null;
+  /** Day 1 of the plan (ISO date); defaults to tomorrow. */
+  startsOn?: string | null;
+  /** Dietitian review round: revise `draft` following written `instructions`. */
+  revision?: { draft: DietPlan; instructions: string } | null;
 }
 
 /**
@@ -529,19 +533,25 @@ async function callNimOnce(
   }
 
   const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
   };
-  const content = data.choices?.[0]?.message?.content;
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content;
   if (!content) throw new NimError(`NVIDIA NIM (${model}) returned an empty response`, true);
+  if (choice?.finish_reason === "length") {
+    console.warn(
+      `NVIDIA NIM (${model}) hit the completion-length cap after ${content.length} chars — output truncated`
+    );
+  }
   return content;
 }
 
-async function callNim(messages: ChatMessage[]): Promise<string> {
+async function callNim(messages: ChatMessage[], model = NIM_MODEL): Promise<string> {
   try {
-    return await callNimOnce(messages, NIM_MODEL);
+    return await callNimOnce(messages, model);
   } catch (e) {
     const transient = e instanceof NimError ? e.transient : true;
-    if (!transient || NIM_FALLBACK_MODEL === NIM_MODEL) throw e;
+    if (!transient || model === NIM_FALLBACK_MODEL || NIM_FALLBACK_MODEL === NIM_MODEL) throw e;
     console.warn(
       `Primary model failed (${e instanceof Error ? e.message : e}); ` +
         `falling back to ${NIM_FALLBACK_MODEL}`
@@ -568,10 +578,34 @@ async function generateValidated<T>(
    */
   softCheck?: (value: T) => string[]
 ): Promise<T> {
+  // A model that keeps truncating or mis-shaping its output usually keeps
+  // doing so — once the primary model burns its attempts, the conversation
+  // restarts from scratch on the fallback model before giving up.
+  const original = messages.slice();
+  try {
+    return await validatedAttempts(messages, NIM_MODEL, schema, expectation, check, softCheck);
+  } catch (e) {
+    if (NIM_FALLBACK_MODEL === NIM_MODEL) throw e;
+    console.warn(
+      `${NIM_MODEL} could not produce a valid response (${e instanceof Error ? e.message : e}); ` +
+        `retrying once on ${NIM_FALLBACK_MODEL}`
+    );
+    return await validatedAttempts(original, NIM_FALLBACK_MODEL, schema, expectation, check, softCheck);
+  }
+}
+
+async function validatedAttempts<T>(
+  messages: ChatMessage[],
+  model: string,
+  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
+  expectation: string,
+  check?: (value: T) => string[],
+  softCheck?: (value: T) => string[]
+): Promise<T> {
   let lastError = "";
 
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const content = await callNim(messages);
+    const content = await callNim(messages, model);
 
     let json: unknown;
     try {
@@ -597,12 +631,27 @@ async function generateValidated<T>(
         .slice(0, 8)
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join("; ");
+      console.warn(
+        `plan validation attempt ${attempt} (${model}) failed (${lastError}) — ` +
+          `response ${content.length} chars, head: ${content.slice(0, 300)}`
+      );
 
+      // Constrained JSON decoding can close the object early when the
+      // completion cap is hit, so "too few days" is usually truncation in
+      // disguise — echoing the huge response back would only make the next
+      // attempt longer; demand brevity instead.
+      const cutOff = parsed.error.issues.some(
+        (i) => i.code === "too_small" && i.path[0] === "days"
+      );
       messages.push(
-        { role: "assistant", content },
+        cutOff
+          ? { role: "assistant", content: content.slice(0, 200) + " …[cut off]" }
+          : { role: "assistant", content },
         {
           role: "user",
-          content: `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected minified JSON object only — no other text. ${expectation}.`,
+          content: cutOff
+            ? `Your response ended before all requested days were included. Return the COMPLETE minified JSON again, much more concisely: empty "notes", max 3 items per meal, food names under 4 words. ${expectation}. JSON only.`
+            : `Your previous response was not valid. Problems: ${lastError}. Return the complete corrected minified JSON object only — no other text. ${expectation}.`,
         }
       );
       continue;
@@ -639,7 +688,7 @@ async function generateValidated<T>(
     );
   }
 
-  throw new Error(`AI returned an invalid diet plan after 3 attempts: ${lastError}`);
+  throw new Error(`AI (${model}) returned an invalid diet plan after 3 attempts: ${lastError}`);
 }
 
 /**
@@ -755,10 +804,10 @@ function hasAllergen(days: DietPlan["days"], rules: FoodRules): boolean {
 
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-/** Weekday name for each plan day ("Day 1" = tomorrow). */
-export function planWeekdays(): string[] {
-  const start = new Date();
-  start.setDate(start.getDate() + 1);
+/** Weekday name for each plan day ("Day 1" = tomorrow unless a start is given). */
+export function planWeekdays(startIso?: string | null): string[] {
+  const start = startIso ? new Date(startIso) : new Date();
+  if (!startIso) start.setDate(start.getDate() + 1);
   return Array.from(
     { length: 7 },
     (_, i) => WEEKDAY_NAMES[new Date(start.getTime() + i * 86_400_000).getDay()]
@@ -933,13 +982,20 @@ function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days
  * limits of NVIDIA's shared NIM endpoints.
  */
 export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
-  const { intake, week, previousPlan, review } = ctx;
+  const { intake, week, previousPlan, review, revision } = ctx;
 
   // ---- Outcome of the AI first-diet decision engine, woven into the prompt
   const reviewNote = review ? reviewBlock(review) : "";
 
+  // ---- Dietitian review round: the draft comes back with written change
+  // instructions. The dietitian's word is final — the model revises the
+  // existing draft instead of inventing a new plan from scratch.
+  const revisionNote = revision
+    ? `\n\nDIETITIAN REVIEW OF THE PREVIOUS DRAFT — the supervising dietitian reviewed the draft below and requires changes. Their instructions are MANDATORY and override everything except allergies and medical safety. Apply EVERY instruction; keep whatever they did not ask to change as close to the draft as possible.\nDIETITIAN'S INSTRUCTIONS: ${revision.instructions.trim()}\n\nPREVIOUS DRAFT (revise this, do not start over):\nDaily target ~${Math.round(revision.draft.daily_calories)} kcal (protein ${Math.round(revision.draft.macros.protein_g)}g, carbs ${Math.round(revision.draft.macros.carbs_g)}g, fat ${Math.round(revision.draft.macros.fat_g)}g)\n${compactDays(revision.draft.days)}`
+    : "";
+
   // ---- Day-of-week rules (e.g. no non-veg/eggs on Tuesdays)
-  const weekdays = planWeekdays();
+  const weekdays = planWeekdays(ctx.startsOn);
   const dayRules = weekdayFoodRules(intake);
   const weeklyNote = dayRules
     ? `\n\nWEEKLY DAY-SPECIFIC FOOD RULES (religious/cultural — must be respected exactly):\n` +
@@ -967,6 +1023,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
         (previousPlan
           ? `\n\nLast week's meals (keep what worked, introduce sensible variety, do not repeat the exact same menu):\n${compactDays(previousPlan.days)}`
           : "") +
+        revisionNote +
         `\n\nReturn ONLY the JSON object.`,
     },
   ];
@@ -1000,6 +1057,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
       role: "user",
       content:
         `Create days 5-7 of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        revisionNote +
         `\n\nDaily target: ~${Math.round(partOne.daily_calories)} kcal (protein ${Math.round(partOne.macros.protein_g)}g, carbs ${Math.round(partOne.macros.carbs_g)}g, fat ${Math.round(partOne.macros.fat_g)}g).` +
         `\n\nDays 1-4 already planned (add variety, do not repeat the same menus):\n${compactDays(partOne.days)}` +
         `\n\nReturn ONLY the JSON object.`,

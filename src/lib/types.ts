@@ -118,15 +118,27 @@ export interface ClientRow {
   updated_at: string;
 }
 
+/** One round of dietitian change instructions applied to a plan draft. */
+export interface PlanRevision {
+  instructions: string;
+  at: string;
+}
+
 export interface DietPlanRow {
   id: string;
   client_id: string;
   dietitian_id: string;
   week_number: number;
   source: "first_counselling" | "follow_up";
+  /** Drafts await dietitian review; only approved (final) plans have a PDF. */
+  status: "draft" | "final";
   plan: unknown;
   /** AI independent clinical review of the dietitian hypothesis (week 1). */
   ai_review: unknown | null;
+  /** Day 1 of the plan (ISO date), fixed at generation time. */
+  starts_on: string | null;
+  /** Dietitian change instructions applied during review, oldest first. */
+  revisions: PlanRevision[];
   pdf_path: string | null;
   created_at: string;
 }

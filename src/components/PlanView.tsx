@@ -4,15 +4,24 @@ export default function PlanView({
   plan,
   weekNumber,
   createdAt,
+  draft = false,
 }: {
   plan: DietPlan;
   weekNumber: number;
   createdAt: string;
+  draft?: boolean;
 }) {
   return (
     <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Week {weekNumber} plan</h2>
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          Week {weekNumber} plan
+          {draft && (
+            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400">
+              Draft preview
+            </span>
+          )}
+        </h2>
         <span className="text-xs text-zinc-500">Generated {createdAt}</span>
       </div>
 

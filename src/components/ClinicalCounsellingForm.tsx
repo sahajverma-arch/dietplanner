@@ -123,7 +123,12 @@ export default function ClinicalCounsellingForm({
       }
       setError(json.error || "Something went wrong. Your counselling is still saved as a draft.");
     } catch {
-      setError("Network error. Your counselling is still saved as a draft — try again.");
+      setError(
+        "The connection dropped while the plan was generating — the server usually finishes anyway. " +
+          "Check My Clients in a minute: if the client is there, open it (the preview may already be " +
+          "waiting, or use its retry button). Only resubmit here if the client never appeared — " +
+          "your counselling is still saved as a draft."
+      );
     }
     setSubmitting(false);
   }
@@ -358,11 +363,12 @@ export default function ClinicalCounsellingForm({
 
           {/* Submit */}
           <div className="card mt-4">
-            <h3 className="text-sm font-semibold">Generate the Week 1 diet plan</h3>
+            <h3 className="text-sm font-semibold">Generate the Week 1 diet preview</h3>
             <p className="mt-1 text-xs text-zinc-400">
               The plan is built from the full assessment — goal, clinical restrictions, current
               diet, protein pattern, training, barriers and your priorities. Macros are grounded
-              in the ICMR-NIN/INDB and USDA food databases.
+              in the ICMR-NIN/INDB and USDA food databases. You&apos;ll review the preview first —
+              request any changes in writing — and the final PDF is only created once you approve.
             </p>
             {escalations.length > 0 && (
               <p className="mt-2 rounded bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -413,10 +419,10 @@ export default function ClinicalCounsellingForm({
               className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting
-                ? "Generating plan… (this takes ~60s)"
+                ? "Generating preview… (this takes ~60s)"
                 : missing.length > 0
                   ? `Answer ${missing.length} mandatory question${missing.length > 1 ? "s" : ""} to generate the plan`
-                  : "Generate Week 1 Diet Plan"}
+                  : "Generate Week 1 Diet Preview"}
             </button>
           </div>
         </div>

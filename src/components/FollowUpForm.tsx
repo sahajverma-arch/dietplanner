@@ -146,12 +146,13 @@ export default function FollowUpForm({
       )}
       {success && (
         <p className="mt-3 rounded-lg bg-brand/10 px-3 py-2 text-sm text-brand">
-          New weekly plan generated — it&apos;s now at the top of the plan history.
+          New weekly preview generated — review it above, request changes if needed, then
+          approve to create the PDF.
         </p>
       )}
 
       <button className="btn-primary mt-4 w-full" disabled={submitting}>
-        {submitting ? `Generating Week ${nextWeek} plan…` : `Generate Week ${nextWeek} Plan`}
+        {submitting ? `Generating Week ${nextWeek} preview…` : `Generate Week ${nextWeek} Preview`}
       </button>
     </form>
   );

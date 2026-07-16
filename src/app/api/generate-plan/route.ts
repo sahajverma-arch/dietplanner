@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import {
   aiClinicalReview,
+  AiReviewSchema,
   DietPlanSchema,
   generateDietPlan,
   isPauseDecision,
@@ -29,6 +30,14 @@ const BodySchema = z.discriminatedUnion("type", [
     followup: z.record(z.any()),
   }),
   z.object({ type: z.literal("regenerate"), clientId: z.string().uuid() }),
+  // Dietitian review of a draft preview: written change instructions the AI
+  // must apply, or approval that renders the final PDF.
+  z.object({
+    type: z.literal("revise"),
+    planId: z.string().uuid(),
+    instructions: z.string().trim().min(1),
+  }),
+  z.object({ type: z.literal("approve"), planId: z.string().uuid() }),
 ]);
 
 function toNum(v: unknown): number | null {
@@ -51,6 +60,12 @@ export async function POST(request: Request) {
     body = BodySchema.parse(await request.json());
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  // Draft review actions operate on an existing plan row and share none of
+  // the generation bookkeeping below.
+  if (body.type === "revise" || body.type === "approve") {
+    return handleDraftReview(supabase, user, body);
   }
 
   let clientId: string | undefined;
@@ -220,8 +235,21 @@ export async function POST(request: Request) {
       }
     }
 
+    // Day 1 is fixed now so the weekday food rules enforced during generation
+    // and the PDF's date labels (rendered later, at approval) agree.
+    const planStart = new Date();
+    planStart.setDate(planStart.getDate() + 1); // plan starts tomorrow
+    const startsOn = planStart.toISOString().slice(0, 10);
+
     // ---- AI generation (server-side; NVIDIA_API_KEY never leaves the server)
-    let plan = await generateDietPlan({ intake, week, previousPlan, followup, review: aiReview });
+    let plan = await generateDietPlan({
+      intake,
+      week,
+      previousPlan,
+      followup,
+      review: aiReview,
+      startsOn,
+    });
 
     // ---- Ground macros in the foods reference table (INDB + USDA). Never
     // fatal: if the table isn't seeded yet, the model estimates are kept.
@@ -240,30 +268,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // ---- Render PDF and store it in the private bucket under the dietitian's folder
-    const planStart = new Date();
-    planStart.setDate(planStart.getDate() + 1); // plan starts tomorrow
-    const pdfBuffer = await renderPlanPdf({
-      plan,
-      clientName,
-      weekNumber: week,
-      dietitianName: user.email ?? "Your dietitian",
-      generatedOn: new Date().toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      }),
-      startDateIso: planStart.toISOString(),
-      dietType: intake.dietType || "",
-      conditions: Array.isArray(intake.conditions) ? intake.conditions : [],
-    });
-
-    const pdfPath = `${user.id}/${clientId}/week-${week}-${Date.now()}.pdf`;
-    const { error: uploadError } = await supabase.storage
-      .from("diet-pdfs")
-      .upload(pdfPath, pdfBuffer, { contentType: "application/pdf", upsert: true });
-    if (uploadError) throw new Error(`PDF upload failed: ${uploadError.message}`);
-
+    // ---- Save as a DRAFT preview. The dietitian reviews it on the client
+    // page, optionally sends change instructions back ("revise"), and only an
+    // approved plan gets its PDF rendered ("approve").
     const { data: planRow, error: planError } = await supabase
       .from("diet_plans")
       .insert({
@@ -271,8 +278,9 @@ export async function POST(request: Request) {
         dietitian_id: user.id,
         week_number: week,
         source,
+        status: "draft",
+        starts_on: startsOn,
         plan,
-        pdf_path: pdfPath,
         ai_review: aiReview,
       })
       .select("id")
@@ -288,7 +296,7 @@ export async function POST(request: Request) {
         .eq("kind", "first_counselling");
     }
 
-    return NextResponse.json({ clientId, planId: planRow.id, week });
+    return NextResponse.json({ clientId, planId: planRow.id, week, status: "draft" });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unexpected error";
     console.error("generate-plan failed:", message);
@@ -297,5 +305,164 @@ export async function POST(request: Request) {
     const payload: Record<string, unknown> = { error: message };
     if (body.type === "first" && clientId) payload.clientId = clientId;
     return NextResponse.json(payload, { status: 502 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Human-in-the-loop draft review.
+// "revise": regenerate the draft with the dietitian's written instructions
+// woven into the prompt (the same forbidden-food/day-rule enforcement and
+// nutrition grounding run again). "approve": render + store the PDF and mark
+// the plan final. Both act only on the caller's own rows (RLS).
+// ---------------------------------------------------------------------------
+async function handleDraftReview(
+  supabase: ReturnType<typeof createClient>,
+  user: { id: string; email?: string },
+  body:
+    | { type: "revise"; planId: string; instructions: string }
+    | { type: "approve"; planId: string }
+) {
+  const { data: row } = await supabase
+    .from("diet_plans")
+    .select("*")
+    .eq("id", body.planId)
+    .maybeSingle();
+  if (!row) {
+    return NextResponse.json({ error: "Plan not found" }, { status: 404 });
+  }
+  if (row.status !== "draft") {
+    return NextResponse.json(
+      { error: "This plan has already been approved" },
+      { status: 409 }
+    );
+  }
+
+  const parsedDraft = DietPlanSchema.safeParse(row.plan);
+  if (!parsedDraft.success) {
+    return NextResponse.json(
+      { error: "The stored draft is not a valid plan — regenerate it instead" },
+      { status: 422 }
+    );
+  }
+  const draft = parsedDraft.data;
+
+  const { data: client } = await supabase
+    .from("clients")
+    .select("id, full_name, intake")
+    .eq("id", row.client_id)
+    .maybeSingle();
+  if (!client) {
+    return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  }
+  const intake = client.intake as IntakeForm;
+
+  try {
+    if (body.type === "revise") {
+      // Rebuild the same context the draft was generated with, so the revision
+      // reasons over the full profile — plus the dietitian's instructions.
+      const parsedReview = row.ai_review ? AiReviewSchema.safeParse(row.ai_review) : null;
+
+      const { data: prev } = await supabase
+        .from("diet_plans")
+        .select("plan")
+        .eq("client_id", row.client_id)
+        .lt("week_number", row.week_number)
+        .order("week_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const parsedPrev = prev ? DietPlanSchema.safeParse(prev.plan) : null;
+
+      let followup: FollowUpInput | null = null;
+      if (row.source === "follow_up") {
+        const { data: fu } = await supabase
+          .from("followups")
+          .select("data")
+          .eq("client_id", row.client_id)
+          .eq("week_number", row.week_number)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        followup = (fu?.data as FollowUpInput) ?? null;
+      }
+
+      let plan = await generateDietPlan({
+        intake,
+        week: row.week_number,
+        previousPlan: parsedPrev?.success ? parsedPrev.data : null,
+        followup,
+        review: parsedReview?.success ? parsedReview.data : null,
+        startsOn: row.starts_on,
+        revision: { draft, instructions: body.instructions },
+      });
+
+      try {
+        const grounded = await groundPlan(supabase, plan);
+        plan = grounded.plan;
+      } catch (groundError) {
+        console.warn(
+          "nutrition grounding skipped:",
+          groundError instanceof Error ? groundError.message : groundError
+        );
+      }
+
+      const revisions = [
+        ...(Array.isArray(row.revisions) ? row.revisions : []),
+        { instructions: body.instructions, at: new Date().toISOString() },
+      ];
+      const { error: updateError } = await supabase
+        .from("diet_plans")
+        .update({ plan, revisions })
+        .eq("id", row.id);
+      if (updateError) throw new Error(`Could not save the revised draft: ${updateError.message}`);
+
+      return NextResponse.json({
+        clientId: row.client_id,
+        planId: row.id,
+        week: row.week_number,
+        status: "draft",
+      });
+    }
+
+    // ---- approve: render the PDF from the reviewed plan and mark it final
+    const start = row.starts_on ? new Date(row.starts_on) : null;
+    const fallbackStart = new Date();
+    fallbackStart.setDate(fallbackStart.getDate() + 1);
+    const pdfBuffer = await renderPlanPdf({
+      plan: draft,
+      clientName: client.full_name,
+      weekNumber: row.week_number,
+      dietitianName: user.email ?? "Your dietitian",
+      generatedOn: new Date().toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }),
+      startDateIso: (start ?? fallbackStart).toISOString(),
+      dietType: intake.dietType || "",
+      conditions: Array.isArray(intake.conditions) ? intake.conditions : [],
+    });
+
+    const pdfPath = `${user.id}/${row.client_id}/week-${row.week_number}-${Date.now()}.pdf`;
+    const { error: uploadError } = await supabase.storage
+      .from("diet-pdfs")
+      .upload(pdfPath, pdfBuffer, { contentType: "application/pdf", upsert: true });
+    if (uploadError) throw new Error(`PDF upload failed: ${uploadError.message}`);
+
+    const { error: updateError } = await supabase
+      .from("diet_plans")
+      .update({ status: "final", pdf_path: pdfPath })
+      .eq("id", row.id);
+    if (updateError) throw new Error(`Could not finalise the plan: ${updateError.message}`);
+
+    return NextResponse.json({
+      clientId: row.client_id,
+      planId: row.id,
+      week: row.week_number,
+      status: "final",
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Unexpected error";
+    console.error(`generate-plan ${body.type} failed:`, message);
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
