@@ -263,8 +263,7 @@ export async function POST(request: Request) {
       console.log(
         `nutrition grounding: ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ` +
           `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
-          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA}, ` +
-          `rescaled ${grounded.stats.rescaled_meals})`
+          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
       );
     } catch (groundError) {
       console.warn(

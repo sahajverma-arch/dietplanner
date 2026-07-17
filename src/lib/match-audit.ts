@@ -50,7 +50,8 @@ const FOOD_CLASSES: {
     bad: (m) => (m.protein_g < 2 ? `only ${m.protein_g} g protein/100g` : null),
   },
   {
-    pattern: /butter|ghee|\boils?\b|almonds?|cashews?|walnuts?|peanuts?|\bseeds?\b|mayonnaise/i,
+    // \bbutters?\b: "peanut butter" is fat-dense, "buttermilk" is not.
+    pattern: /\bbutters?\b|ghee|\boils?\b|almonds?|cashews?|walnuts?|peanuts?|\bseeds?\b|mayonnaise/i,
     expect: "fat-dense food",
     bad: (m) => (m.fat_g < 15 ? `only ${m.fat_g} g fat/100g` : null),
   },

@@ -51,12 +51,20 @@ function isCorruptIndbRow(f) {
   return f.kcal > 550 && f.serving_g != null && f.serving_g > 90;
 }
 
+// Rows that are technically valid but unrepresentative for diet planning, so
+// the plain name resolves to the everyday preparation instead. BFP044 "Poha"
+// is the heavily-oiled version (294.5 kcal/100g, 14 g fat) — three dietitian
+// reviews flagged breakfasts built on it; excluding it makes "poha" resolve
+// to Vegetable poha (BFP045, 180.5 kcal/100g).
+const CURATED_EXCLUDE = new Set(["BFP044"]);
+
 async function seedFile(file) {
   let { source, foods } = JSON.parse(readFileSync(join(root, "scripts", "data", file), "utf8"));
   if (source === "INDB") {
-    const bad = foods.filter(isCorruptIndbRow);
+    const excluded = (f) => isCorruptIndbRow(f) || CURATED_EXCLUDE.has(String(f.source_id));
+    const bad = foods.filter(excluded);
     if (bad.length) {
-      console.log(`INDB: excluding ${bad.length} rows with implausible values:`);
+      console.log(`INDB: excluding ${bad.length} rows (implausible values or curated out):`);
       bad.forEach((f) => console.log(`  - ${f.name} (${f.kcal} kcal/100g, ${f.serving_g} g serving)`));
       const { error } = await supabase
         .from("foods")
@@ -64,7 +72,7 @@ async function seedFile(file) {
         .eq("source", "INDB")
         .in("source_id", bad.map((f) => String(f.source_id)));
       if (error) console.warn(`INDB: cleanup delete failed: ${error.message}`);
-      foods = foods.filter((f) => !isCorruptIndbRow(f));
+      foods = foods.filter((f) => !excluded(f));
     }
   }
   console.log(`${source}: seeding ${foods.length} foods…`);
@@ -133,6 +141,13 @@ async function seedStaples() {
       micros: ref.micros ?? {},
     });
   }
+  // Alias rows are fully derived from staples.json — delete existing ones
+  // first. An alias remapped to the other source ("Paneer bhurji" INDB→USDA)
+  // would otherwise leave its old row behind under the previous source, and
+  // exact-name ranking can keep picking the stale copy.
+  const { error: delError } = await supabase.from("foods").delete().like("source_id", "alias:%");
+  if (delError) console.warn(`staples: stale-alias cleanup failed: ${delError.message}`);
+
   const { error } = await supabase.from("foods").upsert(rows, { onConflict: "source,source_id" });
   if (error) {
     console.error(`staples: upsert failed: ${error.message}`);

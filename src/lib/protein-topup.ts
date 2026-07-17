@@ -108,8 +108,15 @@ export async function nutritionTopUp(
   const before = shortfallScore(plan, lowP, lowCal);
   const after = shortfallScore(grounded, lowP, lowCal);
   const avgKcal = grounded.days.reduce((s, d) => s + dayCalories(d), 0) / grounded.days.length;
+  // Only overshoot is gated here: undershoot is exactly what the shortfall
+  // score measures, and rejecting an improving-but-still-light revision would
+  // freeze a deeply under-portioned plan at its worst (seen at 850 kcal/day
+  // against a 1550 target). Every single day is checked, not just the weekly
+  // average — a revision once smuggled 2823 kcal days past an average-only
+  // gate on a weight-loss plan.
   const calorieOk =
-    !hasCalories || Math.abs(avgKcal - calorieTarget) / calorieTarget <= CALORIE_TOLERANCE;
+    !hasCalories ||
+    grounded.days.every((d) => dayCalories(d) <= calorieTarget * (1 + CALORIE_TOLERANCE));
 
   if (after < before && calorieOk) {
     return {

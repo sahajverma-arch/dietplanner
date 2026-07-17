@@ -13,18 +13,24 @@ import type { DietPlan } from "./nim";
 
 // word_similarity() score below which a match is considered wrong.
 const MIN_SIMILARITY = 0.55;
-// Sanity bounds — outside these the match/quantity is assumed bad and the
-// model estimate is kept.
+// Above MAX the match/quantity is assumed bad and the model estimate is
+// kept. There is deliberately NO lower bound for fully-matched meals:
+// "herbal tea (1 cup)" really is ~2 kcal, and keeping the model's 300 kcal
+// row would print calories for food the meal never lists (dietitian red
+// flag). MIN only sets how small a model estimate can be before it stops
+// serving as a portion hint for the serving-size retry.
 const MEAL_KCAL_MIN = 20;
 const MEAL_KCAL_MAX = 2500;
 // A single item above this is a wrong match, a bad quantity, or a source-data
 // outlier (a few INDB rows have implausible values) — fall back to AI estimate.
 const ITEM_KCAL_MAX = 600;
-// Grounding refines the model estimate — it must not radically rewrite it.
-// A grounded meal diverging beyond BOTH bounds from the AI estimate almost
-// always means a wrong gram resolution (e.g. the generic 200 g "cup" applied
-// to a light dry snack like roasted chana or makhana), so the AI estimate is
-// kept for that meal.
+// The model's calorie estimate is only a PORTION HINT, never a result: when
+// the grounded total lands this far above it, the model probably priced one
+// serving while writing an oversized gram amount, so a serving-size retry
+// runs (see groundPlan); MIN_RATIO bounds that retry's acceptance. In every
+// other case the database total wins outright — keeping the model's calorie
+// level produced fabricated macros dietitians red-flagged in three
+// consecutive reviews (76 g-carb besan-chilla dinners on a diabetic plan).
 const DIVERGENCE_ABS_KCAL = 150;
 const DIVERGENCE_MAX_RATIO = 1.6;
 const DIVERGENCE_MIN_RATIO = 0.5;
@@ -52,9 +58,6 @@ export interface GroundingStats {
   total_items: number;
   matched_items: number;
   grounded_meals: number;
-  /** Meals that kept the model's calorie level but had their macro split
-   *  re-derived from the matched foods' database composition. */
-  rescaled_meals: number;
   total_meals: number;
   sources: { INDB: number; USDA: number };
 }
@@ -400,7 +403,6 @@ export async function groundPlan(
     total_items: 0,
     matched_items: 0,
     grounded_meals: 0,
-    rescaled_meals: 0,
     total_meals: 0,
     sources: { INDB: 0, USDA: 0 },
   };
@@ -457,73 +459,58 @@ export async function groundPlan(
           mealSources.push(match.source);
         }
 
-        if (!complete || kcal < MEAL_KCAL_MIN || kcal > MEAL_KCAL_MAX)
+        if (!complete || kcal > MEAL_KCAL_MAX)
           return { meal, grounded: null, sources: [] };
 
+        // Grounded far ABOVE the estimate usually means the model wrote a
+        // gram amount several times the food's real serving ("poha (150 g)"
+        // priced as a 150 kcal snack — a bowl is 55 g). Retry oversized
+        // items at one serving; if that lands near the estimate, that's the
+        // portion the model actually priced — use it and correct the
+        // printed quantity so the PDF agrees with its own numbers. In every
+        // other case the database total below wins outright.
         const estimate = meal.calories || 0;
-        if (estimate >= MEAL_KCAL_MIN && divergesFrom(kcal, estimate)) {
-          // Grounded far ABOVE the estimate usually means the model wrote a
-          // gram amount several times the food's real serving ("poha (150 g)"
-          // priced as a 150 kcal snack — a bowl is 55 g). Retry oversized
-          // items at one serving; if that lands near the estimate, that's the
-          // portion the model actually priced — use it and correct the
-          // printed quantity so the PDF agrees with its own numbers.
-          if (kcal > estimate * DIVERGENCE_MAX_RATIO) {
-            const retried = resolved.map((r) =>
-              r.match.serving_g && r.grams > 2 * r.match.serving_g
-                ? { ...r, grams: r.match.serving_g, shrunk: true }
-                : { ...r, shrunk: false }
+        if (
+          estimate >= MEAL_KCAL_MIN &&
+          kcal - estimate > DIVERGENCE_ABS_KCAL &&
+          kcal > estimate * DIVERGENCE_MAX_RATIO
+        ) {
+          const retried = resolved.map((r) =>
+            r.match.serving_g && r.grams > 2 * r.match.serving_g
+              ? { ...r, grams: r.match.serving_g, shrunk: true }
+              : { ...r, shrunk: false }
+          );
+          if (retried.some((r) => r.shrunk)) {
+            const sum = retried.reduce(
+              (a, r) => ({
+                kcal: a.kcal + (r.match.kcal * r.grams) / 100,
+                p: a.p + (r.match.protein_g * r.grams) / 100,
+                c: a.c + (r.match.carbs_g * r.grams) / 100,
+                f: a.f + (r.match.fat_g * r.grams) / 100,
+              }),
+              { kcal: 0, p: 0, c: 0, f: 0 }
             );
-            if (retried.some((r) => r.shrunk)) {
-              const sum = retried.reduce(
-                (a, r) => ({
-                  kcal: a.kcal + (r.match.kcal * r.grams) / 100,
-                  p: a.p + (r.match.protein_g * r.grams) / 100,
-                  c: a.c + (r.match.carbs_g * r.grams) / 100,
-                  f: a.f + (r.match.fat_g * r.grams) / 100,
-                }),
-                { kcal: 0, p: 0, c: 0, f: 0 }
-              );
-              if (sum.kcal >= MEAL_KCAL_MIN && !divergesFrom(sum.kcal, estimate)) {
-                const items = meal.items.map((item, i) => {
-                  const r = retried.find((x) => x.idx === i);
-                  if (!r || !r.shrunk) return item;
-                  const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
-                  return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
-                });
-                return {
-                  meal,
-                  grounded: {
-                    ...meal,
-                    items,
-                    calories: Math.round(sum.kcal),
-                    protein_g: Math.round(sum.p),
-                    carbs_g: Math.round(sum.c),
-                    fat_g: Math.round(sum.f),
-                  },
-                  sources: mealSources,
-                };
-              }
+            if (sum.kcal >= MEAL_KCAL_MIN && !divergesFrom(sum.kcal, estimate)) {
+              const items = meal.items.map((item, i) => {
+                const r = retried.find((x) => x.idx === i);
+                if (!r || !r.shrunk) return item;
+                const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
+                return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
+              });
+              return {
+                meal,
+                grounded: {
+                  ...meal,
+                  items,
+                  calories: Math.round(sum.kcal),
+                  protein_g: Math.round(sum.p),
+                  carbs_g: Math.round(sum.c),
+                  fat_g: Math.round(sum.f),
+                },
+                sources: mealSources,
+              };
             }
           }
-
-          // Otherwise keep the model's calorie level, but every item DID
-          // match, so the foods themselves are known: re-derive the macro
-          // split from their database composition scaled to the model's
-          // calories — the model routinely claims protein the ingredients
-          // cannot deliver (e.g. 30 g from a dal-and-roti dinner).
-          stats.rescaled_meals++;
-          const scale = estimate / kcal;
-          return {
-            meal: {
-              ...meal,
-              protein_g: Math.round(protein * scale),
-              carbs_g: Math.round(carbs * scale),
-              fat_g: Math.round(fat * scale),
-            },
-            grounded: null,
-            sources: [],
-          };
         }
 
         return {
