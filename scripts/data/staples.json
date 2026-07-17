@@ -132,6 +132,13 @@
     { "name": "Paneer bhurji", "source": "INDB", "source_id": "ASC195" },
     { "name": "Paneer toast", "source": "INDB", "source_id": "ASC042" },
     { "name": "Paneer sandwich", "source": "INDB", "source_id": "ASC042" },
+    { "name": "Biryani", "source": "INDB", "source_id": "ASC122" },
+    { "name": "Chicken biryani", "source": "INDB", "source_id": "ASC122" },
+    { "name": "Mutton biryani", "source": "INDB", "source_id": "ASC122" },
+    { "name": "Vegetable biryani", "source": "INDB", "source_id": "ASC123" },
+    { "name": "Veg biryani", "source": "INDB", "source_id": "ASC123" },
+    { "name": "Egg bhurji", "source": "INDB", "source_id": "ASC059" },
+    { "name": "Anda bhurji", "source": "INDB", "source_id": "ASC059" },
     { "name": "Paneer tikka", "source": "USDA", "source_id": "172223", "serving_g": 100, "serving_unit": "serving" }
   ]
 }

@@ -32,11 +32,6 @@ const DIVERGENCE_MIN_RATIO = 0.5;
 // fraction (against 4/4/9 Atwater) is internally inconsistent; the calories
 // are reset to the macro-implied value before any grounding comparison.
 const MACRO_KCAL_TOLERANCE = 0.15;
-// Day-level backstop: several individually-plausible corrections can still
-// accumulate. If grounding leaves a day further than this from the plan's
-// calorie target while the model's own design was closer, the whole day keeps
-// the model estimates — grounding must refine a day, not push it off target.
-const DAY_TARGET_TOLERANCE = 0.2;
 
 interface FoodMatch {
   query: string;
@@ -197,6 +192,9 @@ const VULGAR: Record<string, number> = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓
 
 function parseQuantity(raw: string): { count: number; unit: string } {
   let text = (raw || "").trim().toLowerCase();
+  // Composite quantities — "2 eggs + 100g curry" — describe the first
+  // component; the remainder is preparation detail, not a second amount.
+  text = text.split(/\s*\+\s*/)[0];
   let count = 1;
 
   for (const [ch, val] of Object.entries(VULGAR)) {
@@ -223,10 +221,12 @@ function parseQuantity(raw: string): { count: number; unit: string } {
 }
 
 function normalizeUnit(text: string): string {
-  return text
-    .replace(/^(of|a|an)\s+/, "")
-    .trim()
-    .replace(/s$/, ""); // crude singular: rotis -> roti, cups -> cup
+  const cleaned = text.replace(/^(of|a|an)\s+/, "").trim();
+  // An absolute unit followed by descriptors — "ml full-fat", "g cooked" —
+  // is that unit; the trailing words never change the amount.
+  const abs = cleaned.match(/^(g|gm|grams?|ml|kg|l|litres?|liters?)\b/);
+  if (abs) return abs[1].replace(/s$/, "");
+  return cleaned.replace(/s$/, ""); // crude singular: rotis -> roti, cups -> cup
 }
 
 /**
@@ -317,6 +317,10 @@ function reconcileMeal(meal: PlanMeal): PlanMeal {
   return { ...meal, calories: Math.round(implied) };
 }
 
+const divergesFrom = (kcal: number, estimate: number) =>
+  Math.abs(kcal - estimate) > DIVERGENCE_ABS_KCAL &&
+  (kcal > estimate * DIVERGENCE_MAX_RATIO || kcal < estimate * DIVERGENCE_MIN_RATIO);
+
 export async function groundPlan(
   supabase: SupabaseClient,
   plan: DietPlan
@@ -389,8 +393,10 @@ export async function groundPlan(
           fat = 0;
         const mealSources: FoodMatch["source"][] = [];
         let complete = meal.items.length > 0;
+        const resolved: { idx: number; match: FoodMatch; grams: number }[] = [];
 
-        for (const item of meal.items) {
+        for (let i = 0; i < meal.items.length; i++) {
+          const item = meal.items[i];
           const match = bestFor(normName(item.food));
           if (!match) {
             complete = false;
@@ -402,6 +408,7 @@ export async function groundPlan(
             complete = false;
             continue;
           }
+          resolved.push({ idx: i, match, grams });
           kcal += (match.kcal * grams) / 100;
           protein += (match.protein_g * grams) / 100;
           carbs += (match.carbs_g * grams) / 100;
@@ -412,18 +419,58 @@ export async function groundPlan(
         if (!complete || kcal < MEAL_KCAL_MIN || kcal > MEAL_KCAL_MAX)
           return { meal, grounded: null, sources: [] };
 
-        // Too far from the AI estimate (both absolutely and proportionally) —
-        // the gram resolution is probably wrong; keep the model's calorie
-        // level. But every item DID match, so the foods themselves are known:
-        // re-derive the macro split from their database composition scaled to
-        // the model's calories, since the model routinely claims protein the
-        // ingredients cannot deliver (e.g. 30 g from a dal-and-roti dinner).
         const estimate = meal.calories || 0;
-        if (
-          estimate >= MEAL_KCAL_MIN &&
-          Math.abs(kcal - estimate) > DIVERGENCE_ABS_KCAL &&
-          (kcal > estimate * DIVERGENCE_MAX_RATIO || kcal < estimate * DIVERGENCE_MIN_RATIO)
-        ) {
+        if (estimate >= MEAL_KCAL_MIN && divergesFrom(kcal, estimate)) {
+          // Grounded far ABOVE the estimate usually means the model wrote a
+          // gram amount several times the food's real serving ("poha (150 g)"
+          // priced as a 150 kcal snack — a bowl is 55 g). Retry oversized
+          // items at one serving; if that lands near the estimate, that's the
+          // portion the model actually priced — use it and correct the
+          // printed quantity so the PDF agrees with its own numbers.
+          if (kcal > estimate * DIVERGENCE_MAX_RATIO) {
+            const retried = resolved.map((r) =>
+              r.match.serving_g && r.grams > 2 * r.match.serving_g
+                ? { ...r, grams: r.match.serving_g, shrunk: true }
+                : { ...r, shrunk: false }
+            );
+            if (retried.some((r) => r.shrunk)) {
+              const sum = retried.reduce(
+                (a, r) => ({
+                  kcal: a.kcal + (r.match.kcal * r.grams) / 100,
+                  p: a.p + (r.match.protein_g * r.grams) / 100,
+                  c: a.c + (r.match.carbs_g * r.grams) / 100,
+                  f: a.f + (r.match.fat_g * r.grams) / 100,
+                }),
+                { kcal: 0, p: 0, c: 0, f: 0 }
+              );
+              if (sum.kcal >= MEAL_KCAL_MIN && !divergesFrom(sum.kcal, estimate)) {
+                const items = meal.items.map((item, i) => {
+                  const r = retried.find((x) => x.idx === i);
+                  if (!r || !r.shrunk) return item;
+                  const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
+                  return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
+                });
+                return {
+                  meal,
+                  grounded: {
+                    ...meal,
+                    items,
+                    calories: Math.round(sum.kcal),
+                    protein_g: Math.round(sum.p),
+                    carbs_g: Math.round(sum.c),
+                    fat_g: Math.round(sum.f),
+                  },
+                  sources: mealSources,
+                };
+              }
+            }
+          }
+
+          // Otherwise keep the model's calorie level, but every item DID
+          // match, so the foods themselves are known: re-derive the macro
+          // split from their database composition scaled to the model's
+          // calories — the model routinely claims protein the ingredients
+          // cannot deliver (e.g. 30 g from a dal-and-roti dinner).
           stats.rescaled_meals++;
           const scale = estimate / kcal;
           return {
@@ -451,27 +498,16 @@ export async function groundPlan(
         };
       });
 
-      // Day-level backstop against accumulated drift.
-      const target = plan.daily_calories;
-      const modelSum = candidates.reduce((s, c) => s + (c.meal.calories || 0), 0);
-      const groundedSum = candidates.reduce(
-        (s, c) => s + ((c.grounded ?? c.meal).calories || 0),
-        0
-      );
-      let acceptDay = true;
-      if (Number.isFinite(target) && target > 0 && modelSum > 0) {
-        const groundedDev = Math.abs(groundedSum - target) / target;
-        const modelDev = Math.abs(modelSum - target) / target;
-        acceptDay = groundedDev <= DAY_TARGET_TOLERANCE || groundedDev <= modelDev;
-      }
-
-      const meals = candidates.map((c) => (acceptDay && c.grounded ? c.grounded : c.meal));
-      if (acceptDay)
-        for (const c of candidates)
-          if (c.grounded) {
-            stats.grounded_meals++;
-            for (const s of c.sources) stats.sources[s]++;
-          }
+      // Grounded meals are always kept — hiding an under-portioned day behind
+      // the model's invented rows misled dietitians twice. A day landing far
+      // under its calorie target is real information, surfaced to the
+      // nutrition top-up pass and the draft preview instead of masked here.
+      const meals = candidates.map((c) => c.grounded ?? c.meal);
+      for (const c of candidates)
+        if (c.grounded) {
+          stats.grounded_meals++;
+          for (const s of c.sources) stats.sources[s]++;
+        }
 
       return {
         ...day,

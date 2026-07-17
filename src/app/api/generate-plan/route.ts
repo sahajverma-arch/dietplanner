@@ -11,7 +11,7 @@ import {
   type DietPlan,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
-import { proteinTopUp } from "@/lib/protein-topup";
+import { nutritionTopUp } from "@/lib/protein-topup";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
@@ -272,14 +272,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // ---- Protein top-up: grounded vegetarian days often land 5-15 g under
-    // the protein target the model claimed. One corrective revision round,
-    // kept only if the re-grounded shortfall verifiably shrank. Meaningless
-    // without grounding (ungrounded estimates always claim the target), and
-    // never fatal.
+    // ---- Nutrition top-up: grounded days often land under the protein band
+    // or well under the calorie target the model claimed (under-portioned
+    // meals). One corrective revision round, kept only if the re-grounded
+    // shortfall verifiably shrank. Meaningless without grounding (ungrounded
+    // estimates always claim the targets), and never fatal.
     if (wasGrounded) {
       try {
-        const topup = await proteinTopUp(supabase, plan, {
+        const topup = await nutritionTopUp(supabase, plan, {
           intake,
           week,
           previousPlan,
@@ -288,10 +288,10 @@ export async function POST(request: Request) {
           startsOn,
         });
         plan = topup.plan;
-        console.log(`protein top-up ${topup.applied ? "applied" : "skipped"}: ${topup.reason}`);
+        console.log(`nutrition top-up ${topup.applied ? "applied" : "skipped"}: ${topup.reason}`);
       } catch (topupError) {
         console.warn(
-          "protein top-up skipped:",
+          "nutrition top-up skipped:",
           topupError instanceof Error ? topupError.message : topupError
         );
       }
