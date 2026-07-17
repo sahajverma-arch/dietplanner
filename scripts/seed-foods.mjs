@@ -41,12 +41,14 @@ const supabase = createClient(url, serviceKey, {
 
 const BATCH = 500;
 
-// A handful of INDB rows carry data-entry errors (e.g. Boondi raita listed at
-// ~2,260 kcal per bowl). A calorie-dense value (>550/100g) is only plausible
-// for small servings (nuts, oils, dry snacks) — dense AND a 200g+ serving is
-// an error. USDA rows are not filtered.
+// A number of INDB rows carry data-entry errors (e.g. Boondi raita listed at
+// ~2,260 kcal per bowl, Cheese toast at 785 kcal/100g with 84 g fat). A
+// calorie-dense value (>550/100g) is only plausible for small servings (nuts,
+// oils, dry snacks, all <90 g) — dense AND a 90 g+ serving means 800-1,200
+// kcal for one poori/toast/chilla, which is an error. USDA rows are not
+// filtered.
 function isCorruptIndbRow(f) {
-  return f.kcal > 550 && f.serving_g != null && f.serving_g > 200;
+  return f.kcal > 550 && f.serving_g != null && f.serving_g > 90;
 }
 
 async function seedFile(file) {

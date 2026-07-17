@@ -11,6 +11,7 @@ import {
   type DietPlan,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
+import { proteinTopUp } from "@/lib/protein-topup";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
@@ -253,19 +254,47 @@ export async function POST(request: Request) {
 
     // ---- Ground macros in the foods reference table (INDB + USDA). Never
     // fatal: if the table isn't seeded yet, the model estimates are kept.
+    let wasGrounded = false;
     try {
       const grounded = await groundPlan(supabase, plan);
       plan = grounded.plan;
+      wasGrounded = true;
       console.log(
         `nutrition grounding: ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ` +
           `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
-          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
+          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA}, ` +
+          `rescaled ${grounded.stats.rescaled_meals})`
       );
     } catch (groundError) {
       console.warn(
         "nutrition grounding skipped:",
         groundError instanceof Error ? groundError.message : groundError
       );
+    }
+
+    // ---- Protein top-up: grounded vegetarian days often land 5-15 g under
+    // the protein target the model claimed. One corrective revision round,
+    // kept only if the re-grounded shortfall verifiably shrank. Meaningless
+    // without grounding (ungrounded estimates always claim the target), and
+    // never fatal.
+    if (wasGrounded) {
+      try {
+        const topup = await proteinTopUp(supabase, plan, {
+          intake,
+          week,
+          previousPlan,
+          followup,
+          review: aiReview,
+          startsOn,
+        });
+        plan = topup.plan;
+        console.log(`protein top-up ${topup.applied ? "applied" : "skipped"}: ${topup.reason}`);
+      } catch (topupError) {
+        console.warn(
+          "protein top-up skipped:",
+          topupError instanceof Error ? topupError.message : topupError
+        );
+      }
     }
 
     // ---- Save as a DRAFT preview. The dietitian reviews it on the client

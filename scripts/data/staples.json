@@ -119,6 +119,19 @@
     { "name": "Mint chutney", "source": "INDB", "source_id": "ASC387" },
     { "name": "Coriander chutney", "source": "INDB", "source_id": "ASC387" },
     { "name": "Green chutney", "source": "INDB", "source_id": "ASC387" },
-    { "name": "Coconut chutney", "source": "INDB", "source_id": "ASC386" }
+    { "name": "Coconut chutney", "source": "INDB", "source_id": "ASC386" },
+    { "name": "Peanut butter", "source": "USDA", "source_id": "169869" },
+    { "name": "Whole wheat bread", "source": "USDA", "source_id": "172688" },
+    { "name": "Whole wheat toast", "source": "USDA", "source_id": "172688" },
+    { "name": "Brown bread", "source": "USDA", "source_id": "172688" },
+    { "name": "Toast", "source": "USDA", "source_id": "172688" },
+    { "name": "Bread", "source": "USDA", "source_id": "172688" },
+    { "name": "Dal fry", "source": "INDB", "source_id": "ASC155" },
+    { "name": "Dal tadka", "source": "INDB", "source_id": "ASC155" },
+    { "name": "Jeera rice", "source": "INDB", "source_id": "ASC114" },
+    { "name": "Paneer bhurji", "source": "INDB", "source_id": "ASC195" },
+    { "name": "Paneer toast", "source": "INDB", "source_id": "ASC042" },
+    { "name": "Paneer sandwich", "source": "INDB", "source_id": "ASC042" },
+    { "name": "Paneer tikka", "source": "USDA", "source_id": "172223", "serving_g": 100, "serving_unit": "serving" }
   ]
 }

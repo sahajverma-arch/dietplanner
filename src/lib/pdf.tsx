@@ -9,6 +9,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import type { DietPlan } from "./nim";
+import { PORTION_GUIDE } from "./nutrition";
 import { LOGO_DATA_URI, LOGO_ASPECT } from "./logo";
 
 // ---- LEANR brand + macro palette -------------------------------------------
@@ -99,6 +100,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontSize: 8.5,
   },
+
+  // Portion guide strip
+  portionGuide: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 5,
+    backgroundColor: ROW_ALT,
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    marginTop: 8,
+  },
+  portionText: { fontSize: 8, color: "#3f3f46", lineHeight: 1.5 },
+  portionNote: { fontSize: 7, color: FAINT, lineHeight: 1.4, marginTop: 2.5 },
 
   // Day table
   dayBlock: { marginTop: 12 },
@@ -450,6 +464,21 @@ function PlanDocument({
         </View>
 
         {plan.summary ? <Text style={styles.summary}>{plan.summary}</Text> : null}
+
+        {/* Portion guide — what the household measures in this plan mean */}
+        <View style={styles.portionGuide} wrap={false}>
+          <Text style={styles.portionText}>
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>Portion guide:  </Text>
+            {/* "~" not "≈": the built-in Helvetica is WinAnsi-only, U+2248 renders as a wrong glyph */}
+            {PORTION_GUIDE.map((p) => `${p.measure} ~${p.weight}`).join("   ·   ")}
+          </Text>
+          <Text style={styles.portionNote}>
+            Vessel weights assume cooked food filled level (for liquids 1 ml ~ 1 g); light or dry
+            items such as nuts, makhana and salads count proportionally less. Dishes with a
+            measured serving weight use that instead. “Small” and “large” portions scale by
+            ×0.8 and ×1.3.
+          </Text>
+        </View>
 
         {/* Day tables */}
         {plan.days.map((day, di) => (

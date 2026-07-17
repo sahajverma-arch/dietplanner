@@ -28,6 +28,10 @@ const ITEM_KCAL_MAX = 600;
 const DIVERGENCE_ABS_KCAL = 150;
 const DIVERGENCE_MAX_RATIO = 1.6;
 const DIVERGENCE_MIN_RATIO = 0.5;
+// A meal whose stated calories disagree with its own macros by more than this
+// fraction (against 4/4/9 Atwater) is internally inconsistent; the calories
+// are reset to the macro-implied value before any grounding comparison.
+const MACRO_KCAL_TOLERANCE = 0.15;
 // Day-level backstop: several individually-plausible corrections can still
 // accumulate. If grounding leaves a day further than this from the plan's
 // calorie target while the model's own design was closer, the whole day keeps
@@ -53,6 +57,9 @@ export interface GroundingStats {
   total_items: number;
   matched_items: number;
   grounded_meals: number;
+  /** Meals that kept the model's calorie level but had their macro split
+   *  re-derived from the matched foods' database composition. */
+  rescaled_meals: number;
   total_meals: number;
   sources: { INDB: number; USDA: number };
 }
@@ -169,6 +176,23 @@ const PIECE_GRAMS: { pattern: RegExp; grams: number }[] = [
   { pattern: /mango/i, grams: 200 },
 ];
 
+// What the client-facing report says each household measure means. Derived
+// from UNIT_GRAMS / PIECE_GRAMS so the PDF always states the same weights the
+// nutrition math uses — edit those tables, not this list.
+const pieceGrams = (name: string) => PIECE_GRAMS.find((p) => p.pattern.test(name))!.grams;
+export const PORTION_GUIDE: ReadonlyArray<{ measure: string; weight: string }> = [
+  { measure: "1 katori", weight: `${UNIT_GRAMS.katori} g` },
+  { measure: "1 bowl", weight: `${UNIT_GRAMS.bowl} g` },
+  { measure: "1 plate", weight: `${UNIT_GRAMS.plate} g` },
+  { measure: "1 cup", weight: `${UNIT_GRAMS.cup} g` },
+  { measure: "1 glass", weight: `${UNIT_GRAMS.glass} ml` },
+  { measure: "1 tbsp", weight: `${UNIT_GRAMS.tbsp} g` },
+  { measure: "1 tsp", weight: `${UNIT_GRAMS.tsp} g` },
+  { measure: "1 handful", weight: `${UNIT_GRAMS.handful} g` },
+  { measure: "1 roti", weight: `${pieceGrams("roti")} g` },
+  { measure: "1 paratha", weight: `${pieceGrams("paratha")} g` },
+];
+
 const VULGAR: Record<string, number> = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3 };
 
 function parseQuantity(raw: string): { count: number; unit: string } {
@@ -279,6 +303,20 @@ function toGrams(
 
 const normName = (s: string) => s.trim().toLowerCase();
 
+type PlanMeal = DietPlan["days"][number]["meals"][number];
+
+// The model sometimes emits a meal whose stated calories disagree with its own
+// macros (e.g. 510 kcal stated, 18P/18C/20F = 324 kcal implied). The macros
+// are the more granular claim, so the calories are reset to the macro-implied
+// value when the two diverge beyond MACRO_KCAL_TOLERANCE.
+function reconcileMeal(meal: PlanMeal): PlanMeal {
+  const implied = 4 * (meal.protein_g || 0) + 4 * (meal.carbs_g || 0) + 9 * (meal.fat_g || 0);
+  if (implied <= 0) return meal;
+  const stated = meal.calories || 0;
+  if (Math.abs(stated - implied) <= MACRO_KCAL_TOLERANCE * Math.max(stated, implied)) return meal;
+  return { ...meal, calories: Math.round(implied) };
+}
+
 export async function groundPlan(
   supabase: SupabaseClient,
   plan: DietPlan
@@ -287,6 +325,7 @@ export async function groundPlan(
     total_items: 0,
     matched_items: 0,
     grounded_meals: 0,
+    rescaled_meals: 0,
     total_meals: 0,
     sources: { INDB: 0, USDA: 0 },
   };
@@ -339,9 +378,10 @@ export async function groundPlan(
         grounded: (typeof day.meals)[number] | null;
         sources: FoodMatch["source"][];
       };
-      const candidates: Candidate[] = day.meals.map((meal) => {
+      const candidates: Candidate[] = day.meals.map((rawMeal) => {
         stats.total_meals++;
-        stats.total_items += meal.items.length;
+        stats.total_items += rawMeal.items.length;
+        const meal = reconcileMeal(rawMeal);
 
         let kcal = 0,
           protein = 0,
@@ -373,14 +413,29 @@ export async function groundPlan(
           return { meal, grounded: null, sources: [] };
 
         // Too far from the AI estimate (both absolutely and proportionally) —
-        // the gram resolution is probably wrong; keep the model's numbers.
+        // the gram resolution is probably wrong; keep the model's calorie
+        // level. But every item DID match, so the foods themselves are known:
+        // re-derive the macro split from their database composition scaled to
+        // the model's calories, since the model routinely claims protein the
+        // ingredients cannot deliver (e.g. 30 g from a dal-and-roti dinner).
         const estimate = meal.calories || 0;
         if (
           estimate >= MEAL_KCAL_MIN &&
           Math.abs(kcal - estimate) > DIVERGENCE_ABS_KCAL &&
           (kcal > estimate * DIVERGENCE_MAX_RATIO || kcal < estimate * DIVERGENCE_MIN_RATIO)
         ) {
-          return { meal, grounded: null, sources: [] };
+          stats.rescaled_meals++;
+          const scale = estimate / kcal;
+          return {
+            meal: {
+              ...meal,
+              protein_g: Math.round(protein * scale),
+              carbs_g: Math.round(carbs * scale),
+              fat_g: Math.round(fat * scale),
+            },
+            grounded: null,
+            sources: [],
+          };
         }
 
         return {
@@ -398,7 +453,7 @@ export async function groundPlan(
 
       // Day-level backstop against accumulated drift.
       const target = plan.daily_calories;
-      const modelSum = day.meals.reduce((s, m) => s + (m.calories || 0), 0);
+      const modelSum = candidates.reduce((s, c) => s + (c.meal.calories || 0), 0);
       const groundedSum = candidates.reduce(
         (s, c) => s + ((c.grounded ?? c.meal).calories || 0),
         0
