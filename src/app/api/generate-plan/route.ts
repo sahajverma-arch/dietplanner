@@ -12,6 +12,7 @@ import {
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
 import { nutritionTopUp } from "@/lib/protein-topup";
+import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
@@ -293,6 +294,29 @@ export async function POST(request: Request) {
         console.warn(
           "nutrition top-up skipped:",
           topupError instanceof Error ? topupError.message : topupError
+        );
+      }
+    }
+
+    // ---- Match audit: re-check every item's database match and log the ones
+    // a dietitian would flag (wrong-dish matches, unmatched items). Purely
+    // observational — never blocks the draft. A recurring name here means a
+    // staples.json entry is missing.
+    if (wasGrounded) {
+      try {
+        const flagged = (await auditPlan(supabase, plan)).filter((f) => f.verdict !== "ok");
+        if (flagged.length > 0) {
+          console.warn(
+            `match audit: ${flagged.length} item(s) to verify — ` +
+              flagged
+                .map((f) => `"${f.query}" -> ${f.matchedName ?? "NO MATCH"} [${f.verdict}] ${f.reason}`)
+                .join(" | ")
+          );
+        }
+      } catch (auditError) {
+        console.warn(
+          "match audit skipped:",
+          auditError instanceof Error ? auditError.message : auditError
         );
       }
     }

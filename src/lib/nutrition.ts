@@ -33,7 +33,7 @@ const DIVERGENCE_MIN_RATIO = 0.5;
 // are reset to the macro-implied value before any grounding comparison.
 const MACRO_KCAL_TOLERANCE = 0.15;
 
-interface FoodMatch {
+export interface FoodMatch {
   query: string;
   food_id: number;
   name: string;
@@ -301,7 +301,78 @@ function toGrams(
 // Plan grounding
 // ---------------------------------------------------------------------------
 
-const normName = (s: string) => s.trim().toLowerCase();
+// "2 rotis", "1 cup oatmeal" — leading counts and measure words are quantity,
+// not identity, and sabotage similarity matching ("2 eggs" scored higher
+// against "Mayonnaise without eggs" than against the Egg staple).
+export function normName(s: string): string {
+  const base = s.trim().toLowerCase();
+  const stripped = base
+    .replace(/^[\d\s./½¼¾⅓⅔x×-]+/, "")
+    .replace(/^(cups?|tbsps?|tsps?|glass(?:es)?|bowls?|katoris?|plates?|slices?|pieces?|servings?)\s+(?:of\s+)?/, "")
+    .trim();
+  return stripped || base;
+}
+
+/**
+ * Fuzzy-matches food names against the foods table. Each name is queried both
+ * as written and through the Hindi-synonym rewrite, and the higher-scoring
+ * variant wins; only matches at or above MIN_SIMILARITY are returned. Keyed
+ * by normName(name). Shared by plan grounding and the match audit so both
+ * always see the same match.
+ */
+export async function fetchBestMatches(
+  supabase: SupabaseClient,
+  names: Iterable<string>
+): Promise<Map<string, FoodMatch>> {
+  const originals = new Set<string>();
+  Array.from(names).forEach((n) => {
+    const norm = normName(n || "");
+    if (norm) originals.add(norm);
+  });
+  const queries = new Set<string>(originals);
+  originals.forEach((q) => {
+    const rw = rewriteQuery(q);
+    if (rw) queries.add(rw);
+  });
+  const best = new Map<string, FoodMatch>();
+  if (queries.size === 0) return best;
+
+  // A full week has 60-100 unique item names; matching each one scans the
+  // whole foods table, and one giant statement can exceed Supabase's
+  // statement timeout. Small chunks with capped concurrency keep each
+  // statement fast without stampeding the database (an unbounded fan-out
+  // times out on corpus-sized audits), and a transient failure gets one
+  // retry.
+  const CHUNK = 16;
+  const CONCURRENCY = 4;
+  const list = Array.from(queries);
+  const chunks: string[][] = [];
+  for (let i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
+
+  const runChunk = async (c: string[]) => {
+    let res = await supabase.rpc("match_foods_batch", { queries: c });
+    if (res.error) res = await supabase.rpc("match_foods_batch", { queries: c });
+    return res;
+  };
+
+  const bySimilarity = new Map<string, FoodMatch>();
+  for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+    const group = await Promise.all(chunks.slice(i, i + CONCURRENCY).map(runChunk));
+    for (const { data, error } of group) {
+      if (error) throw new Error(`match_foods_batch failed: ${error.message}`);
+      for (const row of (data ?? []) as FoodMatch[]) bySimilarity.set(row.query, row);
+    }
+  }
+
+  Array.from(originals).forEach((name) => {
+    const orig = bySimilarity.get(name) ?? null;
+    const rw = rewriteQuery(name);
+    const alt = rw ? bySimilarity.get(rw) ?? null : null;
+    const winner = alt && (!orig || alt.similarity > orig.similarity) ? alt : orig;
+    if (winner && winner.similarity >= MIN_SIMILARITY) best.set(name, winner);
+  });
+  return best;
+}
 
 type PlanMeal = DietPlan["days"][number]["meals"][number];
 
@@ -335,44 +406,14 @@ export async function groundPlan(
   };
 
   // One round trip: all unique item names + their synonym rewrites.
-  const originals = new Set<string>();
+  const names: string[] = [];
   for (const day of plan.days)
     for (const meal of day.meals)
-      for (const item of meal.items) originals.add(normName(item.food));
+      for (const item of meal.items) names.push(item.food);
+  if (names.length === 0) return { plan, stats };
 
-  const queries = new Set<string>(originals);
-  originals.forEach((q) => {
-    const rw = rewriteQuery(q);
-    if (rw) queries.add(rw);
-  });
-  if (queries.size === 0) return { plan, stats };
-
-  // A full week has 60-100 unique item names; matching each one scans the
-  // whole foods table, and one giant statement can exceed Supabase's
-  // statement timeout. Chunked parallel calls keep each statement small.
-  const CHUNK = 16;
-  const list = Array.from(queries);
-  const chunks: string[][] = [];
-  for (let i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
-
-  const results = await Promise.all(
-    chunks.map((c) => supabase.rpc("match_foods_batch", { queries: c }))
-  );
-
-  const bySimilarity = new Map<string, FoodMatch>();
-  for (const { data, error } of results) {
-    if (error) throw new Error(`match_foods_batch failed: ${error.message}`);
-    for (const row of (data ?? []) as FoodMatch[]) bySimilarity.set(row.query, row);
-  }
-
-  const bestFor = (name: string): FoodMatch | null => {
-    const orig = bySimilarity.get(name) ?? null;
-    const rw = rewriteQuery(name);
-    const alt = rw ? bySimilarity.get(rw) ?? null : null;
-    const best =
-      alt && (!orig || alt.similarity > orig.similarity) ? alt : orig;
-    return best && best.similarity >= MIN_SIMILARITY ? best : null;
-  };
+  const matches = await fetchBestMatches(supabase, names);
+  const bestFor = (name: string): FoodMatch | null => matches.get(name) ?? null;
 
   const grounded: DietPlan = {
     ...plan,
