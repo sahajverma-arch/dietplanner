@@ -22,6 +22,15 @@
 //   planning    directly shapes the diet design
 // ---------------------------------------------------------------------------
 
+import {
+  FREQUENCY_OPTIONS,
+  PORTION_OPTIONS,
+  PROTEIN_FOODS,
+  foodsForPattern,
+  freqQuestionId,
+  portionQuestionId,
+} from "../protein-intake";
+
 export type QuestionType =
   | "text"
   | "textarea"
@@ -44,6 +53,19 @@ export interface Question {
   type: QuestionType;
   tag?: QuestionTag;
   options?: string[];
+  /**
+   * Options that depend on earlier answers (e.g. the protein-food list narrows
+   * to what the client's food pattern allows). When present the form renders
+   * these instead of `options`; `options` must still list every possibility,
+   * since it is what non-UI readers fall back on.
+   */
+  optionsFor?: (a: Answers) => string[];
+  /**
+   * Shown in place of the options when `optionsFor` yields none — a question
+   * that silently renders zero choices reads as broken, so it must say what is
+   * still needed.
+   */
+  optionsEmptyHint?: string;
   /** Multi-select cap ("Select up to N"). Click order doubles as rank. */
   max?: number;
   placeholder?: string;
@@ -1129,6 +1151,35 @@ const S6: Section = {
 
 const isTraining = (a: Answers) => hasOther(a, "q43", ["Currently not exercising"]);
 
+// Q50 records WHICH protein foods the client eats; these follow-ups record HOW
+// OFTEN and HOW MUCH, which is what turns the selection into a measured intake
+// (see src/lib/protein-intake.ts). One pair per food, shown whenever that food
+// is selected in Q50. Selection is the only condition on purpose: the food
+// pattern already narrows what Q50 offers, and gating these on it as well would
+// leave a food the dietitian deliberately selected impossible to measure.
+function proteinFrequencyQuestions(): Question[] {
+  const out: Question[] = [];
+  for (const food of PROTEIN_FOODS) {
+    const show = (a: Answers) => has(a, "q50", food.label);
+    out.push(
+      {
+        id: freqQuestionId(food.id), tag: "planning", type: "single",
+        label: `${food.label} — how often?`,
+        options: FREQUENCY_OPTIONS.map((f) => f.label),
+        showIf: show,
+      },
+      {
+        id: portionQuestionId(food.id), tag: "planning", type: "single",
+        label: `${food.label} — portion each time`,
+        note: `Standard portion: ${food.portion} (${food.proteinPerPortion} g protein). Leave blank if standard.`,
+        options: PORTION_OPTIONS.map((p) => p.label),
+        showIf: show,
+      }
+    );
+  }
+  return out;
+}
+
 const S7: Section = {
   id: "training",
   code: "7",
@@ -1253,12 +1304,25 @@ const S7: Section = {
     {
       id: "q50", n: 50, tag: "planning", type: "multi",
       label: "Which protein foods are currently part of your diet?",
+      why: "Each one selected here is then measured for frequency and portion, and priced from the food database to estimate current protein intake. The list follows the food pattern recorded in Q33.",
+      // Narrowed to the recorded food pattern, so a vegetarian consultation is
+      // not a wall of chicken and fish, and nothing at all until Q33 says which
+      // pattern applies. Anything already selected still keeps its follow-up
+      // rows, even if the pattern is later changed.
+      optionsFor: (a) => {
+        const foods = foodsForPattern(a);
+        return foods.length === 0 ? [] : [...foods.map((f) => f.label), "Other"];
+      },
+      optionsEmptyHint:
+        "Answer Q33 “What food pattern do you follow?” (Section 6) first — the protein list is built from it.",
       options: [
-        "Milk", "Curd", "Greek or high-protein yogurt", "Paneer", "Tofu", "Soy chunks",
-        "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans", "Eggs", "Chicken", "Fish",
+        "Milk", "Curd", "Greek or high-protein yogurt", "Buttermilk or chaas", "Paneer",
+        "Tofu", "Soy chunks", "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans",
+        "Sprouts", "Roasted chana", "Nuts or seeds", "Eggs", "Chicken", "Fish",
         "Seafood", "Meat", "Protein powder", "Other",
       ],
     },
+    ...proteinFrequencyQuestions(),
     {
       id: "q50a", tag: "planning", type: "single",
       label: "Meals per day with a clear protein source",

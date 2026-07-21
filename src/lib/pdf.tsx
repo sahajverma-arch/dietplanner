@@ -400,6 +400,19 @@ function PlanDocument({
   conditions,
 }: PdfArgs) {
   const conditionText = conditions.length > 0 ? conditions.join(", ") : "None";
+  // The header states what the plan actually PROVIDES (the delivered weekly
+  // average of the grounded days), never the model's aspirational target.
+  // Printing a target the grounded plan doesn't reach is a false promise; this
+  // number is computed from the same day sums as the Weekly Avg row, so the two
+  // always agree.
+  const totals = plan.days.map(daySums);
+  const n = totals.length || 1;
+  const avgProvided: Sums = {
+    cal: totals.reduce((a, x) => a + x.cal, 0) / n,
+    p: totals.reduce((a, x) => a + x.p, 0) / n,
+    c: totals.reduce((a, x) => a + x.c, 0) / n,
+    f: totals.reduce((a, x) => a + x.f, 0) / n,
+  };
   return (
     <Document title={`Diet plan — ${clientName} — Week ${weekNumber}`}>
       <Page size="A4" style={styles.page}>
@@ -421,23 +434,24 @@ function PlanDocument({
           </View>
         </View>
 
-        {/* Daily targets */}
+        {/* Average daily nutrition the plan actually provides (matches the
+            Weekly Avg row) — never the model's target, so we never over-promise. */}
         <View style={styles.metaRow}>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>Daily calories</Text>
-            <Text style={styles.metaValue}>{r(plan.daily_calories)} kcal</Text>
+            <Text style={styles.metaLabel}>Avg daily calories</Text>
+            <Text style={styles.metaValue}>{r(avgProvided.cal)} kcal</Text>
           </View>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>Protein</Text>
-            <Text style={[styles.metaValue, { color: PROTEIN }]}>{r(plan.macros.protein_g)} g</Text>
+            <Text style={styles.metaLabel}>Avg protein</Text>
+            <Text style={[styles.metaValue, { color: PROTEIN }]}>{r(avgProvided.p)} g</Text>
           </View>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>Carbohydrates</Text>
-            <Text style={[styles.metaValue, { color: CARBS }]}>{r(plan.macros.carbs_g)} g</Text>
+            <Text style={styles.metaLabel}>Avg carbohydrates</Text>
+            <Text style={[styles.metaValue, { color: CARBS }]}>{r(avgProvided.c)} g</Text>
           </View>
           <View style={styles.metaBox}>
-            <Text style={styles.metaLabel}>Fat</Text>
-            <Text style={[styles.metaValue, { color: FAT }]}>{r(plan.macros.fat_g)} g</Text>
+            <Text style={styles.metaLabel}>Avg fat</Text>
+            <Text style={[styles.metaValue, { color: FAT }]}>{r(avgProvided.f)} g</Text>
           </View>
         </View>
 

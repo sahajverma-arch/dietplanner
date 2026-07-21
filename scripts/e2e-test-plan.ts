@@ -23,6 +23,7 @@ async function main() {
   const { missingRequired } = await import("../src/lib/counselling/questions");
   const { generateDietPlan, planWeekdays, aiClinicalReview, isPauseDecision } = await import("../src/lib/nim");
   const { groundPlan } = await import("../src/lib/nutrition");
+  const { reconcileNutrition } = await import("../src/lib/nutrition-reconcile");
   const { renderPlanPdf } = await import("../src/lib/pdf");
   const { createClient } = await import("@supabase/supabase-js");
 
@@ -33,11 +34,20 @@ async function main() {
 
   const outDir = path.join(__dirname, "..", "test-output");
   mkdirSync(outDir, { recursive: true });
+  // PLAN_SUFFIX=-v2 writes priya-test-week1-v2.pdf, so two runs (e.g. before
+  // and after a prompt change) can be compared side by side instead of one
+  // overwriting the other.
+  const suffix = process.env.PLAN_SUFFIX ?? "";
+  // PLAN_ONLY=rahul-test reruns a single client — generation is stochastic and
+  // occasionally dies on a model-side failure, and re-rolling both clients to
+  // recover one costs an extra four minutes.
+  const only = process.env.PLAN_ONLY ?? "";
 
   for (const [slug, answers] of [
     ["priya-test", PRIYA],
     ["rahul-test", RAHUL],
   ] as const) {
+    if (only && slug !== only) continue;
     const t0 = Date.now();
     console.log(`\n================ ${slug} ================`);
 
@@ -90,9 +100,48 @@ async function main() {
           `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
           `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
       );
+      // The API route reconciles grounded days against the calorie/protein
+      // targets before saving the draft. Skipping it here made this script
+      // report days 600 kcal under target that production would have
+      // corrected — QA must run the same stages as the route.
+      const reconciled = await reconcileNutrition(supabase as any, plan, {
+        intake,
+        week: 1,
+        previousPlan: null,
+        followup: null,
+        review,
+      });
+      plan = reconciled.plan;
+      console.log(`reconcile ${reconciled.applied ? "applied" : "skipped"}: ${reconciled.reason}`);
     } catch (e) {
-      console.warn("grounding skipped:", e instanceof Error ? e.message : e);
+      console.warn("grounding/reconcile skipped:", e instanceof Error ? e.message : e);
     }
+
+    // Day-level verdict against the plan's own targets — the numbers a
+    // dietitian checks first.
+    const dayTotals = plan.days.map((d) => ({
+      day: d.day,
+      kcal: d.meals.reduce((s, m) => s + (m.calories || 0), 0),
+      protein: d.meals.reduce((s, m) => s + (m.protein_g || 0), 0),
+    }));
+    const offBand = dayTotals.filter(
+      (t) =>
+        t.kcal < plan.daily_calories * 0.85 ||
+        t.kcal > plan.daily_calories * 1.15 ||
+        t.protein < plan.macros.protein_g - 5
+    );
+    console.log(
+      `day targets (${Math.round(plan.daily_calories)} kcal, ${Math.round(plan.macros.protein_g)} g protein): ` +
+        dayTotals.map((t) => `${Math.round(t.kcal)}/${Math.round(t.protein)}g`).join(" ")
+    );
+    console.log(
+      offBand.length
+        ? `!! ${offBand.length} day(s) off target: ` +
+            offBand
+              .map((t) => `${t.day} ${Math.round(t.kcal)} kcal ${Math.round(t.protein)} g`)
+              .join("; ")
+        : "day-target check: all 7 days within calorie band and protein floor"
+    );
 
     // Safety spot-check: no forbidden term in any meal item.
     const forbidden = slug === "priya-test" ? ["peanut"] : ["lauki", "karela", "bottle gourd", "bitter gourd"];
@@ -142,9 +191,12 @@ async function main() {
       conditions: intake.conditions,
     });
 
-    const pdfPath = path.join(outDir, `${slug}-week1.pdf`);
+    const pdfPath = path.join(outDir, `${slug}-week1${suffix}.pdf`);
     writeFileSync(pdfPath, pdfBuffer);
-    writeFileSync(path.join(outDir, `${slug}-week1.plan.json`), JSON.stringify(plan, null, 2));
+    writeFileSync(
+      path.join(outDir, `${slug}-week1${suffix}.plan.json`),
+      JSON.stringify(plan, null, 2)
+    );
     console.log(`PDF: ${pdfPath} (${(pdfBuffer.length / 1024).toFixed(0)} KB, ${((Date.now() - t0) / 1000).toFixed(0)}s)`);
   }
 

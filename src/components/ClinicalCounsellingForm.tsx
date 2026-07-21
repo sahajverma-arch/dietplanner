@@ -13,6 +13,7 @@ import {
   type Section,
 } from "@/lib/counselling/questions";
 import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
+import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -331,6 +332,8 @@ export default function ClinicalCounsellingForm({
             </div>
           </div>
 
+          <ProteinIntakePanel answers={answers} />
+
           {/* Footer nav */}
           <div className="mt-4 flex items-center justify-between gap-3">
             <button
@@ -433,6 +436,98 @@ export default function ClinicalCounsellingForm({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Running estimate of what the client eats now and the week-1 target it
+ * implies, shown during the consultation so the dietitian can sanity-check the
+ * number while the client is still in front of them — a target built on a
+ * frequency nobody questioned is worse than no target at all.
+ */
+function ProteinIntakePanel({ answers }: { answers: Answers }) {
+  const estimate = useMemo(() => estimateProteinIntake(answers), [answers]);
+  const target = useMemo(() => proteinTarget(answers, estimate), [answers, estimate]);
+
+  // Nothing selected yet — stay out of the dietitian's way.
+  if (!estimate.measured && estimate.unrecorded.length === 0) return null;
+
+  const tone =
+    target.basis === "medical-cap"
+      ? "border-red-500/30 bg-red-500/5"
+      : target.basis === "unmeasured"
+        ? "border-amber-500/30 bg-amber-500/5"
+        : "border-brand/30 bg-brand/5";
+
+  return (
+    <div className={`card mt-4 border ${tone}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">Measured protein intake</h3>
+        <span className="text-xs text-zinc-500">from Q50 frequency × food database</span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Eats now</div>
+          <div className="text-lg font-semibold">
+            {estimate.gramsPerDay} <span className="text-sm font-normal text-zinc-400">g/day</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Per kg bodyweight</div>
+          <div className="text-lg font-semibold">
+            {estimate.gramsPerKg ?? "—"}
+            <span className="text-sm font-normal text-zinc-400"> g/kg</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Week-1 target</div>
+          <div className="text-lg font-semibold text-brand">
+            {target.targetG || "—"}
+            <span className="text-sm font-normal text-zinc-400"> g/day</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Long-term goal</div>
+          <div className="text-lg font-semibold">
+            {target.goalG || "—"}
+            <span className="text-sm font-normal text-zinc-400"> g/day</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Steps to goal</div>
+          <div className="text-lg font-semibold">
+            {target.weeksToGoal || (target.basis === "goal-reached" ? "0" : "—")}
+            <span className="text-sm font-normal text-zinc-400"> weeks</span>
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-2 text-xs text-zinc-400">{target.explanation}</p>
+
+      {estimate.contributions.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {estimate.contributions.map((c) => (
+            <span
+              key={c.food.id}
+              className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-400 ring-1 ring-zinc-800"
+            >
+              {c.food.label} <span className="text-zinc-200">{c.gramsPerDay.toFixed(1)} g</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {estimate.unrecorded.length > 0 && (
+        <p className="mt-2 rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+          Counting as zero until asked — no frequency recorded for{" "}
+          {estimate.unrecorded.map((f) => f.label).join(", ")}. The estimate is low until these are
+          filled in.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 function Field({
   q,
   answers,
@@ -448,6 +543,16 @@ function Field({
   const text = typeof value === "string" ? value : "";
   const chosen = Array.isArray(value) ? value : [];
   const isRedFlagNote = q.note?.startsWith("RED FLAG");
+  // A question may narrow its options from earlier answers (Q50's protein-food
+  // list follows the client's food pattern). Anything already selected is kept
+  // in the list even when narrowed out, so changing the pattern later never
+  // hides an answer the dietitian can no longer see or clear.
+  const options = q.optionsFor
+    ? Array.from(new Set([...q.optionsFor(answers), ...chosen]))
+    : q.options;
+  // Nothing to offer yet — the question depends on an answer that is still
+  // missing, so say which one instead of rendering an empty row.
+  const blocked = Boolean(q.optionsFor && q.optionsEmptyHint && options?.length === 0);
 
   return (
     <div>
@@ -517,9 +622,15 @@ function Field({
         />
       )}
 
-      {q.type === "single" && (
+      {blocked && (
+        <p className="rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+          {q.optionsEmptyHint}
+        </p>
+      )}
+
+      {!blocked && q.type === "single" && (
         <div className="flex flex-wrap gap-1.5">
-          {q.options?.map((o) => (
+          {options?.map((o) => (
             <button
               key={o}
               type="button"
@@ -536,7 +647,7 @@ function Field({
         </div>
       )}
 
-      {q.type === "multi" && (
+      {!blocked && q.type === "multi" && (
         <div>
           {q.max && (
             <p className="mb-1.5 text-xs text-zinc-500">
@@ -544,7 +655,7 @@ function Field({
             </p>
           )}
           <div className="flex flex-wrap gap-1.5">
-            {q.options?.map((o) => {
+            {options?.map((o) => {
               const active = chosen.includes(o);
               const capped = Boolean(q.max && !active && chosen.length >= q.max);
               return (

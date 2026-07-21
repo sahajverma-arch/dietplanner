@@ -11,7 +11,7 @@ import {
   type DietPlan,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
-import { nutritionTopUp } from "@/lib/protein-topup";
+import { reconcileNutrition } from "@/lib/nutrition-reconcile";
 import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
@@ -272,14 +272,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // ---- Nutrition top-up: grounded days often land under the protein band
-    // or well under the calorie target the model claimed (under-portioned
-    // meals). One corrective revision round, kept only if the re-grounded
-    // shortfall verifiably shrank. Meaningless without grounding (ungrounded
-    // estimates always claim the targets), and never fatal.
+    // ---- Nutrition reconciliation: grounded days often land under the
+    // protein band, well under the calorie target the model claimed
+    // (under-portioned meals), or well over it (weight-loss plans). One
+    // corrective revision round, kept only if the re-grounded deviation
+    // verifiably shrank. Meaningless without grounding (ungrounded estimates
+    // always claim the targets), and never fatal.
     if (wasGrounded) {
       try {
-        const topup = await nutritionTopUp(supabase, plan, {
+        const topup = await reconcileNutrition(supabase, plan, {
           intake,
           week,
           previousPlan,
@@ -288,10 +289,12 @@ export async function POST(request: Request) {
           startsOn,
         });
         plan = topup.plan;
-        console.log(`nutrition top-up ${topup.applied ? "applied" : "skipped"}: ${topup.reason}`);
+        console.log(
+          `nutrition reconcile ${topup.applied ? "applied" : "skipped"}: ${topup.reason}`
+        );
       } catch (topupError) {
         console.warn(
-          "nutrition top-up skipped:",
+          "nutrition reconcile skipped:",
           topupError instanceof Error ? topupError.message : topupError
         );
       }

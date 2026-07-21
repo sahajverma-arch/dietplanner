@@ -20,6 +20,7 @@ import {
   val,
   type Answers,
 } from "./questions";
+import { estimateProteinIntake, proteinTarget } from "../protein-intake";
 
 // ---------------------------------------------------------------------------
 // RED FLAGS — clinical stops. "escalate" ones mean the plan should not be
@@ -699,8 +700,28 @@ export function aiProfile(a: Answers): Block {
     pt_handover: val(a, "q53b"),
   }));
 
+  // The measured current intake and the target it implies. This is the only
+  // protein target the plan may use: left to itself the model picks one and
+  // then quietly lowers it when the plan turns out hard to hit (observed
+  // 80 -> 62 g and 140 -> 125 g across generation runs).
+  const proteinEstimate = estimateProteinIntake(a);
+  const target = proteinTarget(a, proteinEstimate);
+
   put("protein_and_supplements", clean({
     protein_sources: list(a, "q50"),
+    measured_protein_intake_g_per_day: proteinEstimate.measured
+      ? proteinEstimate.gramsPerDay
+      : "",
+    measured_protein_g_per_kg: proteinEstimate.gramsPerKg ?? "",
+    protein_intake_breakdown: proteinEstimate.contributions.map(
+      (c) => `${c.food.label} ${c.gramsPerDay.toFixed(1)} g/day`
+    ),
+    protein_intake_not_recorded_for: proteinEstimate.unrecorded.map((f) => f.label),
+    week_1_protein_target_g: target.targetG || "",
+    long_term_protein_goal_g: target.goalG || "",
+    weekly_steps_to_protein_goal: target.weeksToGoal || "",
+    protein_target_basis: target.basis,
+    protein_target_reasoning: target.explanation,
     meals_with_clear_protein: val(a, "q50a"),
     protein_barriers: list(a, "q50b").filter((v) => v !== "No major barrier"),
     supplements: list(a, "q51").filter((v) => v !== "None"),

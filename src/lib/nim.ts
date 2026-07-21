@@ -2,6 +2,10 @@ import { z } from "zod";
 import type { FollowUpInput, IntakeForm } from "./types";
 import { aiProfile } from "./counselling/assessment";
 import type { Answers } from "./counselling/questions";
+// Value import; nutrition.ts only imports types from here, so there is no
+// runtime cycle. The model must size portions with the same household weights
+// the grounding math uses, or every plan arrives systematically under target.
+import { PORTION_GUIDE, PROTEIN_REFERENCE } from "./nutrition";
 
 // ---------------------------------------------------------------------------
 // Strict plan schema — everything the model returns is validated against this.
@@ -375,8 +379,10 @@ Hard rules:
 4. Prefer foods the client likes and their preferred cuisines where healthy.
 5. Adapt the plan to all stated medical conditions (e.g. low-GI for diabetes, low-sodium for hypertension, PCOS-friendly, etc.).
 6. ${dayRule}
-7. Keep food names and quantities short and specific. Use realistic household measures.
-8. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
+7. Keep food names and quantities short and specific. Use realistic household measures. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
+    (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
+  ).join(", ")}. A quantity that reads small will BE small once verified — write the portion this client actually needs to eat.
+8. Set "daily_calories" and "macros" from this client's clinical need — body composition, goal, training and medical profile — NEVER from what is easy to reach with their current foods. Do not lower the protein target because the client's usual dal-and-roti pattern would struggle to meet it; change the food pattern instead. When the profile carries "week_1_protein_target_g", that number was measured from the client's own recorded intake during counselling and is FIXED: copy it into "macros".protein_g exactly and build the days to meet it. Do not substitute your own protein figure, and do NOT plan toward "long_term_protein_goal_g" — that is where the client is heading over the following weeks, and pulling it forward into week 1 is the restrictive jump this progression exists to avoid. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
 9. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
 
 LeanR Premium diet generation principles — the profile below is a full clinical assessment; use all of it:
@@ -387,7 +393,9 @@ LeanR Premium diet generation principles — the profile below is a full clinica
 14. START FROM THE ACTUAL FOOD DAY ("current_food_day" meal timeline). Keep workable meals where they are; change what the review and limiting factors flagged. Meal times must fit wake/work/training/sleep (shift workers get a wake-cycle structure, not a conventional breakfast/lunch/dinner).
 15. PROTECT favourite foods, non-negotiables, cultural and household foods where clinically appropriate ("food_rules"). Avoid unnecessary food restriction — do not remove rice or roti by default, and correct (don't reinforce) the client's fear-based food beliefs.
 16. AVOID THE CLIENT'S DROPOUT PATTERN ("success_dropout_coaching"): don't trigger the known dropout causes (excess restriction, repetitive food, heavy cooking, unrealistic weekend rules), build on the client's success pattern, and match diet complexity to their preferred structure and portion style.
-17. MUSCLE, TRAINING AND RECOVERY: consider muscle preservation, training performance and recovery. Distribute protein across meals (especially breakfast and around training) using sources this client actually accepts, respecting the protein barriers.
+17. MUSCLE, TRAINING AND RECOVERY: consider muscle preservation, training performance and recovery. Distribute protein across meals (especially breakfast and around training) using sources this client actually accepts, respecting the protein barriers. VERIFIED PROTEIN (from the same database that re-costs this plan — plan by these numbers, not by intuition): ${PROTEIN_REFERENCE.map(
+    (p) => `${p.food} ${p.portion} = ${p.protein_g} g`
+  ).join("; ")}. Indian staples carry far less protein than they appear to: dal, rice and roti together give barely 10 g per meal, so ENLARGING them cannot reach the daily protein target. Every day must therefore carry several CONCENTRATED sources — curd or milk at breakfast, and paneer/soya/tofu/egg/chicken/fish at each main meal, plus a protein-led snack — sized so the day's meals genuinely sum to the protein target. Reach that target INSIDE the calorie target, by SUBSTITUTION, not addition: protein foods carry calories too, so when you add or enlarge one, reduce refined carbohydrate, oil/ghee and fried items in the same day to compensate. A day that hits its protein target while running over its calorie target has failed both.
 18. RESPECT PRACTICAL LIMITS: who cooks, preparation control and capacity, kitchen facilities, budget, limited-access foods, meals the client cannot control, travel and social patterns. Design the diet for the client's ACTUAL life.
 19. RETENTION PHILOSOPHY: the first weekly diet is A BETTER VERSION OF THE CLIENT'S REAL DIET unless a clinical, body-composition or fitness-nutrition reason justifies a larger change. Keep roughly 50-70% of the client's familiar food pattern; improve existing meals before replacing them. Never automatically remove rice, roti, dairy, gluten, fruit, carbohydrates or tea; never automatically replace rice with quinoa or roti with millet roti; do not prescribe raw salad to everyone, paneer to every vegetarian, whey to every gym client, or any supplement without a meaningful reason.
 20. NO CRASH TACTICS, NO FALSE PROMISES: never use dehydration, extreme carbohydrate restriction, prolonged fasting, meal skipping, detox strategies or nutritionally inadequate intake. In "summary" and "guidelines", never guarantee a specific amount of weight, fat, inch or medical improvement — describe realistic first-week wins (hunger control, fewer cravings, meal consistency, workout energy) instead.
@@ -672,7 +680,7 @@ async function validatedAttempts<T>(
         ? `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories.`
         : "",
       soft.length
-        ? `Adjust meal portions and items so every day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories".`
+        ? `Every meal that lists food must have non-zero "calories", "protein_g", "carbs_g" and "fat_g". Adjust portions so each day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories".`
         : "",
     ]
       .filter(Boolean)
@@ -697,8 +705,15 @@ async function validatedAttempts<T>(
  * rather than discarded — the dietitian reviews every plan anyway).
  */
 function calorieIssues(days: DietPlan["days"], target: number): string[] {
-  if (!Number.isFinite(target) || target <= 0) return [];
   const out: string[] = [];
+  // A meal that lists food but carries 0 calories is a model omission the
+  // schema silently defaulted to 0 (calories/macros fields left out). A day
+  // sum can hide it, so name the meal directly and demand its estimate.
+  for (const day of days)
+    for (const meal of day.meals)
+      if (meal.items.length > 0 && (meal.calories || 0) <= 0)
+        out.push(`${day.day} "${meal.name}" lists food but has 0 calories — give it realistic "calories" and macros`);
+  if (!Number.isFinite(target) || target <= 0) return out;
   for (const day of days) {
     const sum = day.meals.reduce((s, m) => s + (m.calories || 0), 0);
     if (sum > 0 && Math.abs(sum - target) / target > 0.2) {

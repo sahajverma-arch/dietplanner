@@ -191,6 +191,34 @@ export const PORTION_GUIDE: ReadonlyArray<{ measure: string; weight: string }> =
   { measure: "1 paratha", weight: `${pieceGrams("paratha")} g` },
 ];
 
+// Verified protein per everyday portion, fed to the generation prompt so the
+// model plans against the same numbers grounding will hold it to. Without it
+// the model prices Indian home food at roughly double its real protein (it
+// assumes ~9 g for a katori of dal; INDB says 3.8) and every plan lands 40-90 g
+// short of its own daily protein target once grounded.
+//
+// Values are read from the seeded foods table — regenerate with
+// `npx tsx scripts/protein-reference.mts` after changing staples.json, and
+// paste the output here. Last verified 21 July 2026.
+export const PROTEIN_REFERENCE: ReadonlyArray<{ food: string; portion: string; protein_g: number }> = [
+  { food: "Roti", portion: "1 roti", protein_g: 2.1 },
+  { food: "Dal", portion: "1 katori (150 g)", protein_g: 3.8 },
+  { food: "Rice", portion: "1 cup (150 g)", protein_g: 3.9 },
+  { food: "Curd", portion: "1 katori (150 g)", protein_g: 5.2 },
+  { food: "Milk", portion: "1 glass (200 ml)", protein_g: 6.3 },
+  { food: "Rajma / chana masala", portion: "1 katori (150 g)", protein_g: 9.2 },
+  { food: "Besan chilla", portion: "2 chilla", protein_g: 8.1 },
+  { food: "Roasted chana", portion: "40 g", protein_g: 8.2 },
+  { food: "Tofu", portion: "100 g", protein_g: 9 },
+  { food: "Eggs", portion: "2 eggs", protein_g: 12.6 },
+  { food: "Soya chunks curry", portion: "150 g", protein_g: 15.6 },
+  { food: "Chicken curry", portion: "150 g", protein_g: 17.7 },
+  { food: "Paneer", portion: "100 g", protein_g: 18.1 },
+  { food: "Whey shake", portion: "1 scoop (30 g)", protein_g: 23.4 },
+  { food: "Grilled fish", portion: "100 g", protein_g: 26.2 },
+  { food: "Grilled chicken", portion: "100 g", protein_g: 31 },
+];
+
 const VULGAR: Record<string, number> = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3 };
 
 function parseQuantity(raw: string): { count: number; unit: string } {
@@ -459,8 +487,30 @@ export async function groundPlan(
           mealSources.push(match.source);
         }
 
-        if (!complete || kcal > MEAL_KCAL_MAX)
+        if (!complete || kcal > MEAL_KCAL_MAX) {
+          // A meal the model left with no calorie estimate (the schema
+          // defaults an omitted "calories" to 0) must never ship at 0 while
+          // it lists real food. If at least one item grounded, use that
+          // partial database sum: it understates (unmatched items are
+          // dropped), but every printed number is a real DB value — strictly
+          // better than a 0-kcal meal the client can't act on. Meals that
+          // DID carry a model estimate keep the existing behaviour.
+          const noEstimate = (meal.calories || 0) <= 0;
+          if (noEstimate && resolved.length > 0 && kcal > 0 && kcal <= MEAL_KCAL_MAX) {
+            return {
+              meal,
+              grounded: {
+                ...meal,
+                calories: Math.round(kcal),
+                protein_g: Math.round(protein),
+                carbs_g: Math.round(carbs),
+                fat_g: Math.round(fat),
+              },
+              sources: mealSources,
+            };
+          }
           return { meal, grounded: null, sources: [] };
+        }
 
         // Grounded far ABOVE the estimate usually means the model wrote a
         // gram amount several times the food's real serving ("poha (150 g)"

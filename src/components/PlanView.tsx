@@ -1,4 +1,5 @@
 import type { DietPlan } from "@/lib/nim";
+import { dayTargetVerdict } from "@/lib/day-targets";
 
 export default function PlanView({
   plan,
@@ -67,6 +68,11 @@ export default function PlanView({
             <summary className="flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-sm font-semibold hover:bg-zinc-800">
               <span>{day.day}</span>
               <span className="flex items-center gap-2 text-xs font-normal text-zinc-500">
+                {dayTargetVerdict(day, plan) && (
+                  <span className="rounded-full bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-400">
+                    {dayTargetVerdict(day, plan)}
+                  </span>
+                )}
                 {day.total_calories ? `~${Math.round(day.total_calories)} kcal` : ""}
                 <span className="transition group-open:rotate-180">▾</span>
               </span>
