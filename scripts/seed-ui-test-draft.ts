@@ -5,12 +5,13 @@
 //
 // Any existing draft is backed up to test-output/ before being replaced.
 //
-// Run: npx -y tsx scripts/seed-ui-test-draft.ts [dietitian-email]
+// Run: npx -y tsx scripts/seed-ui-test-draft.ts [dietitian-email] [client]
+//   client: priya (default) | rahul | sneha | aadi
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { PRIYA } from "./test-clients";
+import { PRIYA, RAHUL, SNEHA, AADI } from "./test-clients";
 
 const envPath = path.join(__dirname, "..", ".env.local");
 for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
@@ -19,6 +20,12 @@ for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
 }
 
 const EMAIL = (process.argv[2] || "sahaj.verma@fitelo.co").toLowerCase();
+const CLIENTS = { priya: PRIYA, rahul: RAHUL, sneha: SNEHA, aadi: AADI } as const;
+const WHICH = (process.argv[3] || "priya").toLowerCase() as keyof typeof CLIENTS;
+if (!CLIENTS[WHICH]) {
+  console.error(`Unknown client "${WHICH}". Choose one of: ${Object.keys(CLIENTS).join(", ")}`);
+  process.exit(1);
+}
 
 async function main() {
   const supabase = createClient(
@@ -55,7 +62,9 @@ async function main() {
     console.log(`Existing draft (updated ${existing.updated_at}) backed up to ${backup}`);
   }
 
-  const answers = { ...PRIYA, name: "Priya UITest", clientCode: "TEST-UI-001" };
+  const base = CLIENTS[WHICH];
+  const label = WHICH.charAt(0).toUpperCase() + WHICH.slice(1);
+  const answers = { ...base, name: `${label} UITest`, clientCode: "TEST-UI-001" };
   const { error: upsertError } = await supabase.from("form_drafts").upsert(
     {
       dietitian_id: profile.id,

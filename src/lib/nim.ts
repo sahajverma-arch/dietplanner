@@ -88,6 +88,10 @@ const NIM_FALLBACK_MODEL =
   process.env.NVIDIA_FALLBACK_MODEL || "meta/llama-3.1-8b-instruct";
 // Fail fast instead of waiting for NVIDIA's multi-minute gateway timeout.
 const NIM_TIMEOUT_MS = 120_000;
+// Extra attempts on the fallback model when it fails TRANSIENTLY (timeout or
+// network). A model that genuinely cannot produce a valid plan is not retried.
+const FALLBACK_TRANSIENT_RETRIES = 2;
+const FALLBACK_RETRY_BACKOFF_MS = 1_500;
 
 const DAY_SPEC = `{
   "day": string,                  // e.g. "Day 1"
@@ -379,7 +383,7 @@ Hard rules:
 4. Prefer foods the client likes and their preferred cuisines where healthy.
 5. Adapt the plan to all stated medical conditions (e.g. low-GI for diabetes, low-sodium for hypertension, PCOS-friendly, etc.).
 6. ${dayRule}
-7. Keep food names and quantities short and specific. Use realistic household measures. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
+7. NAME THE ACTUAL DISH — never a bare category. "Sabzi", "Curry", "Salad", "Fruit", "Snack" and "Chutney" on their own are not foods the client can cook or shop for, and they cannot be costed accurately: a lauki sabzi and an aloo sabzi differ several-fold. Write "Bhindi sabzi", "Cucumber tomato salad", "Guava". Keep names short and specific, and use realistic household measures. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
   ).join(", ")}. A quantity that reads small will BE small once verified — write the portion this client actually needs to eat.
 8. Set "daily_calories" and "macros" from this client's clinical need — body composition, goal, training and medical profile — NEVER from what is easy to reach with their current foods. Do not lower the protein target because the client's usual dal-and-roti pattern would struggle to meet it; change the food pattern instead. When the profile carries "week_1_protein_target_g", that number was measured from the client's own recorded intake during counselling and is FIXED: copy it into "macros".protein_g exactly and build the days to meet it. Do not substitute your own protein figure, and do NOT plan toward "long_term_protein_goal_g" — that is where the client is heading over the following weeks, and pulling it forward into week 1 is the restrictive jump this progression exists to avoid. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
@@ -598,7 +602,37 @@ async function generateValidated<T>(
       `${NIM_MODEL} could not produce a valid response (${e instanceof Error ? e.message : e}); ` +
         `retrying once on ${NIM_FALLBACK_MODEL}`
     );
-    return await validatedAttempts(original, NIM_FALLBACK_MODEL, schema, expectation, check, softCheck);
+    // The fallback used to get a single attempt, so one timeout on it turned a
+    // recoverable generation into a total failure — four times in one day of
+    // testing, each costing the whole plan. A timeout is an infrastructure
+    // hiccup, not the model refusing the task, so transient failures here are
+    // retried; a genuine "cannot produce a valid plan" is not.
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= FALLBACK_TRANSIENT_RETRIES + 1; attempt++) {
+      try {
+        return await validatedAttempts(
+          original.slice(),
+          NIM_FALLBACK_MODEL,
+          schema,
+          expectation,
+          check,
+          softCheck
+        );
+      } catch (fallbackError) {
+        lastError = fallbackError;
+        const transient =
+          fallbackError instanceof NimError ? fallbackError.transient : false;
+        if (!transient || attempt > FALLBACK_TRANSIENT_RETRIES) break;
+        const waitMs = FALLBACK_RETRY_BACKOFF_MS * attempt;
+        console.warn(
+          `${NIM_FALLBACK_MODEL} attempt ${attempt} failed transiently ` +
+            `(${fallbackError instanceof Error ? fallbackError.message : fallbackError}); ` +
+            `retrying in ${waitMs}ms`
+        );
+        await new Promise((r) => setTimeout(r, waitMs));
+      }
+    }
+    throw lastError;
   }
 }
 
@@ -680,7 +714,7 @@ async function validatedAttempts<T>(
         ? `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories.`
         : "",
       soft.length
-        ? `Every meal that lists food must have non-zero "calories", "protein_g", "carbs_g" and "fat_g". Adjust portions so each day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories".`
+        ? `Every meal that lists food must have non-zero "calories", "protein_g", "carbs_g" and "fat_g". Adjust portions so each day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories". Name every item as a specific dish, never a bare category: "Bhindi sabzi" not "Sabzi", "Cucumber tomato salad" not "Salad".`
         : "",
     ]
       .filter(Boolean)
@@ -704,6 +738,46 @@ async function validatedAttempts<T>(
  * the model is asked to fix portions, but an off-target plan is still shipped
  * rather than discarded — the dietitian reviews every plan anyway).
  */
+// Item names that are a food CATEGORY rather than a food. "Sabzi 1 small bowl"
+// tells the client nothing to cook, and it grounds against a generic
+// mixed-vegetable row — so the printed macros are an average of dishes whose
+// real values differ several-fold (lauki sabzi vs aloo sabzi). The dish has to
+// be named. Trim this list if it costs too many regeneration attempts; each
+// entry here is a soft issue, so it can never block a plan from shipping.
+const CATEGORY_ONLY_NAMES = new Set([
+  "sabzi", "sabji", "subzi", "vegetable", "vegetables", "veg", "mixed veg",
+  // "Dal" is deliberately absent: it is the commonest item in every plan, a
+  // plain dal is a real everyday dish rather than a category, and INDB's
+  // "Mixed dal" is a fair measured proxy for it. Flagging it forced a retry on
+  // nearly every generation for little accuracy gain.
+  "curry", "gravy", "salad", "pulse", "pulses", "legumes",
+  "fruit", "fruits", "snack", "snacks", "chutney", "raita", "soup", "juice",
+  "nuts", "seeds", "dry fruits", "millet", "cereal", "protein",
+]);
+
+/** Meal items named by category instead of by dish. Deduplicated by name. */
+function vagueItemIssues(days: DietPlan["days"]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const day of days)
+    for (const meal of day.meals)
+      for (const item of meal.items) {
+        const name = item.food.trim().toLowerCase().replace(/\s+/g, " ");
+        if (!CATEGORY_ONLY_NAMES.has(name) || seen.has(name)) continue;
+        seen.add(name);
+        out.push(
+          `"${item.food}" names a food category, not a dish — say which one ` +
+            `(e.g. "Bhindi sabzi", "Cucumber tomato salad", "Guava")`
+        );
+      }
+  return out;
+}
+
+/** Every soft quality check applied to a generated plan. */
+function qualityIssues(days: DietPlan["days"], target: number): string[] {
+  return [...calorieIssues(days, target), ...vagueItemIssues(days)];
+}
+
 function calorieIssues(days: DietPlan["days"], target: number): string[] {
   const out: string[] = [];
   // A meal that lists food but carries 0 calories is a model omission the
@@ -1120,7 +1194,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     PartOneSchema,
     'at least 4 days ("Day 1" to "Day 4")',
     (p) => checkDays(p.days),
-    (p) => calorieIssues(p.days, p.daily_calories)
+    (p) => qualityIssues(p.days, p.daily_calories)
   );
   partOne.days = pickDays(partOne.days, ["Day 1", "Day 2", "Day 3", "Day 4"]);
 
@@ -1150,7 +1224,7 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     PartTwoSchema,
     'at least 3 days ("Day 5" to "Day 7")',
     (p) => checkDays(p.days),
-    (p) => calorieIssues(p.days, partOne.daily_calories)
+    (p) => qualityIssues(p.days, partOne.daily_calories)
   );
 
   let days = [...partOne.days, ...pickDays(partTwo.days, ["Day 5", "Day 6", "Day 7"])];

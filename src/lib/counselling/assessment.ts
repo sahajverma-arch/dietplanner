@@ -20,7 +20,7 @@ import {
   val,
   type Answers,
 } from "./questions";
-import { estimateProteinIntake, proteinTarget } from "../protein-intake";
+import { estimateProteinIntake, proteinTarget, stapleQuestionId } from "../protein-intake";
 
 // ---------------------------------------------------------------------------
 // RED FLAGS — clinical stops. "escalate" ones mean the plan should not be
@@ -34,19 +34,78 @@ export interface RedFlag {
   escalate: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Clinical matching.
+//
+// These rules are the app's safety stops, and they compared answers with
+// exact, case-sensitive string equality. Rewording a single option in the
+// question bank therefore switched a rule off silently — moving to the v3.0
+// wording alone would have killed 8 of the 9 urgent-symptom flags ("Chest pain
+// or pressure" became "Chest Pain") and INVERTED the doctor-instruction flag,
+// firing it for every client who reported no restrictions.
+//
+// So clinical matching is now case-insensitive and every rule carries the
+// wordings it must recognise, v3.0 first and the earlier bank's kept as
+// aliases — clients counselled before the rewrite still have the old strings
+// stored, and their flags must not quietly stop working.
+// ---------------------------------------------------------------------------
+
+const norm = (s: string) => s.trim().toLowerCase();
+
+/**
+ * Strips the "none" answers from a multi-select before it reaches the AI.
+ * Both wordings must be listed — v3.0 renamed most of them, and an
+ * unrecognised none-option is passed to the model as a real finding
+ * ("No Medical Condition" arriving in the conditions list).
+ */
+const dropNone = (values: string[], none: string[]): string[] => {
+  const skip = new Set(none.map(norm));
+  return values.filter((v) => !skip.has(norm(v)));
+};
+
+
+/** Multi-select containing any of `options`, case-insensitively. */
+const hasAnyOf = (a: Answers, id: string, options: string[]): boolean => {
+  const want = new Set(options.map(norm));
+  return list(a, id).some((v) => want.has(norm(v)));
+};
+
+/** Single-select equal to any of `options`, case-insensitively. */
+const isOneOf = (a: Answers, id: string, options: string[]): boolean => {
+  const v = norm(val(a, id));
+  return v !== "" && options.some((o) => norm(o) === v);
+};
+
+/**
+ * Multi-select answered with anything beyond the given "none" options.
+ * Every wording of the none-option must be listed: an unrecognised one is read
+ * as a real answer, which is how "No Restrictions" came to raise a
+ * doctor-instruction flag.
+ */
+const hasBeyond = (a: Answers, id: string, none: string[]): boolean => {
+  const skip = new Set(none.map(norm));
+  return list(a, id).some((v) => !skip.has(norm(v)));
+};
+
 // Q21 symptoms that always require medical escalation before any plan.
+// v3.0 wording first, pre-v3.0 aliases after.
 const URGENT_SYMPTOMS = [
-  "Chest pain or pressure",
+  "Chest Pain", "Chest pain or pressure",
   "Fainting",
-  "Severe breathlessness",
-  "Breathlessness during light activity",
-  "Irregular or very rapid heartbeat sensation",
-  "Repeated vomiting",
-  "Blood in stool",
-  "Black or tarry stool",
-  "Unexplained rapid weight loss",
+  "Breathlessness", "Severe breathlessness", "Breathlessness during light activity",
+  "Palpitations", "Irregular or very rapid heartbeat sensation",
+  "Repeated Vomiting", "Repeated vomiting",
+  "Blood in Stool", "Blood in stool",
+  "Black Stool", "Black or tarry stool",
+  "Rapid Unexplained Weight Loss", "Unexplained rapid weight loss",
+  // v3.0 additions that belong on an urgent list on their own merits.
+  "Swelling in Legs",
+  "Severe Headache During Exercise",
 ];
 
+// Under-fuelling / RED-S. q52 has no v3.0 Section 1 equivalent, so the question
+// is carried over from the previous bank rather than lost — these are the signs
+// that stop a deficit being prescribed at all.
 const REDS_SIGNS = [
   "Stress fracture or bone injury",
   "Menstrual cycle irregular or stopped",
@@ -64,7 +123,7 @@ const ED_RISK = [
 
 const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   ...URGENT_SYMPTOMS.map((symptom) => ({
-    when: (a: Answers) => has(a, "q21", symptom),
+    when: (a: Answers) => hasAnyOf(a, "q21", [symptom]),
     flag: {
       label: symptom,
       action: "Medical evaluation required before finalising the plan. Follow the safety SOP.",
@@ -72,15 +131,19 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   })),
   {
-    when: (a) => is(a, "q21c", "Urgent SOP escalation"),
+    when: (a) => isOneOf(a, "q21c", ["SOP Escalation Required", "Urgent SOP escalation"]),
     flag: { label: "Dietitian marked urgent SOP escalation", action: "Escalate immediately per SOP.", escalate: true },
   },
   {
-    when: (a) => has(a, "q25a", "Blood") || has(a, "q25a", "Black or tarry"),
+    // v3.0 moved blood/black stool onto Q19 symptoms and left q25a as stool
+    // consistency, so both places must be checked or the flag dies.
+    when: (a) =>
+      hasAnyOf(a, "q25a", ["Blood", "Black or tarry"]) ||
+      hasAnyOf(a, "q21", ["Blood in Stool", "Black Stool"]),
     flag: { label: "Blood / black tarry stool", action: "Medical evaluation required.", escalate: true },
   },
   {
-    when: (a) => hasOther(a, "q27", ["No known allergy"]),
+    when: (a) => hasBeyond(a, "q27", ["No known allergy", "No Known Allergy", "None"]),
     flag: {
       label: "Known food allergy",
       action: "Allergen must never appear in any meal, in any form or preparation.",
@@ -89,8 +152,8 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   },
   {
     when: (a) =>
-      hasOther(a, "q27", ["No known allergy"]) &&
-      (is(a, "q27a", "Severe") || is(a, "q27a", "Previous emergency reaction")),
+      hasBeyond(a, "q27", ["No known allergy", "No Known Allergy", "None"]) &&
+      isOneOf(a, "q27a", ["Severe", "Previous emergency reaction", "Anaphylaxis"]),
     flag: {
       label: "Severe / emergency food allergy",
       action: "Zero tolerance: no allergen or cross-reactive food anywhere. Senior review of the plan.",
@@ -98,7 +161,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => hasAny(a, "q60", ED_RISK),
+    when: (a) => hasAnyOf(a, "q60", ED_RISK),
     flag: {
       label: "Possible disordered-eating pattern",
       action:
@@ -108,8 +171,10 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   },
   {
     when: (a) =>
-      is(a, "q60a", "Senior clinical review required") ||
-      is(a, "q60a", "Professional referral should be considered"),
+      isOneOf(a, "q60a", [
+        "Senior Clinical Review", "Senior clinical review required",
+        "Mental Health Professional Referral", "Professional referral should be considered",
+      ]),
     flag: {
       label: "Eating-behaviour review flagged by dietitian",
       action: "Senior clinical review / professional referral before intensifying the plan.",
@@ -117,7 +182,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => has(a, "q66", "Pregnant"),
+    when: (a) => hasAnyOf(a, "q66", ["Pregnant"]),
     flag: {
       label: "Pregnant",
       action: "No calorie deficit or standard fat-loss protocol. Coordinate with treating clinician.",
@@ -125,11 +190,13 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => has(a, "q66", "Breastfeeding"),
+    when: (a) => hasAnyOf(a, "q66", ["Breastfeeding"]),
     flag: { label: "Breastfeeding", action: "Avoid aggressive transformation protocols.", escalate: false },
   },
   {
-    when: (a) => has(a, "q17", "Kidney condition"),
+    // Only chronic kidney disease suppresses a high-protein plan; v3.0's
+    // separate "Kidney Stones" and "High Uric Acid" entries must not.
+    when: (a) => hasAnyOf(a, "q17", ["Chronic Kidney Disease", "Kidney condition"]),
     flag: {
       label: "Kidney condition",
       action: "No generic high-protein plan. Protein/fluid/electrolytes per nephrologist.",
@@ -137,11 +204,19 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => has(a, "q17", "Liver condition"),
+    when: (a) =>
+      hasAnyOf(a, "q17", [
+        "Other Liver Disease", "Hepatitis", "Fatty Liver Grade I", "Fatty Liver Grade II",
+        "Fatty Liver Grade III", "Liver condition",
+      ]),
     flag: { label: "Liver condition", action: "Clinical nutrition modification required.", escalate: false },
   },
   {
-    when: (a) => has(a, "q17", "Professionally diagnosed eating disorder"),
+    // v3.0's Q14 condition list has no eating-disorder entry; the diagnosis is
+    // captured at q60 instead, so read both.
+    when: (a) =>
+      hasAnyOf(a, "q17", ["Professionally diagnosed eating disorder"]) ||
+      hasAnyOf(a, "q60", ["Professionally diagnosed eating disorder"]),
     flag: {
       label: "Diagnosed eating disorder",
       action: "Plan only alongside the treating professional. No restriction-led approach.",
@@ -149,7 +224,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => has(a, "q18", "Bariatric surgery"),
+    when: (a) => hasAnyOf(a, "q18", ["Bariatric Surgery", "Bariatric surgery"]),
     flag: {
       label: "Bariatric surgery history",
       action: "Post-bariatric clinical nutrition strategy required — senior review.",
@@ -157,7 +232,9 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => hasOther(a, "q22", ["No instruction"]),
+    // Every wording of the none-option must be listed here: an unrecognised
+    // one reads as a real restriction and flags every healthy client.
+    when: (a) => hasBeyond(a, "q22", ["No Restrictions", "No instruction", "None"]),
     flag: {
       label: "Doctor-given food/exercise instruction",
       action: "The healthcare professional's instruction overrides plan design.",
@@ -165,7 +242,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => hasAny(a, "q52", REDS_SIGNS),
+    when: (a) => hasAnyOf(a, "q52", REDS_SIGNS),
     flag: {
       label: "Possible under-fuelling (RED-S signs)",
       action: "No deficit until reviewed. Prioritise fuelling, recovery and senior/medical review.",
@@ -173,7 +250,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => is(a, "q13", "Yes"),
+    when: (a) => isOneOf(a, "q13", ["Yes"]),
     flag: {
       label: "Rapid-loss / highly restrictive diet history",
       action: "Consider intake stabilisation before any deficit; avoid re-triggering restriction.",
@@ -181,7 +258,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => is(a, "q17a", "Uncontrolled"),
+    when: (a) => isOneOf(a, "q17a", ["Uncontrolled"]),
     flag: {
       label: "Condition currently uncontrolled",
       action: "Coordinate with the treating doctor before transformation-focused planning.",
@@ -189,7 +266,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     },
   },
   {
-    when: (a) => has(a, "q61c", "Observed breathing pauses"),
+    when: (a) => hasAnyOf(a, "q61c", ["Observed breathing pauses", "Breathing Pauses"]),
     flag: {
       label: "Breathing pauses during sleep",
       action: "Consider evaluation for sleep-disordered breathing.",
@@ -198,8 +275,11 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   },
   {
     when: (a) =>
-      has(a, "cr1", "Doctor clearance should be considered") ||
-      has(a, "cr1", "Senior Dietitian review required"),
+      hasAnyOf(a, "cr1", [
+        "Doctor clearance should be considered", "Senior Dietitian review required",
+      ]) ||
+      // v3.0 records the same decision on Q19's dietitian safety call.
+      isOneOf(a, "q21c", ["Doctor Clearance Recommended", "Clinical Dietitian Review"]),
     flag: {
       label: "Clinical reflection: clearance / senior review",
       action: "Obtain doctor clearance or senior dietitian review before finalising.",
@@ -229,9 +309,17 @@ type Item = { points: number; label: string; done: (a: Answers) => boolean };
 const all = (...ids: string[]) => (a: Answers) => ids.every((id) => answered(a, id));
 
 /** Every selected meal occasion has its food detail filled. */
-const mealDetailComplete = (a: Answers) => {
+export const mealDetailComplete = (a: Answers) => {
   const chosen = MEAL_OCCASIONS.filter((o) => has(a, "q28", o.label));
-  return chosen.length > 0 && chosen.every((o) => answered(a, `q28_${o.key}_food`));
+  // Either input completes an occasion: tapped staples record the same meal
+  // the free text would have, and holding a tap-only consultation "incomplete"
+  // would push dietitians back to typing for no gain.
+  return (
+    chosen.length > 0 &&
+    chosen.every(
+      (o) => answered(a, `q28_${o.key}_food`) || answered(a, stapleQuestionId(o.key))
+    )
+  );
 };
 
 const RUBRIC: { name: string; items: Item[] }[] = [
@@ -414,7 +502,7 @@ export function allergenList(a: Answers): string[] {
 }
 
 export function toIntake(a: Answers, appointmentId?: string | null): ClinicalIntake {
-  const conditions = list(a, "q17").filter((c) => c !== "No known condition");
+  const conditions = dropNone(list(a, "q17"), ["No Medical Condition", "No known condition"]);
   if (has(a, "q66", "PCOS or PCOD") && !conditions.includes("PCOS or PCOD"))
     conditions.push("PCOS or PCOD");
   if (has(a, "q66", "Pregnant")) conditions.push("Pregnant");
@@ -528,7 +616,13 @@ function mealTimeline(a: Answers): Block[] {
       clean({
         occasion: label,
         time: val(a, `q28_${key}_time`),
-        food_and_quantity: val(a, `q28_${key}_food`),
+        // Picked staples and free text are both the food day, and the model
+        // must see both: a dietitian who only tapped "Roti × 2" would
+        // otherwise send an empty meal, and one who only typed would lose
+        // nothing. Joined rather than either/or for the same reason.
+        food_and_quantity: [list(a, stapleQuestionId(key)).join(", "), val(a, `q28_${key}_food`)]
+          .filter((s) => s.trim())
+          .join(" · "),
         preparation: list(a, `q28_${key}_prep`),
         source: val(a, `q28_${key}_source`),
         added_components: list(a, `q28_${key}_extras`).filter((v) => v !== "None"),
@@ -558,7 +652,7 @@ export function aiProfile(a: Answers): Block {
     target_inch_loss: val(a, "q5_inches"),
     target_clothing_size: val(a, "q5_size"),
     other_targets: val(a, "q5_other"),
-    physique_result: list(a, "q6"),
+    physique_result: val(a, "q6") || list(a, "q6"),
     deadline: val(a, "q7") === "No deadline" ? null : val(a, "q7"),
     deadline_date: val(a, "q7a"),
     deadline_importance: val(a, "q7b"),
@@ -590,7 +684,7 @@ export function aiProfile(a: Answers): Block {
     rapid_loss_consequences: list(a, "q13c"),
     regain_or_plateau: list(a, "q14").filter((v) => v !== "No"),
     plateau_duration: val(a, "q14a"),
-    body_composition_data: list(a, "q15").filter((v) => v !== "No data"),
+    body_composition_data: dropNone(list(a, "q15"), ["None", "No data"]),
     body_fat_pct: val(a, "q15_bf"),
     muscle_mass_kg: val(a, "q15_muscle"),
     skeletal_muscle_mass_kg: val(a, "q15_smm"),
@@ -607,22 +701,22 @@ export function aiProfile(a: Answers): Block {
   }));
 
   put("clinical", clean({
-    conditions: list(a, "q17").filter((c) => c !== "No known condition"),
+    conditions: dropNone(list(a, "q17"), ["No Medical Condition", "No known condition"]),
     condition_status: val(a, "q17a"),
     doctor_follow_up: val(a, "q17b"),
     condition_notes: val(a, "q17c"),
     medical_events: list(a, "q18").filter((v) => v !== "None"),
-    event_impact: list(a, "q18a").filter((v) => v !== "No current impact"),
+    event_impact: dropNone(list(a, "q18a"), ["No Impact", "No current impact"]),
     medicines: val(a, "q19") === "Yes" ? val(a, "q19a") : "none",
     recent_medicine_change: val(a, "q19b") === "No" ? null : val(a, "q19b"),
-    blood_reports_available: list(a, "q20").filter((v) => v !== "No recent reports"),
+    blood_reports_available: dropNone(list(a, "q20"), ["Reports Not Available", "No recent reports"]),
     report_status: val(a, "q20a"),
     abnormal_values: val(a, "q20b"),
     symptoms: list(a, "q21").filter((v) => v !== "None"),
     symptom_frequency: val(a, "q21a"),
     symptom_doctor_assessed: val(a, "q21b"),
     safety_status: val(a, "q21c"),
-    professional_instructions: list(a, "q22").filter((v) => v !== "No instruction"),
+    professional_instructions: dropNone(list(a, "q22"), ["No Restrictions", "No instruction"]),
     instruction_details: val(a, "q22a"),
     dietitian_clinical_reflection: list(a, "cr1"),
   }));
@@ -634,7 +728,7 @@ export function aiProfile(a: Answers): Block {
     symptom_timing: list(a, "q24b"),
     severity_1_10: val(a, "q24c"),
     bowel_frequency: val(a, "q25"),
-    stool_experience: list(a, "q25a").filter((v) => v !== "Comfortable and formed"),
+    stool_experience: dropNone(list(a, "q25a"), ["Normal", "Comfortable and formed"]),
     discomfort_foods: list(a, "q26").filter((v) => v !== "No repeated discomfort"),
     discomfort_reaction: list(a, "q26a"),
     discomfort_pattern: val(a, "q26b"),
@@ -671,7 +765,7 @@ export function aiProfile(a: Answers): Block {
   put("current_food_day", clean({
     meal_timeline: mealTimeline(a),
     how_typical: val(a, "q29"),
-    weekend_changes: list(a, "q30").filter((v) => v !== "No major change"),
+    weekend_changes: dropNone(list(a, "q30"), ["No Meaningful Difference", "No major change"]),
     outside_food_frequency: val(a, "q31"),
     outside_food_sources: list(a, "q31a"),
     common_outside_orders: val(a, "q31b"),
@@ -728,7 +822,7 @@ export function aiProfile(a: Answers): Block {
     supplements_recommended_by: val(a, "q51a"),
     supplement_side_effects: list(a, "q51b").filter((v) => v !== "None"),
     supplement_details: val(a, "q51c"),
-    under_fuelling_signs: list(a, "q52").filter((v) => v !== "None"),
+    under_fuelling_signs: dropNone(list(a, "q52"), ["None"]),
     under_fuelling_coincided_with: list(a, "q52a"),
   }));
 
@@ -746,7 +840,7 @@ export function aiProfile(a: Answers): Block {
     cravings: list(a, "q58").filter((v) => v !== "No strong cravings"),
     craving_triggers: list(a, "q58a"),
     craving_time: val(a, "q58b"),
-    stress_eating: list(a, "q59").filter((v) => v !== "No major effect"),
+    stress_eating: dropNone(list(a, "q59"), ["No Significant Effect", "No major effect"]),
     eating_pattern_risk: list(a, "q60").filter((v) => v !== "None"),
     eating_risk_safety_selection: val(a, "q60a"),
   }));
@@ -780,13 +874,13 @@ export function aiProfile(a: Answers): Block {
 
   put("success_dropout_coaching", clean({
     dropout_first_signs: list(a, "q68"),
-    after_off_plan: list(a, "q69"),
+    after_off_plan: val(a, "q69") || list(a, "q69"),
     support_that_helps: list(a, "q70"),
     nutrition_beliefs: list(a, "q71").filter((v) => v !== "No strong belief affecting choices"),
     belief_restriction_level: val(a, "q71a"),
     diet_structure_preference: val(a, "q72"),
     portion_explanation_preference: val(a, "q72a"),
-    top_barriers_ranked: list(a, "q73").filter((v) => v !== "No major barrier"),
+    top_barriers_ranked: dropNone(list(a, "q73"), ["No Significant Barrier", "No major barrier"]),
     realistic_change_first_2_weeks: val(a, "q74"),
     confidence_1_10: val(a, "q75"),
     what_would_make_it_easier: list(a, "q75a"),

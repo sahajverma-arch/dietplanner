@@ -335,13 +335,36 @@ function toGrams(
 // "2 rotis", "1 cup oatmeal" — leading counts and measure words are quantity,
 // not identity, and sabotage similarity matching ("2 eggs" scored higher
 // against "Mayonnaise without eggs" than against the Egg staple).
+const LEADING_COUNT = /^[\d\s./½¼¾⅓⅔x×-]+/;
+const LEADING_MEASURE =
+  /^(cups?|tbsps?|tsps?|glass(?:es)?|bowls?|katoris?|plates?|slices?|pieces?|servings?|handfuls?|scoops?|mugs?|packets?|portions?|bunch(?:es)?)\s+(?:of\s+)?/;
+// Size adjectives are quantity too. Without this "1 small banana" normalised to
+// "small banana" and missed the Banana staple entirely — eight items of one
+// generated week went unmatched purely because the model wrote the size into
+// the food name instead of the quantity field.
+const LEADING_SIZE = /^(extra\s+large|small|medium|large|big|xl)\s+/;
+// The quantity sometimes lands at the END of the name instead: "Curd 1 katori"
+// missed the Curd staple the same way. A unit is required, so a food whose
+// name genuinely ends in a number ("Omega 3") is left alone.
+const TRAILING_QUANTITY =
+  /\s+[\d./½¼¾⅓⅔]+\s*(g|gm|grams?|ml|kg|l|litres?|katoris?|cups?|bowls?|plates?|glass(?:es)?|pieces?|slices?|tbsps?|tsps?|scoops?|handfuls?|servings?|portions?)\s*$/;
+
 export function normName(s: string): string {
-  const base = s.trim().toLowerCase();
-  const stripped = base
-    .replace(/^[\d\s./½¼¾⅓⅔x×-]+/, "")
-    .replace(/^(cups?|tbsps?|tsps?|glass(?:es)?|bowls?|katoris?|plates?|slices?|pieces?|servings?)\s+(?:of\s+)?/, "")
-    .trim();
-  return stripped || base;
+  const base = s.trim().toLowerCase().replace(TRAILING_QUANTITY, "").trim();
+  // The parts stack in any order — "2 small bowls of dal" is a count, a size,
+  // a vessel and a filler word before the food — so strip repeatedly until
+  // nothing more comes off.
+  let out = base;
+  for (let pass = 0; pass < 4; pass++) {
+    const before = out;
+    out = out
+      .replace(LEADING_COUNT, "")
+      .replace(LEADING_SIZE, "")
+      .replace(LEADING_MEASURE, "")
+      .trim();
+    if (out === before) break;
+  }
+  return out || base;
 }
 
 /**

@@ -3,6 +3,8 @@
 // its per-food questions, so a value import in this direction would create a
 // runtime import cycle.
 import type { Answers } from "./counselling/questions";
+// Value import is safe: meal-occasions.ts imports nothing, so no cycle.
+import { MEAL_KEYS } from "./counselling/meal-occasions";
 
 const val = (a: Answers, id: string): string => {
   const v = a[id];
@@ -42,38 +44,49 @@ export interface ProteinFood {
   portion: string;
   /** Protein in one standard portion, from the foods table. */
   proteinPerPortion: number;
+  /** Carbohydrate in that same portion, from the same database row. */
+  carbsPerPortion: number;
+  /** Fat in that same portion, from the same database row. */
+  fatPerPortion: number;
+  /** Energy in that same portion, from the same database row. */
+  kcalPerPortion: number;
   klass: FoodClass;
 }
 
-// Protein per standard portion, read from the seeded foods table — regenerate
-// with `npx tsx scripts/protein-reference.mts` after changing staples.json and
-// paste the output here. Last verified 21 July 2026.
+// Protein, carbs, fat and energy per standard portion, read from the seeded
+// foods table — regenerate with `npx tsx scripts/intake-reference.mts` after
+// changing staples.json and paste the output here. Last verified 22 July 2026.
+//
+// Carbs and fat are DESCRIPTIVE only: they show the dietitian what the client
+// currently eats. Nothing downstream targets them — the week-1 target this
+// module produces is still protein, and the plan's carb/fat split is derived
+// from calories and that protein target, not from these numbers.
 //
 // Portions are the everyday Indian serving a dietitian would picture, and the
 // curry forms are used for chicken/fish/mutton deliberately: home eating is
 // curry, not a grilled fillet, and pricing 150 g of chicken curry (17.7 g) as
 // 150 g of grilled breast (46 g) would inflate every non-vegetarian estimate.
 export const PROTEIN_FOODS: ProteinFood[] = [
-  { id: "milk", label: "Milk", portion: "1 glass (200 ml)", proteinPerPortion: 6.3, klass: "dairy" },
-  { id: "curd", label: "Curd", portion: "1 katori (150 g)", proteinPerPortion: 5.2, klass: "dairy" },
-  { id: "greek", label: "Greek or high-protein yogurt", portion: "1 cup (170 g)", proteinPerPortion: 17.3, klass: "dairy" },
-  { id: "buttermilk", label: "Buttermilk or chaas", portion: "1 glass (250 ml)", proteinPerPortion: 3.4, klass: "dairy" },
-  { id: "paneer", label: "Paneer", portion: "100 g", proteinPerPortion: 18.1, klass: "dairy" },
-  { id: "tofu", label: "Tofu", portion: "100 g", proteinPerPortion: 9, klass: "plant" },
-  { id: "soy", label: "Soy chunks", portion: "1 katori curry (150 g)", proteinPerPortion: 15.6, klass: "plant" },
-  { id: "tempeh", label: "Tempeh", portion: "100 g", proteinPerPortion: 20.3, klass: "plant" },
-  { id: "dal", label: "Dal", portion: "1 katori (150 g)", proteinPerPortion: 3.8, klass: "plant" },
-  { id: "chole", label: "Chickpeas or chole", portion: "1 katori (150 g)", proteinPerPortion: 9.2, klass: "plant" },
-  { id: "rajma", label: "Rajma or beans", portion: "1 katori (150 g)", proteinPerPortion: 8.9, klass: "plant" },
-  { id: "sprouts", label: "Sprouts", portion: "1 cup (100 g)", proteinPerPortion: 3, klass: "plant" },
-  { id: "chana", label: "Roasted chana", portion: "1 handful (40 g)", proteinPerPortion: 8.2, klass: "plant" },
-  { id: "nuts", label: "Nuts or seeds", portion: "1 handful (30 g)", proteinPerPortion: 7.7, klass: "plant" },
-  { id: "powder", label: "Protein powder", portion: "1 scoop (30 g)", proteinPerPortion: 23.4, klass: "plant" },
-  { id: "eggs", label: "Eggs", portion: "2 eggs", proteinPerPortion: 12.6, klass: "egg" },
-  { id: "fish", label: "Fish", portion: "1 katori curry (150 g)", proteinPerPortion: 13.1, klass: "fish" },
-  { id: "seafood", label: "Seafood", portion: "1 katori curry (150 g)", proteinPerPortion: 12.8, klass: "fish" },
-  { id: "chicken", label: "Chicken", portion: "1 katori curry (150 g)", proteinPerPortion: 17.7, klass: "meat" },
-  { id: "meat", label: "Meat", portion: "1 katori curry (150 g)", proteinPerPortion: 10.6, klass: "meat" },
+  { id: "milk", label: "Milk", portion: "1 glass (200 ml)", proteinPerPortion: 6.3, carbsPerPortion: 9.6, fatPerPortion: 6.5, kcalPerPortion: 122, klass: "dairy" },
+  { id: "curd", label: "Curd", portion: "1 katori (150 g)", proteinPerPortion: 5.2, carbsPerPortion: 7, fatPerPortion: 4.9, kcalPerPortion: 92, klass: "dairy" },
+  { id: "greek", label: "Greek or high-protein yogurt", portion: "1 cup (170 g)", proteinPerPortion: 17.3, carbsPerPortion: 6.1, fatPerPortion: 0.7, kcalPerPortion: 100, klass: "dairy" },
+  { id: "buttermilk", label: "Buttermilk or chaas", portion: "1 glass (250 ml)", proteinPerPortion: 3.4, carbsPerPortion: 4.7, fatPerPortion: 1.8, kcalPerPortion: 47, klass: "dairy" },
+  { id: "paneer", label: "Paneer", portion: "100 g", proteinPerPortion: 18.1, carbsPerPortion: 3, fatPerPortion: 23.8, kcalPerPortion: 299, klass: "dairy" },
+  { id: "tofu", label: "Tofu", portion: "100 g", proteinPerPortion: 9, carbsPerPortion: 2.9, fatPerPortion: 4.2, kcalPerPortion: 78, klass: "plant" },
+  { id: "soy", label: "Soy chunks", portion: "1 katori curry (150 g)", proteinPerPortion: 15.6, carbsPerPortion: 10.1, fatPerPortion: 15.3, kcalPerPortion: 245, klass: "plant" },
+  { id: "tempeh", label: "Tempeh", portion: "100 g", proteinPerPortion: 20.3, carbsPerPortion: 7.6, fatPerPortion: 10.8, kcalPerPortion: 192, klass: "plant" },
+  { id: "dal", label: "Dal", portion: "1 katori (150 g)", proteinPerPortion: 3.8, carbsPerPortion: 8.7, fatPerPortion: 4.7, kcalPerPortion: 93, klass: "plant" },
+  { id: "chole", label: "Chickpeas or chole", portion: "1 katori (150 g)", proteinPerPortion: 9.2, carbsPerPortion: 30, fatPerPortion: 10.3, kcalPerPortion: 245, klass: "plant" },
+  { id: "rajma", label: "Rajma or beans", portion: "1 katori (150 g)", proteinPerPortion: 8.9, carbsPerPortion: 24.6, fatPerPortion: 8.7, kcalPerPortion: 216, klass: "plant" },
+  { id: "sprouts", label: "Sprouts", portion: "1 cup (100 g)", proteinPerPortion: 3, carbsPerPortion: 5.9, fatPerPortion: 0.2, kcalPerPortion: 30, klass: "plant" },
+  { id: "chana", label: "Roasted chana", portion: "1 handful (40 g)", proteinPerPortion: 8.2, carbsPerPortion: 25.2, fatPerPortion: 2.4, kcalPerPortion: 151, klass: "plant" },
+  { id: "nuts", label: "Nuts or seeds", portion: "1 handful (30 g)", proteinPerPortion: 7.7, carbsPerPortion: 4.8, fatPerPortion: 14.8, kcalPerPortion: 170, klass: "plant" },
+  { id: "powder", label: "Protein powder", portion: "1 scoop (30 g)", proteinPerPortion: 23.4, carbsPerPortion: 1.9, fatPerPortion: 0.5, kcalPerPortion: 106, klass: "plant" },
+  { id: "eggs", label: "Eggs", portion: "2 eggs", proteinPerPortion: 12.6, carbsPerPortion: 1.1, fatPerPortion: 10.6, kcalPerPortion: 155, klass: "egg" },
+  { id: "fish", label: "Fish", portion: "1 katori curry (150 g)", proteinPerPortion: 13.1, carbsPerPortion: 5.7, fatPerPortion: 10, kcalPerPortion: 167, klass: "fish" },
+  { id: "seafood", label: "Seafood", portion: "1 katori curry (150 g)", proteinPerPortion: 12.8, carbsPerPortion: 4.7, fatPerPortion: 10.4, kcalPerPortion: 164, klass: "fish" },
+  { id: "chicken", label: "Chicken", portion: "1 katori curry (150 g)", proteinPerPortion: 17.7, carbsPerPortion: 5.1, fatPerPortion: 11.4, kcalPerPortion: 194, klass: "meat" },
+  { id: "meat", label: "Meat", portion: "1 katori curry (150 g)", proteinPerPortion: 10.6, carbsPerPortion: 3.8, fatPerPortion: 12.8, kcalPerPortion: 173, klass: "meat" },
 ];
 
 // Which food classes each q33 food pattern may be offered. A dietitian can
@@ -132,12 +145,164 @@ export const PORTION_OPTIONS: { label: string; multiplier: number }[] = [
 export const freqQuestionId = (id: string) => `q50p_${id}_freq`;
 export const portionQuestionId = (id: string) => `q50p_${id}_portion`;
 
+// ---------------------------------------------------------------------------
+// Staple baseline
+// ---------------------------------------------------------------------------
+
+// Protein from foods that are NOT protein foods, so they never appear in Q50
+// and were being counted as zero. Four rotis carry more protein than a katori
+// of dal, and leaving them out halved every estimate: one client measured at
+// 17 g/day when her own recorded food day came to about 31 g, which then set a
+// week-1 target of 19 g against a real requirement near 60.
+//
+// Read from the same foods table as PROTEIN_REFERENCE (regenerate alongside
+// it). Nothing here may duplicate a PROTEIN_FOODS label, or Q50 and the Q28
+// food day would both count it.
+// Regenerated alongside PROTEIN_FOODS by `npx tsx scripts/intake-reference.mts`.
+// The staples are where the client's carbohydrate actually lives — roti, rice
+// and dosa carry the bulk of it — so leaving them out of the carb estimate
+// would understate it far more severely than it understated protein.
+const STAPLE_PROTEIN: {
+  pattern: RegExp;
+  label: string;
+  perUnit: number;
+  carbsPerUnit: number;
+  fatPerUnit: number;
+  kcalPerUnit: number;
+  defaultUnits: number;
+}[] = [
+  { pattern: /\b(rotis?|chapatis?|chappatis?|phulkas?)\b/i, label: "Roti", perUnit: 2.1, carbsPerUnit: 12.8, fatPerUnit: 1.3, kcalPerUnit: 73, defaultUnits: 2 },
+  { pattern: /\b(parathas?|paranthas?)\b/i, label: "Paratha", perUnit: 4.1, carbsPerUnit: 18, fatPerUnit: 7.8, kcalPerUnit: 161, defaultUnits: 1 },
+  { pattern: /\b(rice|chawal|pulao|biryani)\b/i, label: "Rice", perUnit: 3.9, carbsPerUnit: 38.6, fatPerUnit: 0.3, kcalPerUnit: 176, defaultUnits: 1 },
+  { pattern: /\bpoha\b/i, label: "Poha", perUnit: 4.9, carbsPerUnit: 21.5, fatPerUnit: 8.1, kcalPerUnit: 181, defaultUnits: 1 },
+  { pattern: /\b(bread|toast)\b/i, label: "Bread", perUnit: 3.1, carbsPerUnit: 10.7, fatPerUnit: 0.9, kcalPerUnit: 63, defaultUnits: 2 },
+  { pattern: /\bidli/i, label: "Idli", perUnit: 1.9, carbsPerUnit: 11.3, fatPerUnit: 0.1, kcalPerUnit: 55, defaultUnits: 2 },
+  { pattern: /\bdosa/i, label: "Dosa", perUnit: 9.3, carbsPerUnit: 57.7, fatPerUnit: 7.6, kcalPerUnit: 343, defaultUnits: 1 },
+  { pattern: /\b(upma|daliya|dalia)\b/i, label: "Upma", perUnit: 3.9, carbsPerUnit: 26.9, fatPerUnit: 11.2, kcalPerUnit: 227, defaultUnits: 1 },
+  { pattern: /\bkhichdi\b/i, label: "Khichdi", perUnit: 2.6, carbsPerUnit: 15.1, fatPerUnit: 1.5, kcalPerUnit: 86, defaultUnits: 1 },
+  { pattern: /\b(chilla|cheela)\b/i, label: "Chilla", perUnit: 4.1, carbsPerUnit: 10.9, fatPerUnit: 1.5, kcalPerUnit: 71, defaultUnits: 2 },
+  { pattern: /\b(sabzi|sabji|subzi|vegetables?)\b/i, label: "Sabzi", perUnit: 4.2, carbsPerUnit: 10.8, fatPerUnit: 7, kcalPerUnit: 125, defaultUnits: 1 },
+  { pattern: /\bsalad\b/i, label: "Salad", perUnit: 1.2, carbsPerUnit: 3.3, fatPerUnit: 0.3, kcalPerUnit: 17, defaultUnits: 1 },
+  { pattern: /\b(biscuits?|cookies?)\b/i, label: "Biscuits", perUnit: 0.4, carbsPerUnit: 5.5, fatPerUnit: 1.9, kcalPerUnit: 40, defaultUnits: 2 },
+  { pattern: /\b(banana|apple|guava|orange|papaya|pear|fruit)\b/i, label: "Fruit", perUnit: 1.1, carbsPerUnit: 22.8, fatPerUnit: 0.3, kcalPerUnit: 89, defaultUnits: 1 },
+];
+
+
+export interface StapleContribution {
+  label: string;
+  units: number;
+  /** Protein per day, kept as `gramsPerDay` so existing callers still read. */
+  gramsPerDay: number;
+  carbsPerDay: number;
+  fatPerDay: number;
+  kcalPerDay: number;
+}
+
+// ---------------------------------------------------------------------------
+// Structured staple picks
+//
+// The free-text food day is the original input and still works, but a
+// dietitian mid-consultation should not have to type "2 rotis + dal 1 katori"
+// for seventeen occasions — and when they type something the parser cannot
+// match ("lunch: home food", "chawal-sabzi"), every staple silently counts as
+// zero, which is what makes an intake read as 22% carbs. The picker records
+// the same thing as taps: a staple and a count.
+//
+// Stored as a string[] per occasion ("Roti × 2") because Answers is
+// Record<string, string | string[]> and must stay that way — every saved draft
+// in the database is already that shape.
+// ---------------------------------------------------------------------------
+
+/** The staples offered by the picker. Never includes a PROTEIN_FOODS label. */
+export const STAPLE_LABELS: string[] = STAPLE_PROTEIN.map((s) => s.label);
+
+export const stapleQuestionId = (mealKey: string) => `q28_${mealKey}_staples`;
+
+export const encodeStaplePick = (label: string, units: number) => `${label} × ${units}`;
+
+/** Parses "Roti × 2" back to its parts; null for anything unrecognised. */
+export function decodeStaplePick(entry: string): { label: string; units: number } | null {
+  const m = entry.match(/^(.+?)\s*[×x]\s*(\d+(?:\.\d+)?)$/i);
+  if (!m) return null;
+  const label = m[1].trim();
+  if (!STAPLE_LABELS.includes(label)) return null;
+  const units = parseFloat(m[2]);
+  return Number.isFinite(units) && units > 0 ? { label, units } : null;
+}
+
+/**
+ * Protein per day from the staples in the client's recorded Q28 food day.
+ *
+ * The text is free-form ("2 rotis + dal 1 katori + sabzi"), so each component
+ * is split on separators and matched against one staple; the count is whatever
+ * number sits in that component, else a typical serving. Rough by nature — but
+ * counting four rotis as roughly four rotis is far closer than counting them
+ * as zero.
+ */
+export function stapleProtein(a: Answers): StapleContribution[] {
+  const totals = new Map<
+    string,
+    { units: number; grams: number; carbs: number; fat: number; kcal: number }
+  >();
+  const add = (label: string, units: number) => {
+    const staple = STAPLE_PROTEIN.find((s) => s.label === label);
+    if (!staple) return;
+    const prev = totals.get(label) ?? { units: 0, grams: 0, carbs: 0, fat: 0, kcal: 0 };
+    totals.set(label, {
+      units: prev.units + units,
+      grams: prev.grams + units * staple.perUnit,
+      carbs: prev.carbs + units * staple.carbsPerUnit,
+      fat: prev.fat + units * staple.fatPerUnit,
+      kcal: prev.kcal + units * staple.kcalPerUnit,
+    });
+  };
+
+  for (const key of MEAL_KEYS) {
+    // Picked staples win for THIS occasion and the free text is then skipped:
+    // a dietitian who taps "Roti × 2" and also writes "2 rotis with dal" means
+    // one meal, not two, and counting both would inflate the day.
+    const picks = list(a, stapleQuestionId(key))
+      .map(decodeStaplePick)
+      .filter((p): p is { label: string; units: number } => p !== null);
+    if (picks.length > 0) {
+      for (const p of picks) add(p.label, p.units);
+      continue;
+    }
+
+    const text = val(a, `q28_${key}_food`);
+    if (!text.trim()) continue;
+    for (const part of text.split(/[+,;·]/)) {
+      const segment = part.trim();
+      if (!segment) continue;
+      const staple = STAPLE_PROTEIN.find((s) => s.pattern.test(segment));
+      if (!staple) continue;
+      const num = segment.match(/(\d+(?:\.\d+)?)/);
+      // A gram/ml figure is a weight, not a count of servings — "curd 100 g"
+      // must not be read as 100 rotis' worth.
+      const isWeight = /\d\s*(g|gm|gram|ml)\b/i.test(segment);
+      const units = num && !isWeight ? Math.min(10, parseFloat(num[1])) : staple.defaultUnits;
+      add(staple.label, units);
+    }
+  }
+  return Array.from(totals, ([label, v]) => ({
+    label,
+    units: v.units,
+    gramsPerDay: v.grams,
+    carbsPerDay: v.carbs,
+    fatPerDay: v.fat,
+    kcalPerDay: v.kcal,
+  })).sort((x, y) => y.gramsPerDay - x.gramsPerDay);
+}
+
 export interface FoodContribution {
   food: ProteinFood;
   perWeek: number;
   multiplier: number;
   /** Grams of protein this food contributes per DAY. */
   gramsPerDay: number;
+  carbsPerDay: number;
+  fatPerDay: number;
+  kcalPerDay: number;
 }
 
 export interface ProteinIntakeEstimate {
@@ -145,10 +310,41 @@ export interface ProteinIntakeEstimate {
   gramsPerDay: number;
   /** Per kg bodyweight, or null when weight was not recorded. */
   gramsPerKg: number | null;
+  /** Estimated carbohydrate the client eats now, g/day. Descriptive only. */
+  carbsPerDay: number;
+  /** Estimated fat the client eats now, g/day. Descriptive only. */
+  fatPerDay: number;
+  /** Estimated energy from everything counted here, kcal/day. */
+  kcalPerDay: number;
+  /**
+   * Share of energy from each macro, as whole percentages summing to 100.
+   *
+   * Computed from the macros (4/4/9 kcal per g) rather than from `kcalPerDay`,
+   * which comes from the database's own energy column and can differ by a few
+   * percent (fibre, rounding, sugar alcohols). Deriving the split from the
+   * macros is what makes the three shares total 100 — the same precedent
+   * `reconcileMeal` in nutrition.ts follows when the two disagree.
+   */
+  energySplit: { protein: number; carbs: number; fat: number };
   /** Highest-contributing foods first; only foods actually eaten. */
   contributions: FoodContribution[];
   /** Foods selected in q50 that have no frequency recorded yet. */
   unrecorded: ProteinFood[];
+  /** Staples from the Q28 food day (roti, rice, sabzi) — not Q50 foods. */
+  staples: StapleContribution[];
+  /** Protein per day contributed by those staples. */
+  stapleGramsPerDay: number;
+  /**
+   * Whether the food day actually contributed anything, and if not, why.
+   *
+   * Almost all of a client's carbohydrate lives in the staples, so a food day
+   * that yields none makes the estimate read as a very low-carb, very
+   * high-fat diet that nobody is really eating. The two failures need
+   * different words: "none" is a form still being filled in, "unmatched" is a
+   * dietitian who DID record the day in wording the parser could not read —
+   * that one looks identical to a complete form and is the dangerous case.
+   */
+  foodDay: "counted" | "unmatched" | "none";
   /** True once at least one food has a frequency — the estimate is meaningful. */
   measured: boolean;
 }
@@ -181,24 +377,60 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
     const portionLabel = val(a, portionQuestionId(food.id));
     const multiplier =
       PORTION_OPTIONS.find((p) => p.label === portionLabel)?.multiplier ?? 1;
+    // One factor for all four nutrients: how much of a standard portion, how
+    // many days a week, spread over seven.
+    const perDay = (multiplier * freq.perWeek) / 7;
     contributions.push({
       food,
       perWeek: freq.perWeek,
       multiplier,
-      gramsPerDay: (food.proteinPerPortion * multiplier * freq.perWeek) / 7,
+      gramsPerDay: food.proteinPerPortion * perDay,
+      carbsPerDay: food.carbsPerPortion * perDay,
+      fatPerDay: food.fatPerPortion * perDay,
+      kcalPerDay: food.kcalPerPortion * perDay,
     });
   }
 
   contributions.sort((x, y) => y.gramsPerDay - x.gramsPerDay);
-  const gramsPerDay = contributions.reduce((s, c) => s + c.gramsPerDay, 0);
+  // Q50 covers the protein foods; the recorded food day covers the roti, rice
+  // and sabzi that carry protein but are nobody's idea of a protein food.
+  const staples = stapleProtein(a);
+  const sum = (
+    key: "gramsPerDay" | "carbsPerDay" | "fatPerDay" | "kcalPerDay"
+  ): number =>
+    contributions.reduce((s, c) => s + c[key], 0) + staples.reduce((s, c) => s + c[key], 0);
+
+  const stapleGrams = staples.reduce((s, c) => s + c.gramsPerDay, 0);
+  const gramsPerDay = sum("gramsPerDay");
+  const carbsPerDay = sum("carbsPerDay");
+  const fatPerDay = sum("fatPerDay");
   const weight = bodyWeightKg(a);
+
+  const macroKcal = 4 * gramsPerDay + 4 * carbsPerDay + 9 * fatPerDay;
+  const share = (kcal: number) => (macroKcal > 0 ? Math.round((kcal / macroKcal) * 100) : 0);
 
   return {
     gramsPerDay: Math.round(gramsPerDay),
     gramsPerKg: weight ? Math.round((gramsPerDay / weight) * 100) / 100 : null,
+    carbsPerDay: Math.round(carbsPerDay),
+    fatPerDay: Math.round(fatPerDay),
+    kcalPerDay: Math.round(sum("kcalPerDay")),
+    energySplit: {
+      protein: share(4 * gramsPerDay),
+      carbs: share(4 * carbsPerDay),
+      fat: share(9 * fatPerDay),
+    },
     contributions,
     unrecorded,
-    measured: contributions.length > 0,
+    staples,
+    stapleGramsPerDay: Math.round(stapleGrams),
+    foodDay:
+      staples.length > 0
+        ? "counted"
+        : MEAL_KEYS.some((k) => val(a, `q28_${k}_food`).trim())
+          ? "unmatched"
+          : "none",
+    measured: contributions.length > 0 || staples.length > 0,
   };
 }
 

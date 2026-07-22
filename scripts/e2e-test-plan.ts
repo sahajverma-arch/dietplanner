@@ -8,7 +8,7 @@
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { PRIYA, RAHUL, SNEHA } from "./test-clients";
+import { PRIYA, RAHUL, SNEHA, AADI } from "./test-clients";
 
 // .env.local must be in process.env BEFORE the libs are imported (nim.ts reads
 // NVIDIA_MODEL at module load), hence the dynamic imports in main().
@@ -47,6 +47,7 @@ async function main() {
     ["priya-test", PRIYA],
     ["rahul-test", RAHUL],
     ["sneha-test", SNEHA],
+    ["aadi-test", AADI],
   ] as const) {
     if (only && slug !== only) continue;
     const t0 = Date.now();
@@ -150,6 +151,8 @@ async function main() {
         ? ["peanut"]
         : slug === "sneha-test"
           ? ["brinjal", "baingan", "eggplant", "mushroom"]
+          : slug === "aadi-test"
+            ? ["karela", "bitter gourd", "tinda"]
           : ["lauki", "karela", "bottle gourd", "bitter gourd"];
     const hits: string[] = [];
     for (const day of plan.days)
@@ -159,28 +162,44 @@ async function main() {
             if (item.food.toLowerCase().includes(term)) hits.push(`${day.day} ${meal.name}: ${item.food}`);
     console.log(hits.length ? `!! FORBIDDEN FOOD PRESENT: ${hits.join("; ")}` : "forbidden-food check: clean");
 
-    // Day-of-week rules: Rahul's Tuesdays & Thursdays must be veg + egg-free.
-    if (slug === "rahul-test") {
+    // Day-of-week rules (q38a-c), driven by the client's own answers rather
+    // than a hardcoded slug, so every client with a day rule is checked. The
+    // term lists are deliberately INDEPENDENT of the ones nim.ts enforces
+    // with — a copy of the enforcement table would pass even when the table
+    // itself is wrong, which is exactly how a "Baingan bharta" reached a PDF.
+    const AVOID_TERMS: Record<string, string[]> = {
+      "Non-vegetarian food": [
+        "chicken", "murgh", "fish", "machli", "mutton", "prawn", "shrimp", "seafood",
+        "crab", "keema", "meat", "lamb", "pork", "beef",
+      ],
+      Eggs: ["egg", "anda", "omelette", "omelet"],
+      "Onion & garlic": ["onion", "pyaaz", "garlic", "lehsun"],
+      "All animal products": [
+        "chicken", "fish", "mutton", "prawn", "shrimp", "seafood", "meat", "egg",
+        "milk", "curd", "paneer", "ghee", "butter", "cheese", "honey",
+      ],
+    };
+    const ruleDays = (answers.q38a as string[] | undefined) ?? [];
+    const ruleAvoids = (answers.q38b as string[] | undefined) ?? [];
+    if (ruleDays.length > 0 && ruleAvoids.length > 0) {
       const weekdays = planWeekdays();
-      const nonveg = [
-        "chicken", "fish", "mutton", "prawn", "shrimp", "seafood", "crab", "keema",
-        "meat", "lamb", "pork", "beef", "egg", "omelette", "omelet",
-      ];
+      const terms = Array.from(new Set(ruleAvoids.flatMap((c) => AVOID_TERMS[c] ?? [])));
       const dayHits: string[] = [];
       plan.days.forEach((day, i) => {
-        if (weekdays[i] !== "Tuesday" && weekdays[i] !== "Thursday") return;
+        if (!ruleDays.includes(weekdays[i])) return;
         for (const meal of day.meals)
           for (const item of meal.items)
-            if (nonveg.some((t) => new RegExp(`\\b${t}s?\\b`, "i").test(item.food)))
+            // Whole-word: "egg" must not flag "eggplant".
+            if (terms.some((t) => new RegExp(`\b${t}(?:e?s)?\b`, "i").test(item.food)))
               dayHits.push(`${day.day} (${weekdays[i]}) ${meal.name}: ${item.food}`);
       });
-      const restrictedDays = plan.days
+      const restricted = plan.days
         .map((d, i) => `${d.day}=${weekdays[i]}`)
-        .filter((_, i) => weekdays[i] === "Tuesday" || weekdays[i] === "Thursday");
+        .filter((_, i) => ruleDays.includes(weekdays[i]));
       console.log(
         dayHits.length
-          ? `!! DAY-RULE VIOLATION (${restrictedDays.join(", ")}): ${dayHits.join("; ")}`
-          : `day-rule check (${restrictedDays.join(", ")} veg + egg-free): clean`
+          ? `!! DAY-RULE VIOLATION (${restricted.join(", ")} avoid ${ruleAvoids.join(" + ")}): ${dayHits.join("; ")}`
+          : `day-rule check (${restricted.join(", ")} free of ${ruleAvoids.join(" + ")}): clean`
       );
     }
 

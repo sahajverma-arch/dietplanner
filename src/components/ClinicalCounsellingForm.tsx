@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   answered,
+  isRequired,
   missingRequired,
   visibleQuestions,
   visibleSections,
@@ -13,7 +14,12 @@ import {
   type Section,
 } from "@/lib/counselling/questions";
 import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
-import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
+import {
+  decodeStaplePick,
+  encodeStaplePick,
+  estimateProteinIntake,
+  proteinTarget,
+} from "@/lib/protein-intake";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -143,7 +149,7 @@ export default function ClinicalCounsellingForm({
   const sectionProgress = (s: Section) => {
     const qs = visibleQuestions(s, answers);
     const done = qs.filter((q) => answered(answers, q.id)).length;
-    const requiredLeft = qs.filter((q) => q.required && !answered(answers, q.id)).length;
+    const requiredLeft = qs.filter((q) => isRequired(q, answers) && !answered(answers, q.id)).length;
     return { done, total: qs.length, requiredLeft };
   };
 
@@ -349,13 +355,16 @@ export default function ClinicalCounsellingForm({
             </button>
 
             {index < sections.length - 1 ? (
+              // LEANR yellow: moving to the next section is the action a
+              // dietitian takes 15 times per counselling, so it carries the
+              // brand colour while "Previous" stays quiet.
               <button
                 type="button"
                 onClick={() => {
                   setSectionId(sections[index + 1].id);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className="btn-secondary"
+                className="btn-primary"
               >
                 Next: {sections[index + 1].title} →
               </button>
@@ -442,7 +451,7 @@ export default function ClinicalCounsellingForm({
  * number while the client is still in front of them — a target built on a
  * frequency nobody questioned is worse than no target at all.
  */
-function ProteinIntakePanel({ answers }: { answers: Answers }) {
+export function ProteinIntakePanel({ answers }: { answers: Answers }) {
   const estimate = useMemo(() => estimateProteinIntake(answers), [answers]);
   const target = useMemo(() => proteinTarget(answers, estimate), [answers, estimate]);
 
@@ -459,7 +468,7 @@ function ProteinIntakePanel({ answers }: { answers: Answers }) {
   return (
     <div className={`card mt-4 border ${tone}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold">Measured protein intake</h3>
+        <h3 className="text-sm font-semibold">Measured current intake</h3>
         <span className="text-xs text-zinc-500">from Q50 frequency × food database</span>
       </div>
 
@@ -502,17 +511,128 @@ function ProteinIntakePanel({ answers }: { answers: Answers }) {
 
       <p className="mt-2 text-xs text-zinc-400">{target.explanation}</p>
 
-      {estimate.contributions.length > 0 && (
+      {/* What the client eats now across ALL three macros. Carbs and fat are
+          context, not targets: nothing downstream plans against them, but a
+          dietitian cannot judge a protein number without seeing what the rest
+          of the day is made of. Colours match PlanView so P/C/F read the same
+          in counselling and in the finished plan. */}
+      {estimate.measured && (
+        <div className="mt-3 border-t border-zinc-800 pt-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 className="text-xs font-semibold text-zinc-300">Eating now, whole day</h4>
+            <span className="text-xs text-zinc-500">
+              counted from the same foods — carbs and fat are context, not targets
+            </span>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+              <div className="text-xs text-sky-400">Protein</div>
+              <div className="text-lg font-semibold">
+                {estimate.gramsPerDay}
+                <span className="text-sm font-normal text-zinc-400"> g</span>
+              </div>
+            </div>
+            <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+              <div className="text-xs text-amber-400">Carbs</div>
+              <div className="text-lg font-semibold">
+                {estimate.carbsPerDay}
+                <span className="text-sm font-normal text-zinc-400"> g</span>
+              </div>
+            </div>
+            <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+              <div className="text-xs text-red-400">Fat</div>
+              <div className="text-lg font-semibold">
+                {estimate.fatPerDay}
+                <span className="text-sm font-normal text-zinc-400"> g</span>
+              </div>
+            </div>
+            <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+              <div className="text-xs text-zinc-500">Energy</div>
+              <div className="text-lg font-semibold">
+                {estimate.kcalPerDay}
+                <span className="text-sm font-normal text-zinc-400"> kcal</span>
+              </div>
+            </div>
+          </div>
+
+          {/* The split is only meaningful once the food day is counted. Almost
+              all of a client's carbohydrate is in the staples, so showing this
+              bar without them advertises a very low-carb, very high-fat diet
+              that nobody is eating — the estimate has to say it is incomplete
+              rather than quietly look complete. */}
+          {estimate.foodDay === "counted" ? (
+            <>
+              <div
+                className="mt-2 flex h-2 overflow-hidden rounded-full bg-zinc-900"
+                role="img"
+                aria-label={`Energy split: protein ${estimate.energySplit.protein}%, carbohydrate ${estimate.energySplit.carbs}%, fat ${estimate.energySplit.fat}%`}
+              >
+                <div className="bg-sky-500" style={{ width: `${estimate.energySplit.protein}%` }} />
+                <div className="bg-amber-500" style={{ width: `${estimate.energySplit.carbs}%` }} />
+                <div className="bg-red-500" style={{ width: `${estimate.energySplit.fat}%` }} />
+              </div>
+              <p className="mt-1.5 text-xs text-zinc-500">
+                <span className="text-sky-400">{estimate.energySplit.protein}% protein</span>
+                {" · "}
+                <span className="text-amber-400">{estimate.energySplit.carbs}% carbs</span>
+                {" · "}
+                <span className="text-red-400">{estimate.energySplit.fat}% fat</span> of the
+                calories counted here.
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 rounded bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+              {estimate.foodDay === "unmatched" ? (
+                <>
+                  <strong>The food day was recorded but none of it could be counted.</strong> No
+                  roti, rice or other staple was recognised in the Q28 wording, so the carbs and
+                  calories above are far too low and the macro split would be misleading. Use the
+                  &ldquo;staples and how many&rdquo; picker on each meal to record them as taps.
+                </>
+              ) : (
+                <>
+                  <strong>No food day recorded yet.</strong> Carbs and calories count only the Q50
+                  protein foods so far — nearly all of a client&rsquo;s carbohydrate is in roti,
+                  rice and other staples. Fill in the Q28 meals to complete this.
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
+      {(estimate.contributions.length > 0 || estimate.staples.length > 0) && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {estimate.contributions.map((c) => (
             <span
               key={c.food.id}
               className="rounded bg-zinc-900 px-2 py-1 text-xs text-zinc-400 ring-1 ring-zinc-800"
+              title={`${c.gramsPerDay.toFixed(1)} g protein · ${c.carbsPerDay.toFixed(1)} g carbs · ${c.fatPerDay.toFixed(1)} g fat · ${Math.round(c.kcalPerDay)} kcal per day`}
             >
               {c.food.label} <span className="text-zinc-200">{c.gramsPerDay.toFixed(1)} g</span>
             </span>
           ))}
+          {/* Staples read off the Q28 food day, styled apart from the Q50
+              foods: they are inferred from free text, not recorded answers. */}
+          {estimate.staples.map((s) => (
+            <span
+              key={s.label}
+              className="rounded bg-zinc-900/60 px-2 py-1 text-xs text-zinc-500 ring-1 ring-dashed ring-zinc-800"
+              title={`From the recorded food day (Q28), not Q50 — ${s.gramsPerDay.toFixed(1)} g protein · ${s.carbsPerDay.toFixed(1)} g carbs · ${s.fatPerDay.toFixed(1)} g fat · ${Math.round(s.kcalPerDay)} kcal per day`}
+            >
+              {s.label} <span className="text-zinc-300">{s.gramsPerDay.toFixed(1)} g</span>
+            </span>
+          ))}
         </div>
+      )}
+
+      {estimate.stapleGramsPerDay > 0 && (
+        <p className="mt-2 text-xs text-zinc-500">
+          Includes {estimate.stapleGramsPerDay} g/day from roti, rice and other staples in the
+          recorded food day — these carry real protein but are never ticked as &ldquo;protein
+          foods&rdquo;.
+        </p>
       )}
 
       {estimate.unrecorded.length > 0 && (
@@ -560,7 +680,7 @@ function Field({
         {q.n && <span className="text-xs text-zinc-600">Q{q.n}</span>}
         <span>
           {q.label}
-          {q.required && (
+          {isRequired(q, answers) && (
             <span className="ml-1 text-red-400" title="Mandatory — required before plan generation">
               *
             </span>
@@ -676,6 +796,67 @@ function Field({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Tap a staple to add one, tap + / − to change the count. Everything is
+          a tap: the whole point is that a dietitian mid-consultation never has
+          to type a quantity, and the parser never has to guess one. */}
+      {!blocked && q.type === "portions" && (
+        <div className="flex flex-wrap gap-1.5">
+          {options?.map((o) => {
+            const picked = chosen
+              .map(decodeStaplePick)
+              .find((p) => p?.label === o);
+            const units = picked?.units ?? 0;
+            const others = chosen.filter((e) => decodeStaplePick(e)?.label !== o);
+            const setUnits = (n: number) =>
+              set(
+                q.id,
+                n <= 0
+                  ? others
+                  : [...others, encodeStaplePick(o, Math.min(20, n))].sort()
+              );
+
+            if (units === 0) {
+              return (
+                <button
+                  key={o}
+                  type="button"
+                  onClick={() => setUnits(1)}
+                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-zinc-400 ring-1 ring-zinc-700 transition hover:bg-zinc-800"
+                >
+                  {o}
+                </button>
+              );
+            }
+            return (
+              <span
+                key={o}
+                className="flex items-center gap-1 rounded-lg bg-brand px-1.5 py-1 text-sm font-medium text-black"
+              >
+                <button
+                  type="button"
+                  aria-label={`One less ${o}`}
+                  onClick={() => setUnits(units - 1)}
+                  className="h-6 w-6 rounded text-base leading-none hover:bg-black/15"
+                >
+                  −
+                </button>
+                <span className="tabular-nums">
+                  {o} × {units}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`One more ${o}`}
+                  onClick={() => setUnits(units + 1)}
+                  className="h-6 w-6 rounded text-base leading-none hover:bg-black/15"
+                >
+                  +
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 

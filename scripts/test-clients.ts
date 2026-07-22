@@ -571,3 +571,194 @@ export const SNEHA: Answers = {
   q104: ["Added flexibility"],
   q105: "8",
 };
+
+// ---------------------------------------------------------------------------
+// Test client 4 — Aadi Test: 27M EGGETARIAN who does not eat eggs on Tuesdays
+// and Saturdays. Exercises the day-of-week rules (q38a–c) on an EGG-only
+// restriction — Rahul's case removes non-veg and eggs together, so an
+// egg-only rule on an eggetarian (whose entire non-plant protein IS eggs) is
+// the harder test: those two days must find protein elsewhere.
+// ---------------------------------------------------------------------------
+export const AADI: Answers = {
+  name: "Aadi Test",
+  clientCode: "TEST-004",
+  gender: "Male",
+  phone: "+91 90000 00004",
+  email: "aadi.test@example.com",
+
+  // 1 — Goal & deeper motivation
+  q1: ["Poor fitness", "Low energy"],
+  q2: "Muscle gain with fat control",
+  q3: ["Improve strength", "Improve daily energy"],
+  q4: ["Feel physically fitter", "Improve confidence"],
+  q5: ["Target weight"],
+  q5_weight: "72",
+  q6: ["Athletic appearance"],
+  q7: "Flexible personal target", q7a: "2026-12-01", q7b: "Flexible",
+  q8: "8",
+  gr_dietitian: "Goal correctly understood",
+  gr_client: "Correctly understood",
+
+  // 2 — Body & transformation history
+  q9_age: "27", q9_height: "172", q9_weight: "66", q9_weight_1y: "64",
+  q10: ["Gradual weight gain"], q10a: "2", q10b: "1–2 years",
+  q11: ["Sedentary lifestyle", "Irregular meals"],
+  q12: ["Self-designed diet"],
+  q12a: "No clear result",
+  q12b: ["Food became repetitive"],
+  q13: "No",
+  q14: ["Weight-loss plateau"], q14a: "3–6 months",
+  q15: ["No data"], q15_assess: "Baseline measurement required",
+  q16: ["Regular gym routine", "Regular meals"],
+  q16a: "1) Regular gym routine 2) Regular meals",
+
+  // 3 — Medical & clinical safety
+  q17: ["No known condition"],
+  q18: ["None"],
+  q19: "No",
+  q20: ["No recent reports"],
+  q21: ["None"],
+  q22: ["No instruction"],
+  cr1: ["No major clinical limitation identified"],
+
+  // 4 — Digestion & tolerance
+  q23: "Mostly comfortable",
+  q24: ["No frequent symptom"],
+  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q26: ["No repeated discomfort"],
+  q27: ["No known allergy"],
+
+  // 5 — Actual food day
+  q28: ["Breakfast", "Lunch", "Evening snack", "Post-workout", "Dinner"],
+  q28_breakfast_time: "08:30",
+  q28_breakfast_food: "3 egg omelette + 2 bread slices + tea",
+  q28_breakfast_prep: ["Shallow fried"],
+  q28_breakfast_source: "Home",
+  q28_lunch_time: "13:30",
+  q28_lunch_food: "Rice 1 cup + dal 1 katori + sabzi + curd 1 katori",
+  q28_lunch_source: "Home",
+  q28_evening_food: "Tea + biscuits",
+  q28_postworkout_food: "1 banana + 2 boiled eggs",
+  q28_dinner_time: "21:00",
+  q28_dinner_food: "3 rotis + paneer sabzi or dal",
+  q28_dinner_source: "Home",
+  q29: "Weekdays are similar",
+  q30: ["Family meals", "Delayed meals"],
+  q31: "Once weekly", q31a: ["Restaurant"],
+  q31b: "Chole bhature, pav bhaji",
+  q32: ["Tea", "Office snacks"],
+  q32a: "Tea ×2/day with sugar; biscuits most evenings",
+
+  // 6 — Preferences & feasibility
+  q33: "Eggetarian",
+  q34: ["North Indian"],
+  q35: "Eggs, paneer, dal, rajma, curd",
+  q36: "Karela, tinda", q36a: "Will not eat",
+  q37: ["Tea", "Rice", "Eggs"],
+
+  // The rule under test: eggs are avoided on Tuesdays and Saturdays.
+  q38: ["No non-vegetarian food on selected days"],
+  q38a: ["Tuesday", "Saturday"],
+  q38b: ["Eggs"],
+  q38c: "Family religious practice — no eggs on Tuesdays and Saturdays",
+
+  q39: ["Parent or family"], q39a: "Some",
+  q40: ["Full kitchen", "Refrigerator"],
+  q41: ["Carry meals", "Limited additional cooking acceptable"],
+  q42: "Flexible", q42a: ["No major limitation"],
+
+  // 7 — Training, protein & recovery
+  q43: ["Strength training"],
+  q44a: "4", q44b: "45–60 minutes", q44c: "Evening",
+  q44d: "Less than 6 months", q44e: "Moderate", q44f: "Muscle gain",
+  q45: ["Good energy"],
+  q46: ["Mild normal soreness"],
+  q47: ["Snack"], q47a: "30–60 minutes before",
+  q48: ["Water"],
+  q49: ["Whole food meal"], q49a: "Less than 30 minutes",
+
+  // Frequencies match the Q28 food day: eggs most days (but not Tue/Sat),
+  // dal and curd daily, paneer at dinner a few nights a week.
+  q50: ["Eggs", "Dal", "Curd", "Paneer", "Milk", "Rajma or beans"],
+  q50p_eggs_freq: "5–6 days a week", q50p_eggs_portion: "1½ portions",
+  q50p_dal_freq: "Daily",
+  q50p_curd_freq: "Daily",
+  q50p_paneer_freq: "3–4 days a week",
+  q50p_milk_freq: "Daily",
+  q50p_rajma_freq: "1–2 days a week",
+  q50a: "3", q50b: ["Cooking", "Family food pattern"],
+  q51: ["None"],
+  q52: ["None"],
+  q53: ["None"],
+
+  // 8 — Routine & behaviour
+  q54: "Desk-based", q54a: "Day", q54b: "Fixed",
+  q54c: "Mostly seated", q54d: "7000",
+  q55: ["Evening"], q55a: ["Training timing"],
+  q56: "Moderate night hunger",
+  q57: ["Moderate"],
+  q58: ["Sweets", "Fried foods"],
+  q58a: ["Habit"],
+  q59: ["Order food more often"],
+  q60: ["None"],
+
+  // 9 — Lifestyle
+  q61: "6–7 hours", q61a: "6", q61b: "No",
+  q61c: ["Late screen time"],
+  q62: "5", q62a: ["Work"], q62b: ["Sleep"],
+  q63: "2–3 litres", q63a: ["Long workouts"], q63b: "Sometimes",
+  q64: ["Tea"], q64a: "2", q64b: "Before 3 PM",
+  q65: ["None"],
+  q67: ["Family functions"],
+  q67a: ["Overeat"],
+
+  // 10 — Success, dropout & coaching
+  q68: ["Work becomes busy", "Stop tracking"],
+  q69: ["Wait until Monday"],
+  q70: ["Clear weekly targets", "Frequent check-ins"],
+  q71: ["Very high protein is necessary"], q71a: "Mild",
+  q72: "Flexible food exchange", q72a: "Household measures",
+  q73: ["Work", "Poor sleep"],
+  q74: "Minor routine adjustment",
+  q75: "8",
+
+  // 11 — Dietitian professional assessment
+  q76: ["Low protein intake", "Poor protein distribution", "Irregular meals"],
+  q77: ["Increase protein", "Improve protein distribution"],
+  q78: "Tea; rice at lunch; eggs at breakfast",
+  q79: ["No unnecessary restriction identified"],
+  q80: "Muscle gain",
+  q81: "Muscle-gain phase",
+  q82a: "69", q82b: "72", q82c: "Client target appears appropriate",
+  q83: ["Current weight and height context", "Training demand"],
+  q83a: "High — sufficient baseline information",
+  q84: "Increase lean mass",
+  q84a: "No numerical target", q84b: "Increase", q84c: "Maintain",
+  q85: ["No specific target"],
+  q86: ["Improve strength"],
+  q87a: "3 weeks", q87b: "3 weeks", q87c: "8–12 weeks", q87d: "6–9 months",
+  q87e: "Client timeline appears realistic",
+  q88: ["Weight", "Strength", "Diet adherence"],
+  q89: "Controlled energy surplus",
+  q90: "High", q90a: "Moderate",
+  q91: ["Protein distribution", "Meal regularity"],
+  q92: "Moderate but poorly distributed",
+  q92a: ["Total quantity", "Lunch"],
+  q92b: ["Increase total protein", "Improve distribution"],
+  q92c: "Not required",
+  q93: ["Increase total protein", "Improve distribution"],
+  q94: ["Reduce fried food"],
+  q95: ["Increase vegetables"],
+  q96: ["Maintain current intake"],
+  q97: ["Improve pre-workout nutrition"],
+  q98: ["Time"], q98a: "Routine",
+  q99: ["Protein misconception"], q99a: "Clarify gradually",
+  q100: "Flexible food exchange",
+  q101: "8",
+
+  // 12 — Client strategy discussion
+  q102: "Yes",
+  q103: "Mostly", q103a: "Work schedule",
+  q104: ["Added flexibility"],
+  q105: "8",
+};
