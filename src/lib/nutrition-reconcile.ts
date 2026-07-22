@@ -134,9 +134,16 @@ export async function reconcileNutrition(
 
   const before = deviationScore(plan, bands);
   const after = deviationScore(grounded, bands);
+  // The ceiling stops a revision SMUGGLING IN a blowout; it must not demand the
+  // revision fix a breach the draft already had. Holding it to the absolute
+  // ceiling rejected a revision that had genuinely improved (deviation
+  // 2105 -> 1986) because the draft was over the ceiling to begin with, and
+  // kept the worse plan. So the bar is the ceiling OR the draft's own worst
+  // day, whichever is higher.
+  const worstDay = (p: DietPlan) => Math.max(...p.days.map(dayCalories));
   const ceilingOk =
     !hasCalories ||
-    grounded.days.every((d) => dayCalories(d) <= calorieTarget * CALORIE_HARD_CEILING);
+    worstDay(grounded) <= Math.max(calorieTarget * CALORIE_HARD_CEILING, worstDay(plan));
 
   if (after < before && ceilingOk) {
     return {

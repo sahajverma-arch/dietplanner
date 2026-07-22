@@ -217,8 +217,13 @@ const INCREASE_HIGH = 0.15;
 // whole point of progressing from measured intake. These are starting
 // defaults, not a clinical protocol: confirm them against the dietitian team's
 // own standard.
+// Resistance training 3+ days a week, losing fat — protein protects muscle
+// through the deficit.
 const GOAL_TRAINING_FAT_LOSS = 1.6;
+// Resistance training 3+ days a week, not in a deficit.
 const GOAL_ACTIVE = 1.4;
+// Everyone else, including walkers and yoga practitioners: cardio and mobility
+// do not create the same protein requirement as lifting.
 const GOAL_DEFAULT = 1.2;
 
 export interface ProteinTarget {
@@ -236,9 +241,20 @@ export interface ProteinTarget {
   explanation: string;
 }
 
-const isTraining = (a: Answers): boolean => {
+// Q43 answers that count as resistance training. Only these raise the protein
+// goal: the higher g/kg figures exist to support muscle under load, and
+// counting exercise days alone put a client whose Q43 was "Walking, Yoga" on
+// the 1.6 g/kg goal meant for people who lift. Deliberately strict — add
+// "Home workout", "HIIT" or "Starting with LeanR PT" here if the team counts
+// them as resistance work.
+const RESISTANCE_TRAINING = ["Strength training"];
+
+// Resistance training at a frequency that actually drives a protein
+// requirement — the exercise type AND at least three sessions a week.
+const doesResistanceTraining = (a: Answers): boolean => {
   const days = Number(val(a, "q44a"));
-  return Number.isFinite(days) && days >= 3;
+  if (!Number.isFinite(days) || days < 3) return false;
+  return list(a, "q43").some((v) => RESISTANCE_TRAINING.includes(v));
 };
 
 const isFatLoss = (a: Answers): boolean =>
@@ -262,9 +278,8 @@ function medicalProteinCap(a: Answers): string | null {
 }
 
 function goalGPerKg(a: Answers): number {
-  if (isTraining(a) && isFatLoss(a)) return GOAL_TRAINING_FAT_LOSS;
-  if (isTraining(a)) return GOAL_ACTIVE;
-  return GOAL_DEFAULT;
+  if (!doesResistanceTraining(a)) return GOAL_DEFAULT;
+  return isFatLoss(a) ? GOAL_TRAINING_FAT_LOSS : GOAL_ACTIVE;
 }
 
 // Compounding +step weeks from `from` to `to`, for the "about N weeks away"

@@ -8,7 +8,7 @@
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { PRIYA, RAHUL } from "./test-clients";
+import { PRIYA, RAHUL, SNEHA } from "./test-clients";
 
 // .env.local must be in process.env BEFORE the libs are imported (nim.ts reads
 // NVIDIA_MODEL at module load), hence the dynamic imports in main().
@@ -46,6 +46,7 @@ async function main() {
   for (const [slug, answers] of [
     ["priya-test", PRIYA],
     ["rahul-test", RAHUL],
+    ["sneha-test", SNEHA],
   ] as const) {
     if (only && slug !== only) continue;
     const t0 = Date.now();
@@ -144,7 +145,12 @@ async function main() {
     );
 
     // Safety spot-check: no forbidden term in any meal item.
-    const forbidden = slug === "priya-test" ? ["peanut"] : ["lauki", "karela", "bottle gourd", "bitter gourd"];
+    const forbidden =
+      slug === "priya-test"
+        ? ["peanut"]
+        : slug === "sneha-test"
+          ? ["brinjal", "baingan", "eggplant", "mushroom"]
+          : ["lauki", "karela", "bottle gourd", "bitter gourd"];
     const hits: string[] = [];
     for (const day of plan.days)
       for (const meal of day.meals)

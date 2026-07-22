@@ -747,36 +747,100 @@ interface FoodRules {
   disliked: string[];
 }
 
-// Indian-English/Hindi names and common aliases for allergens. "Peanut" typed
-// by the dietitian must also forbid "groundnut sabzi" — the model uses these
-// names interchangeably, so the safety scan must too.
-const ALLERGEN_SYNONYMS: Record<string, string[]> = {
-  peanut: ["groundnut", "moongphali", "moongfali", "singdana"],
-  groundnut: ["peanut", "moongphali", "moongfali", "singdana"],
-  milk: ["doodh"],
-  curd: ["dahi", "yogurt", "yoghurt"],
-  egg: ["anda", "omelette", "omelet"],
-  wheat: ["atta", "gehun"],
-  soy: ["soya", "tofu"],
-  sesame: ["til ", "tahini", "gingelly"],
+// THE SAME FOOD UNDER ANOTHER NAME. Groups are symmetric: recording any member
+// forbids all of them. A dietitian typed "Brinjal", the model wrote "Baingan
+// bharta", the literal substring test matched neither against the other, and a
+// plan shipped containing a food the client will not eat. Dislikes AND
+// allergens both expand through this, so it is a safety mechanism.
+const NAME_ALIASES: string[][] = [
+  ["peanut", "groundnut", "moongphali", "moongfali", "singdana"],
+  ["brinjal", "baingan", "eggplant", "aubergine"],
+  ["mushroom", "khumb", "khumbi"],
+  ["bottle gourd", "lauki", "ghiya", "dudhi"],
+  ["bitter gourd", "karela"],
+  ["ridge gourd", "turai", "tori"],
+  ["apple gourd", "tinda"],
+  ["okra", "bhindi", "lady finger", "ladies finger"],
+  ["spinach", "palak"],
+  ["cauliflower", "gobi", "gobhi"],
+  ["potato", "aloo", "alu"],
+  ["onion", "pyaaz", "pyaz"],
+  ["garlic", "lehsun", "lasun"],
+  ["fenugreek", "methi"],
+  ["curd", "dahi", "yogurt", "yoghurt"],
+  ["milk", "doodh", "dudh"],
+  ["paneer", "cottage cheese"],
+  ["egg", "anda", "omelette", "omelet"],
+  ["fish", "machli", "machhli"],
+  ["prawn", "shrimp", "jhinga"],
+  ["chicken", "murgh", "murga"],
+  ["mutton", "goat meat"],
+  ["soy", "soya", "soybean"],
+  ["wheat", "gehun", "gehu", "atta"],
+  ["semolina", "suji", "rava"],
+  ["sesame", "til", "tahini", "gingelly"],
+  ["cashew", "kaju"],
+  ["almond", "badam"],
+  ["walnut", "akhrot"],
+  ["pistachio", "pista"],
+  ["coconut", "nariyal"],
+];
+
+// FOODS THAT CONTAIN AN ALLERGEN. Applied to allergens ONLY, never dislikes:
+// a milk allergy must rule out paneer and ghee, but a client who merely
+// dislikes milk can still eat curd, and expanding a dislike this far would
+// strip half the plan for no reason.
+const ALLERGEN_DERIVATIVES: Record<string, string[]> = {
+  milk: ["paneer", "curd", "dahi", "yogurt", "cheese", "butter", "ghee", "cream", "khoya", "buttermilk", "chaas", "lassi"],
+  wheat: ["maida", "suji", "semolina", "rava", "roti", "chapati", "paratha", "bread", "pasta", "noodles", "dalia"],
+  soy: ["tofu", "soya chunks", "edamame", "tempeh"],
+  peanut: ["peanut butter", "peanut oil", "groundnut oil"],
+  egg: ["mayonnaise", "mayo"],
   "tree nut": ["almond", "cashew", "walnut", "pistachio", "hazelnut", "badam", "kaju", "akhrot", "pista"],
   "tree nuts": ["almond", "cashew", "walnut", "pistachio", "hazelnut", "badam", "kaju", "akhrot", "pista"],
 };
 
-/** Expands allergen terms with their known synonyms. */
-function withSynonyms(terms: string[]): string[] {
-  const out = new Set(terms);
-  for (const t of terms) for (const syn of ALLERGEN_SYNONYMS[t] ?? []) out.add(syn);
+/** Every other name for the same food, including the term itself. */
+export function aliasesOf(term: string): string[] {
+  const t = term.toLowerCase().trim();
+  const group = NAME_ALIASES.find((g) => g.includes(t));
+  return group ? Array.from(new Set([t, ...group])) : [t];
+}
+
+/** Aliases only — safe for dislikes, which must not drag in derivatives. */
+function withAliases(terms: string[]): string[] {
+  const out = new Set<string>();
+  for (const t of terms) for (const a of aliasesOf(t)) out.add(a);
   return Array.from(out);
+}
+
+/** Aliases plus anything containing the allergen. */
+function withAllergenTerms(terms: string[]): string[] {
+  const out = new Set(withAliases(terms));
+  for (const t of terms)
+    for (const alias of aliasesOf(t))
+      for (const d of ALLERGEN_DERIVATIVES[alias] ?? []) out.add(d);
+  return Array.from(out);
+}
+
+/**
+ * Whole-word match, tolerating a plural. Substring matching flagged "eggplant"
+ * as an egg violation on every vegetarian plan and needed hacks like a trailing
+ * space on "til " to stop it matching "lentil"; compound foods that genuinely
+ * hide an allergen ("buttermilk") are listed in ALLERGEN_DERIVATIVES instead.
+ */
+export function mentionsTerm(text: string, term: string): boolean {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}(?:e?s)?\\b`, "i").test(text);
 }
 
 function foodRules(intake: IntakeForm): FoodRules {
   return {
-    allergens: withSynonyms([
+    allergens: withAllergenTerms([
       ...splitFoodTerms(intake.allergies),
       ...splitFoodTerms(intake.intolerances),
     ]),
-    disliked: splitFoodTerms(intake.dislikes),
+    disliked: withAliases(splitFoodTerms(intake.dislikes)),
   };
 }
 
@@ -791,13 +855,13 @@ function violations(days: DietPlan["days"], rules: FoodRules): string[] {
         .join(" · ")
         .toLowerCase();
       for (const term of rules.allergens) {
-        if (mealText.includes(term))
+        if (mentionsTerm(mealText, term))
           found.set(term, `${day.day} ${meal.name} mentions the allergen/intolerance "${term}"`);
       }
       for (const item of meal.items) {
-        const food = item.food.toLowerCase();
         for (const term of rules.disliked) {
-          if (food.includes(term)) found.set(term, `"${item.food}" contains the disliked food "${term}"`);
+          if (mentionsTerm(item.food, term))
+            found.set(term, `"${item.food}" contains the disliked food "${term}"`);
         }
       }
     }
@@ -894,10 +958,13 @@ function cleanFoodsToAvoid(entries: string[], intake: IntakeForm): string[] {
     ...splitFoodTerms(intake.dislikes),
   ];
   const dietTerms = new Set((DIET_TYPE_TERMS[intake.dietType] ?? []).map((t) => t.toLowerCase()));
+  // Expansions of what the dietitian recorded — "baingan" and "eggplant" are
+  // the same entry as "brinjal", so the client-facing avoid list shows one of
+  // them, not all four.
   const synonymTerms = new Set(
-    Object.values(ALLERGEN_SYNONYMS)
-      .flat()
-      .map((s) => s.trim().toLowerCase())
+    [...NAME_ALIASES.flat(), ...Object.values(ALLERGEN_DERIVATIVES).flat()].map((s) =>
+      s.trim().toLowerCase()
+    )
   );
 
   const out: string[] = [];

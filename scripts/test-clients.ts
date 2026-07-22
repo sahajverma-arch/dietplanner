@@ -115,7 +115,13 @@ export const PRIYA: Answers = {
   q47: ["Water only"],
   q48: ["Water"],
   q49: ["Small meal"], q49a: "30–60 minutes",
+  // Frequencies match the Q28 food day above: dal at lunch daily, paneer sabzi
+  // most dinners, milk only in tea (hence half portions), curd rarely.
   q50: ["Milk", "Curd", "Paneer", "Dal"],
+  q50p_milk_freq: "Daily", q50p_milk_portion: "Half portion",
+  q50p_curd_freq: "1–2 days a week",
+  q50p_paneer_freq: "3–4 days a week",
+  q50p_dal_freq: "Daily",
   q50a: "2", q50b: ["Vegetarian pattern", "Lack of knowledge"],
   q51: ["Vitamin D"], q51a: "Doctor", q51b: ["None"], q51c: "Vitamin D 60,000 IU weekly",
   q52: ["None"],
@@ -291,7 +297,15 @@ export const RAHUL: Answers = {
   q47: ["Snack", "Caffeine"], q47a: "30–60 minutes before",
   q48: ["Water"],
   q49: ["Protein shake"], q49a: "Less than 30 minutes",
-  q50: ["Chicken", "Eggs", "Dal", "Paneer", "Protein powder"],
+  // Frequencies match the Q28 food day above: curd at breakfast and dal in the
+  // office thali daily, chicken on gym nights, a shake after every session.
+  q50: ["Chicken", "Eggs", "Dal", "Paneer", "Curd", "Protein powder"],
+  q50p_chicken_freq: "3–4 days a week",
+  q50p_eggs_freq: "1–2 days a week",
+  q50p_dal_freq: "Daily",
+  q50p_paneer_freq: "1–2 days a week",
+  q50p_curd_freq: "Daily",
+  q50p_powder_freq: "Daily",
   q50a: "2", q50b: ["Work schedule", "Carrying food"],
   q51: ["Protein powder", "Creatine"], q51a: "Personal Trainer", q51b: ["None"],
   q51c: "Whey 1 scoop post-workout daily; creatine 5 g daily",
@@ -367,5 +381,193 @@ export const RAHUL: Answers = {
   q102: "Yes",
   q103: "Mostly", q103a: "Work schedule",
   q104: ["Added flexibility", "Added restaurant consideration"],
+  q105: "8",
+};
+
+// ---------------------------------------------------------------------------
+// Test client 3 — Sneha Test: 35F EGGETARIAN working mother, walks daily but
+// does no resistance training. Exercises the counselling protein measurement:
+// every Q50 food carries a frequency and portion (q50p_*), so the plan is
+// generated against a MEASURED week-1 protein target rather than one the model
+// invents. Also covers the Eggetarian food-pattern filter (16 of 20 protein
+// foods offered) and a dislike that is not a day-of-week rule.
+// ---------------------------------------------------------------------------
+export const SNEHA: Answers = {
+  name: "Sneha Test",
+  clientCode: "TEST-003",
+  gender: "Female",
+  phone: "+91 90000 00003",
+  email: "sneha.test@example.com",
+
+  // 1 — Goal & deeper motivation
+  q1: ["Low energy", "Recent weight gain"],
+  q2: "Fat loss",
+  q3: ["Improve daily energy", "Improve hormonal health"],
+  q4: ["Improve confidence", "Family motivation"],
+  q5: ["Target weight"],
+  q5_weight: "60",
+  q6: ["Smaller waist"],
+  q7: "No deadline",
+  q8: "7",
+  gr_dietitian: "Goal correctly understood",
+  gr_client: "Correctly understood",
+
+  // 2 — Body & transformation history
+  q9_age: "35", q9_height: "158", q9_weight: "68", q9_weight_1y: "64",
+  q10: ["Gradual weight gain"], q10a: "5", q10b: "1–2 years",
+  q11: ["Postpartum period", "Sedentary lifestyle", "Poor sleep"],
+  q12: ["Self-designed diet"],
+  q12a: "Lost weight then regained",
+  q12b: ["Family food mismatch", "Excessive hunger"],
+  q13: "No",
+  q14: ["Repeated weight regain"], q14a: "6–12 months",
+  q15: ["No data"], q15_assess: "Baseline measurement required",
+  q16: ["Home-cooked food", "Regular meals", "Frequent check-ins"],
+  q16a: "1) Home-cooked food 2) Regular meals 3) Frequent check-ins",
+
+  // 3 — Medical & clinical safety
+  q17: ["Vitamin B12 deficiency"], q17a: "Controlled", q17b: "Irregular",
+  q17c: "B12 deficiency noted on last report; no medication started",
+  q18: ["None"],
+  q19: "No",
+  q20: ["No recent reports"],
+  q21: ["None"],
+  q22: ["No instruction"],
+  cr1: ["No major clinical limitation identified"],
+
+  // 4 — Digestion & tolerance
+  q23: "Mostly comfortable",
+  q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After dinner"], q24c: "3",
+  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q26: ["No repeated discomfort"],
+  q27: ["No known allergy"],
+
+  // 5 — Actual food day
+  q28: ["Breakfast", "Mid-morning", "Lunch", "Evening snack", "Dinner"],
+  q28_breakfast_time: "08:00",
+  q28_breakfast_food: "2 rotis + sabzi + tea with 1 tsp sugar",
+  q28_breakfast_prep: ["Dry preparation"],
+  q28_breakfast_source: "Home",
+  q28_midmorning_food: "1 glass milk",
+  q28_lunch_time: "13:30",
+  q28_lunch_food: "Rice 1 cup + dal 1 katori + sabzi + curd 1 katori",
+  q28_lunch_source: "Home",
+  q28_evening_food: "Tea + 2 biscuits",
+  q28_dinner_time: "21:00",
+  q28_dinner_food: "2 rotis + sabzi (paneer twice a week)",
+  q28_dinner_source: "Home",
+  q29: "Weekdays are similar",
+  q30: ["Family meals", "Delayed meals"],
+  q31: "Once weekly", q31a: ["Restaurant"],
+  q31b: "Chole bhature, dosa",
+  q32: ["Tea", "Children's leftovers"],
+  q32a: "Tea ×3/day with sugar; finishes children's leftover food most days",
+
+  // 6 — Preferences & feasibility
+  q33: "Eggetarian",
+  q34: ["North Indian"],
+  q35: "Paneer, dal, curd, seasonal fruit, eggs",
+  q36: "Brinjal, mushroom", q36a: "Will not eat",
+  q37: ["Tea", "Rice", "Family dinner"],
+  q38: ["No restriction"],
+  q39: ["Self"], q39a: "Full",
+  q40: ["Full kitchen", "Refrigerator", "Microwave"],
+  q41: ["Cook once for the family", "Limited additional cooking acceptable"],
+  q42: "Moderate", q42a: ["Time"],
+
+  // 7 — Training, protein & recovery
+  q43: ["Walking", "Yoga"],
+  q44a: "5", q44b: "30–45 minutes", q44c: "Morning",
+  q44d: "Complete beginner", q44e: "Light", q44f: "Fat loss",
+  q45: ["Good energy"],
+  q46: ["Mild normal soreness"],
+  q47: ["Nothing"], q47a: "30–60 minutes before",
+  q48: ["Water"],
+  q49: ["Nothing for several hours"],
+
+  // Q50 — protein foods, each measured for frequency and portion. This is what
+  // makes the week-1 protein target a measurement rather than a guess.
+  q50: ["Milk", "Curd", "Paneer", "Dal", "Eggs", "Sprouts", "Nuts or seeds"],
+  q50p_milk_freq: "Daily",
+  q50p_curd_freq: "Daily",
+  q50p_paneer_freq: "1–2 days a week",
+  q50p_dal_freq: "Daily",
+  q50p_eggs_freq: "3–4 days a week",
+  q50p_sprouts_freq: "1–2 days a week",
+  q50p_nuts_freq: "Daily",
+  q50a: "2", q50b: ["Family food pattern", "Cooking"],
+  q51: ["None"],
+  q52: ["None"],
+  q53: ["None"],
+
+  // 8 — Routine & behaviour
+  q54: "Desk-based", q54a: "Day", q54b: "Fixed",
+  q54c: "Mostly seated", q54d: "5000",
+  q55: ["Evening"], q55a: ["Cravings"],
+  q56: "Moderate night hunger",
+  q57: ["Moderate"],
+  q58: ["Sweets", "Tea with sugar"],
+  q58a: ["Habit", "Stress"],
+  q59: ["Eat more sweets"],
+  q60: ["None"],
+
+  // 9 — Lifestyle
+  q61: "6–7 hours", q61a: "6", q61b: "No",
+  q61c: ["Children waking at night"],
+  q62: "6", q62a: ["Family responsibilities"], q62b: ["Sleep", "Food intake"],
+  q63: "1–2 litres", q63a: ["Forgets"], q63b: "Sometimes",
+  q64: ["Tea"], q64a: "3", q64b: "6–9 PM",
+  q65: ["None"],
+  q67: ["Family functions"],
+  q67a: ["Overeat", "Eat late"],
+
+  // 10 — Success, dropout & coaching
+  q68: ["Family responsibilities increase", "Stop tracking"],
+  q69: ["Wait until Monday"],
+  q70: ["Frequent check-ins", "Clear weekly targets"],
+  q71: ["Skipping meals helps fat loss"], q71a: "Mild",
+  q72: "Fixed structured plan", q72a: "Household measures",
+  q73: ["Family responsibilities", "Poor sleep"],
+  q74: "Minor routine adjustment",
+  q75: "7",
+
+  // 11 — Dietitian professional assessment
+  q76: ["Low protein intake", "Poor protein distribution", "Hidden calorie intake", "Poor sleep"],
+  q77: ["Increase protein", "Improve protein distribution", "Improve breakfast"],
+  q78: "Tea; rice at lunch; family dinner",
+  q79: ["No unnecessary restriction identified"],
+  q80: "Fat loss",
+  q81: "Fat-loss phase",
+  q82a: "64", q82b: "60", q82c: "Client target appears appropriate",
+  q83: ["Current weight and height context"],
+  q83a: "High — sufficient baseline information",
+  q84: "Reduce fat while preserving muscle",
+  q84a: "No numerical target", q84b: "Preserve", q84c: "Reduce",
+  q85: ["Waist"], q85a: "Waist 36 → 33 in",
+  q86: ["Improve stamina"],
+  q87a: "2 weeks", q87b: "3 weeks", q87c: "8–12 weeks", q87d: "6–9 months",
+  q87e: "Client timeline appears realistic",
+  q88: ["Weight", "Waist", "Diet adherence"],
+  q89: "Controlled energy deficit",
+  q90: "Moderate", q90a: "Moderate",
+  q91: ["Protein distribution", "Breakfast quality"],
+  q92: "Very low",
+  q92a: ["Total quantity", "Breakfast"],
+  q92b: ["Increase total protein", "Improve breakfast protein"],
+  q92c: "Not required",
+  q93: ["Increase total protein", "Improve distribution"],
+  q94: ["Reduce sweets"],
+  q95: ["Increase vegetables"],
+  q96: ["Maintain current intake"],
+  q97: ["Address sleep-related recovery"],
+  q98: ["Time"], q98a: "Routine",
+  q99: ["Meal-timing misconception"], q99a: "Clarify gradually",
+  q100: "Fixed structured plan",
+  q101: "7",
+
+  // 12 — Client strategy discussion
+  q102: "Yes",
+  q103: "Mostly", q103a: "Family schedule",
+  q104: ["Added flexibility"],
   q105: "8",
 };
