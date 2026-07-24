@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   answered,
   isRequired,
   missingRequired,
+  questionNumber,
+  CONSULTATION_MINUTES,
+  val,
   visibleQuestions,
   visibleSections,
   type Answers,
@@ -174,8 +177,8 @@ export default function ClinicalCounsellingForm({
         <div>
           <h1 className="text-xl font-bold">LeanR Premium — First Counselling</h1>
           <p className="text-sm text-zinc-400">
-            55–65 min consultation · conversational — select options, don&apos;t read them out ·
-            everything autosaves.
+            {CONSULTATION_MINUTES.low}–{CONSULTATION_MINUTES.high} min consultation ·
+            conversational — select options, don&apos;t read them out · everything autosaves.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -333,7 +336,13 @@ export default function ClinicalCounsellingForm({
 
             <div className="space-y-6">
               {visibleQuestions(section, answers).map((q) => (
-                <Field key={q.id} q={q} answers={answers} set={set} toggle={toggle} />
+                <Fragment key={q.id}>
+                  <Field q={q} answers={answers} set={set} toggle={toggle} />
+                  {/* BMI sits directly under the weight block it is computed
+                      from — the dietitian reads it while the client is still
+                      quoting numbers, not after leaving the section. */}
+                  {q.id === "q9_weight_comfort" && <BmiPanel answers={answers} />}
+                </Fragment>
               ))}
             </div>
           </div>
@@ -469,7 +478,7 @@ export function ProteinIntakePanel({ answers }: { answers: Answers }) {
     <div className={`card mt-4 border ${tone}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">Measured current intake</h3>
-        <span className="text-xs text-zinc-500">from Q50 frequency × food database</span>
+        <span className="text-xs text-zinc-500">from the recorded frequency × food database</span>
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -586,15 +595,15 @@ export function ProteinIntakePanel({ answers }: { answers: Answers }) {
               {estimate.foodDay === "unmatched" ? (
                 <>
                   <strong>The food day was recorded but none of it could be counted.</strong> No
-                  roti, rice or other staple was recognised in the Q28 wording, so the carbs and
+                  roti, rice or other staple was recognised in the meal wording, so the carbs and
                   calories above are far too low and the macro split would be misleading. Use the
                   &ldquo;staples and how many&rdquo; picker on each meal to record them as taps.
                 </>
               ) : (
                 <>
-                  <strong>No food day recorded yet.</strong> Carbs and calories count only the Q50
+                  <strong>No food day recorded yet.</strong> Carbs and calories count only the ticked
                   protein foods so far — nearly all of a client&rsquo;s carbohydrate is in roti,
-                  rice and other staples. Fill in the Q28 meals to complete this.
+                  rice and other staples. Fill in the meal timeline to complete this.
                 </>
               )}
             </p>
@@ -619,7 +628,7 @@ export function ProteinIntakePanel({ answers }: { answers: Answers }) {
             <span
               key={s.label}
               className="rounded bg-zinc-900/60 px-2 py-1 text-xs text-zinc-500 ring-1 ring-dashed ring-zinc-800"
-              title={`From the recorded food day (Q28), not Q50 — ${s.gramsPerDay.toFixed(1)} g protein · ${s.carbsPerDay.toFixed(1)} g carbs · ${s.fatPerDay.toFixed(1)} g fat · ${Math.round(s.kcalPerDay)} kcal per day`}
+              title={`From the recorded food day, not the ticked protein foods — ${s.gramsPerDay.toFixed(1)} g protein · ${s.carbsPerDay.toFixed(1)} g carbs · ${s.fatPerDay.toFixed(1)} g fat · ${Math.round(s.kcalPerDay)} kcal per day`}
             >
               {s.label} <span className="text-zinc-300">{s.gramsPerDay.toFixed(1)} g</span>
             </span>
@@ -642,6 +651,192 @@ export function ProteinIntakePanel({ answers }: { answers: Answers }) {
           filled in.
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const CM_PER_INCH = 2.54;
+
+/**
+ * Height typed in either unit but stored only as centimetres. Feet and inches
+ * are derived from the stored value rather than kept as answers of their own,
+ * so a client can never end up with two heights on file that disagree — and
+ * everything downstream (BMI here, the energy equations in the plan) keeps
+ * reading one number in one unit.
+ *
+ * The chosen unit is remembered in `q9_height_unit`: it is a display
+ * preference, not clinical data, but a dietitian who works in feet should not
+ * have to flip the switch again every time they come back to the section.
+ */
+function HeightField({
+  cm,
+  unit,
+  setCm,
+  setUnit,
+}: {
+  cm: string;
+  unit: "cm" | "ft";
+  setCm: (v: string) => void;
+  setUnit: (v: "cm" | "ft") => void;
+}) {
+  const cmNum = Number(cm);
+  const totalInches = Number.isFinite(cmNum) && cmNum > 0 ? Math.round(cmNum / CM_PER_INCH) : 0;
+  const feet = totalInches ? String(Math.floor(totalInches / 12)) : "";
+  const inches = totalInches ? String(totalInches % 12) : "";
+
+  // Inches are never clamped to 0–11: 5 ft 14 in is a legitimate thing to type
+  // mid-sentence and simply reads back as 6 ft 2 in.
+  const setFromFeet = (f: string, i: string) => {
+    const total = (Number(f) || 0) * 12 + (Number(i) || 0);
+    setCm(total > 0 ? String(Math.round(total * CM_PER_INCH * 10) / 10) : "");
+  };
+
+  return (
+    <div>
+      <div className="mb-1.5 flex gap-1">
+        {(["cm", "ft"] as const).map((u) => (
+          <button
+            key={u}
+            type="button"
+            onClick={() => setUnit(u)}
+            className={`rounded-lg px-3 py-1 text-xs transition ${
+              unit === u
+                ? "bg-brand font-medium text-black"
+                : "bg-zinc-900 text-zinc-400 ring-1 ring-zinc-700 hover:bg-zinc-800"
+            }`}
+          >
+            {u === "cm" ? "cm" : "feet + inches"}
+          </button>
+        ))}
+      </div>
+
+      {unit === "cm" ? (
+        <div className="flex items-center gap-2">
+          <input
+            className="input"
+            type="number"
+            value={cm}
+            placeholder="e.g. 165"
+            onChange={(e) => setCm(e.target.value)}
+          />
+          <span className="shrink-0 text-sm text-zinc-500">cm</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            className="input"
+            type="number"
+            value={feet}
+            placeholder="5"
+            aria-label="Height, feet"
+            onChange={(e) => setFromFeet(e.target.value, inches)}
+          />
+          <span className="shrink-0 text-sm text-zinc-500">ft</span>
+          <input
+            className="input"
+            type="number"
+            value={inches}
+            placeholder="6"
+            aria-label="Height, inches"
+            onChange={(e) => setFromFeet(feet, e.target.value)}
+          />
+          <span className="shrink-0 text-sm text-zinc-500">in</span>
+        </div>
+      )}
+
+      {Number(cm) > 0 && (
+        <p className="mt-1.5 text-xs text-zinc-500">
+          {unit === "cm"
+            ? `= ${feet} ft ${inches} in`
+            : `= ${cm} cm — stored and used in centimetres`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+// ICMR / WHO Asia-Pacific cut-offs, not the 25/30 European ones — the whole
+// client base is South Asian, where cardiometabolic risk starts at a lower BMI.
+const BMI_BANDS: { max: number; label: string; tone: string }[] = [
+  { max: 18.5, label: "Underweight", tone: "text-amber-400" },
+  { max: 23, label: "Normal", tone: "text-emerald-400" },
+  { max: 25, label: "Overweight", tone: "text-amber-400" },
+  { max: 30, label: "Obese I", tone: "text-red-400" },
+  { max: Infinity, label: "Obese II", tone: "text-red-400" },
+];
+
+const bmiBand = (bmi: number) => BMI_BANDS.find((b) => bmi < b.max) ?? BMI_BANDS[BMI_BANDS.length - 1];
+
+/**
+ * BMI the dietitian would otherwise work out on a phone: current, at the
+ * weight the client says they are comfortable at, and the healthy-weight band
+ * for their height. It is a cross-check, not a target — the plan is built from
+ * the measured intake and the goal, never from this number alone.
+ */
+function BmiPanel({ answers }: { answers: Answers }) {
+  const num = (id: string) => {
+    const n = Number(val(answers, id));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const heightCm = num("q9_height");
+  const weightKg = num("q9_weight");
+  const comfortKg = num("q9_weight_comfort");
+
+  // Height alone says nothing until there is a weight against it.
+  if (!heightCm || !weightKg) return null;
+
+  const m = heightCm / 100;
+  const bmi = weightKg / m ** 2;
+  const band = bmiBand(bmi);
+  const comfortBmi = comfortKg ? comfortKg / m ** 2 : null;
+  const healthyLow = 18.5 * m ** 2;
+  const healthyHigh = 22.9 * m ** 2;
+
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">BMI (calculated)</h3>
+        <span className="text-xs text-zinc-500">
+          from height and current weight · ICMR / WHO Asia-Pacific cut-offs
+        </span>
+      </div>
+
+      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Current BMI</div>
+          <div className="text-lg font-semibold">
+            {bmi.toFixed(1)} <span className={`text-sm font-normal ${band.tone}`}>{band.label}</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">Healthy range for {heightCm} cm</div>
+          <div className="text-lg font-semibold">
+            {healthyLow.toFixed(0)}–{healthyHigh.toFixed(0)}
+            <span className="text-sm font-normal text-zinc-400"> kg</span>
+          </div>
+        </div>
+        <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
+          <div className="text-xs text-zinc-500">At preferred weight</div>
+          <div className="text-lg font-semibold">
+            {comfortBmi ? comfortBmi.toFixed(1) : "—"}
+            {comfortBmi && (
+              <span className={`text-sm font-normal ${bmiBand(comfortBmi).tone}`}>
+                {" "}
+                {bmiBand(comfortBmi).label}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-2 text-xs text-zinc-500">
+        A cross-check only — BMI cannot tell muscle from fat, so read it next to the body-fat and
+        waist answers rather than on its own.
+      </p>
     </div>
   );
 }
@@ -677,7 +872,9 @@ function Field({
   return (
     <div>
       <label className="mb-1 flex flex-wrap items-baseline gap-x-2 text-sm font-medium">
-        {q.n && <span className="text-xs text-zinc-600">Q{q.n}</span>}
+        {questionNumber(q.id) && (
+          <span className="text-xs text-zinc-600">Q{questionNumber(q.id)}</span>
+        )}
         <span>
           {q.label}
           {isRequired(q, answers) && (
@@ -722,6 +919,15 @@ function Field({
           value={text}
           placeholder={q.placeholder}
           onChange={(e) => set(q.id, e.target.value)}
+        />
+      )}
+
+      {q.type === "height" && (
+        <HeightField
+          cm={text}
+          unit={answers[`${q.id}_unit`] === "ft" ? "ft" : "cm"}
+          setCm={(v) => set(q.id, v)}
+          setUnit={(u) => set(`${q.id}_unit`, u)}
         />
       )}
 

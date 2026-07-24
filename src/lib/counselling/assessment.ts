@@ -135,8 +135,9 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     flag: { label: "Dietitian marked urgent SOP escalation", action: "Escalate immediately per SOP.", escalate: true },
   },
   {
-    // v3.0 moved blood/black stool onto Q19 symptoms and left q25a as stool
-    // consistency, so both places must be checked or the flag dies.
+    // Blood/black stool is caught on Q19 symptoms. The retired stool-consistency
+    // question (q25a) is still checked so the flag keeps firing for the
+    // counsellings that were recorded while it existed.
     when: (a) =>
       hasAnyOf(a, "q25a", ["Blood", "Black or tarry"]) ||
       hasAnyOf(a, "q21", ["Blood in Stool", "Black Stool"]),
@@ -192,6 +193,19 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   {
     when: (a) => hasAnyOf(a, "q66", ["Breastfeeding"]),
     flag: { label: "Breastfeeding", action: "Avoid aggressive transformation protocols.", escalate: false },
+  },
+  {
+    // Kept separate from the RED-S flag below: amenorrhoea is a low-energy
+    // signal often enough to stop a deficit, but PCOS and several other causes
+    // produce it too, and labelling every one of them "under-fuelling" would
+    // send the dietitian down the wrong road.
+    when: (a) => isOneOf(a, "q66_cycle", ["No period for 3+ months"]),
+    flag: {
+      label: "No period for 3+ months",
+      action:
+        "Medical review before any deficit — bone health and energy availability are the question, whatever the cause turns out to be.",
+      escalate: true,
+    },
   },
   {
     // Only chronic kidney disease suppresses a high-protein plan; v3.0's
@@ -329,8 +343,10 @@ const RUBRIC: { name: string; items: Item[] }[] = [
       { points: 3, label: "Main result", done: all("q2") },
       { points: 2, label: "Decision trigger", done: all("q1") },
       { points: 2, label: "Deeper motivation", done: all("q4") },
-      { points: 1, label: "Deadline", done: all("q7") },
-      { points: 2, label: "Goal reflection", done: all("gr_dietitian", "gr_client") },
+      // The old 1-point "Deadline" item (q7) went with the question itself —
+      // its point moved here rather than being dropped, so the rubric still
+      // totals 100 and the score keeps meaning the same thing.
+      { points: 3, label: "Goal reflection", done: all("gr_dietitian", "gr_client") },
     ],
   },
   {
@@ -356,7 +372,7 @@ const RUBRIC: { name: string; items: Item[] }[] = [
     name: "Digestion & tolerance",
     items: [
       { points: 2, label: "Digestion & symptoms", done: all("q23", "q24") },
-      { points: 2, label: "Bowel pattern", done: all("q25", "q25a") },
+      { points: 2, label: "Bowel pattern", done: all("q25") },
       { points: 2, label: "Allergy screen", done: all("q27") },
     ],
   },
@@ -429,12 +445,16 @@ const RUBRIC: { name: string; items: Item[] }[] = [
     ],
   },
   {
-    name: "Dietitian strategy & discussion",
+    name: "Dietitian strategy",
     items: [
+      // The client-discussion point went with that section; it now scores the
+      // dietitian's own read of the case, which is what the trimmed assessment
+      // section actually asks for. q91 (nutrition priorities) went the same way
+      // — the energy strategy is what that point was really scoring.
+      { points: 1, label: "Case understanding", done: all("ds1") },
       { points: 1, label: "Limiting factors", done: all("q76") },
       { points: 1, label: "Minimum changes", done: all("q77") },
-      { points: 1, label: "Energy strategy & priorities", done: all("q89", "q91") },
-      { points: 1, label: "Client discussion", done: all("q102", "q105") },
+      { points: 1, label: "Energy strategy", done: all("q89") },
     ],
   },
 ];
@@ -544,7 +564,11 @@ export function toIntake(a: Answers, appointmentId?: string | null): ClinicalInt
     gender: val(a, "gender"),
     heightCm: val(a, "q9_height"),
     weightKg: val(a, "q9_weight"),
-    targetWeightKg: val(a, "q5_weight") || val(a, "q82a"),
+    // q82a (the dietitian's recommended target) went with the trimmed
+    // assessment section, so new counsellings fall through to the weight the
+    // client themselves named as comfortable. Both older keys are still read —
+    // clients already on file keep the target they were given.
+    targetWeightKg: val(a, "q5_weight") || val(a, "q82a") || val(a, "q9_weight_comfort"),
     phone: val(a, "phone"),
     email: val(a, "email"),
     occupation: val(a, "q54"),
@@ -716,6 +740,11 @@ export function aiProfile(a: Answers): Block {
     doctor_follow_up: val(a, "q17b"),
     condition_notes: val(a, "q17c"),
     medical_events: list(a, "q18").filter((v) => v !== "None"),
+    // The procedure detail never used to reach the plan — only the category
+    // did, so "Organ Surgery" arrived without the fact that it was a
+    // gallbladder removal, which is the part that changes the fat plan.
+    event_detail: val(a, "q18b"),
+    event_date: val(a, "q18c"),
     event_impact: dropNone(list(a, "q18a"), ["No Impact", "No current impact"]),
     medicines: val(a, "q19") === "Yes" ? val(a, "q19a") : "none",
     recent_medicine_change: val(a, "q19b") === "No" ? null : val(a, "q19b"),
@@ -756,6 +785,7 @@ export function aiProfile(a: Answers): Block {
     household_cuisines: list(a, "q34"),
     household_staples: list(a, "q34c"),
     allergies_never_include: allergenList(a),
+    allergy_reaction: val(a, "q27d"),
     allergy_severity: val(a, "q27a"),
     intolerances_avoid: list(a, "q26").filter((v) => !["No repeated discomfort", "Other"].includes(v)),
     dislikes: val(a, "q36"),
@@ -879,6 +909,13 @@ export function aiProfile(a: Answers): Block {
       (v) => !["Nothing relevant", "Not applicable", "Prefer not to answer"].includes(v)
     ),
     hormonal_medical_care: val(a, "q66a"),
+    cycle_regularity: val(a, "q66_cycle"),
+    last_period_start: val(a, "q66_lmp"),
+    cycle_symptoms: dropNone(list(a, "q66_symptoms"), ["No noticeable change"]),
+    hardest_cycle_phase: val(a, "q66_phase"),
+    hormonal_contraception: ["None", "Prefer not to answer"].includes(val(a, "q66_contraception"))
+      ? ""
+      : val(a, "q66_contraception"),
     travel_social_situations: list(a, "q67").filter((v) => v !== "Rarely affected"),
     travel_social_effect: list(a, "q67a"),
     travel_social_frequency: val(a, "q67b"),

@@ -29,7 +29,6 @@ export const PRIYA: Answers = {
   q5: ["Target weight"],
   q5_weight: "62",
   q6: ["Leaner appearance", "Smaller waist"],
-  q7: "No deadline",
   q8: "8",
   gr_dietitian: "Goal correctly understood",
   gr_client: "Correctly understood",
@@ -68,9 +67,10 @@ export const PRIYA: Answers = {
   // 4 — Digestion & tolerance
   q23: "Occasionally uncomfortable",
   q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After lunch"], q24c: "4",
-  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q25: "Once daily",
   q26: ["No repeated discomfort"],
-  q27: ["Peanut"], q27a: "Severe", q27b: "Yes",
+  q27: ["Peanut"], q27d: "Peanut — throat tightens and hives within minutes",
+  q27a: "Severe", q27b: "Yes",
 
   // 5 — Actual food day
   q28: ["Breakfast", "Mid-morning", "Lunch", "Evening snack", "Dinner"],
@@ -158,6 +158,7 @@ export const PRIYA: Answers = {
   q75: "7",
 
   // 11 — Dietitian professional assessment
+  ds1: "Homemaker with adequate calories but low, poorly distributed protein and heavy evening hunger — needs protein raised and the evening restructured, not a deficit first.",
   q76: ["Low protein intake", "Excessive evening hunger", "Hidden calorie intake", "Poor sleep"],
   q77: ["Increase protein", "Improve evening snack", "Improve meal regularity"],
   q78: "Tea with breakfast; roti at lunch and dinner; family dinner together",
@@ -191,10 +192,6 @@ export const PRIYA: Answers = {
   q101: "8",
 
   // 12 — Client strategy discussion
-  q102: "Yes",
-  q103: "Yes",
-  q104: ["No"],
-  q105: "8",
 };
 
 // ---------------------------------------------------------------------------
@@ -217,7 +214,6 @@ export const RAHUL: Answers = {
   q5: ["Target weight"],
   q5_weight: "72",
   q6: ["Athletic appearance"],
-  q7: "Flexible personal target", q7a: "2026-10-01", q7b: "Flexible",
   q8: "7",
   gr_dietitian: "Goal correctly understood",
   gr_client: "Correctly understood",
@@ -247,7 +243,7 @@ export const RAHUL: Answers = {
   // 4 — Digestion & tolerance
   q23: "Mostly comfortable",
   q24: ["Acidity or heartburn"], q24a: "1–2 times per week", q24b: ["After dinner"], q24c: "3",
-  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q25: "Once daily",
   q26: ["No repeated discomfort"],
   q27: ["No known allergy"],
 
@@ -344,6 +340,7 @@ export const RAHUL: Answers = {
   q75: "8",
 
   // 11 — Dietitian professional assessment
+  ds1: "Trains hard but eats out most evenings with alcohol — the plan has to make restaurant meals workable rather than ask him to stop eating out.",
   q76: ["Frequent outside food", "Excessive night hunger", "Poor sleep", "Alcohol intake", "Hidden calorie intake"],
   q77: ["Improve dinner", "Create weekend strategy", "Improve meal regularity"],
   q78: "Weekend restaurant meal (guided choices); rice at lunch; tea",
@@ -378,10 +375,6 @@ export const RAHUL: Answers = {
   q101: "8",
 
   // 12 — Client strategy discussion
-  q102: "Yes",
-  q103: "Mostly", q103a: "Work schedule",
-  q104: ["Added flexibility", "Added restaurant consideration"],
-  q105: "8",
 };
 
 // ---------------------------------------------------------------------------
@@ -407,7 +400,6 @@ export const SNEHA: Answers = {
   q5: ["Target weight"],
   q5_weight: "60",
   q6: ["Smaller waist"],
-  q7: "No deadline",
   q8: "7",
   gr_dietitian: "Goal correctly understood",
   gr_client: "Correctly understood",
@@ -438,7 +430,7 @@ export const SNEHA: Answers = {
   // 4 — Digestion & tolerance
   q23: "Mostly comfortable",
   q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After dinner"], q24c: "3",
-  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q25: "Once daily",
   q26: ["No repeated discomfort"],
   q27: ["No known allergy"],
 
@@ -532,6 +524,7 @@ export const SNEHA: Answers = {
   q75: "7",
 
   // 11 — Dietitian professional assessment
+  ds1: "Desk-based, fixed routine, protein low and clustered at dinner — spread protein across the day and protect the family dinner.",
   q76: ["Low protein intake", "Poor protein distribution", "Hidden calorie intake", "Poor sleep"],
   q77: ["Increase protein", "Improve protein distribution", "Improve breakfast"],
   q78: "Tea; rice at lunch; family dinner",
@@ -566,10 +559,6 @@ export const SNEHA: Answers = {
   q101: "7",
 
   // 12 — Client strategy discussion
-  q102: "Yes",
-  q103: "Mostly", q103a: "Family schedule",
-  q104: ["Added flexibility"],
-  q105: "8",
 };
 
 // ---------------------------------------------------------------------------
@@ -594,7 +583,6 @@ export const AADI: Answers = {
   q5: ["Target weight"],
   q5_weight: "72",
   q6: ["Athletic appearance"],
-  q7: "Flexible personal target", q7a: "2026-12-01", q7b: "Flexible",
   q8: "8",
   gr_dietitian: "Goal correctly understood",
   gr_client: "Correctly understood",
@@ -624,7 +612,7 @@ export const AADI: Answers = {
   // 4 — Digestion & tolerance
   q23: "Mostly comfortable",
   q24: ["No frequent symptom"],
-  q25: "Once daily", q25a: ["Comfortable and formed"],
+  q25: "Once daily",
   q26: ["No repeated discomfort"],
   q27: ["No known allergy"],
 
@@ -723,6 +711,7 @@ export const AADI: Answers = {
   q75: "8",
 
   // 11 — Dietitian professional assessment
+  ds1: "Young, trains regularly, protein below what his training needs — raise protein and fix meal regularity before touching calories.",
   q76: ["Low protein intake", "Poor protein distribution", "Irregular meals"],
   q77: ["Increase protein", "Improve protein distribution"],
   q78: "Tea; rice at lunch; eggs at breakfast",
@@ -757,8 +746,4 @@ export const AADI: Answers = {
   q101: "8",
 
   // 12 — Client strategy discussion
-  q102: "Yes",
-  q103: "Mostly", q103a: "Work schedule",
-  q104: ["Added flexibility"],
-  q105: "8",
 };

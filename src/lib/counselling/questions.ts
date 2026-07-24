@@ -2,8 +2,10 @@
 // LeanR Premium — Final New Client First Counselling question bank.
 //
 // Source: "LeanR Premium Final New Client First Counselling" (Q1–Q105 across
-// 12 sections + final AI independent clinical review). Target duration
-// 55–65 minutes. The counselling is conversational: the dietitian asks the
+// 12 sections + final AI independent clinical review). The bank has since been
+// trimmed and reordered; the consultation length shown to the dietitian is added
+// up from the sections (CONSULTATION_MINUTES) rather than asserted here. The
+// counselling is conversational: the dietitian asks the
 // main question naturally, the client speaks, the dietitian mainly selects
 // options (options are not read out). Free text is avoided except where
 // options cannot capture the information.
@@ -42,6 +44,10 @@ export type QuestionType =
   | "single"
   | "multi"
   | "scale10"
+  // Height with a cm / feet-inches switch. Always stored as centimetres —
+  // feet and inches are only how the dietitian types it, so everything
+  // downstream (BMI, energy equations) keeps reading one unit.
+  | "height"
   // A list of options each carrying a count ("Roti × 2"), stored as string[].
   // Exists so the food day can be tapped instead of typed — see
   // STAPLE_LABELS in src/lib/protein-intake.ts.
@@ -53,8 +59,20 @@ export type QuestionTag = "core" | "conditional" | "clinical" | "fitness" | "pla
 
 export interface Question {
   id: string;
-  /** Original number in the LeanR Premium bank — shown to the dietitian. */
+  /**
+   * Original number in the LeanR Premium bank — kept as provenance so a
+   * question can still be traced back to the source document. It is NOT what
+   * the dietitian sees: the displayed number is derived from position, see
+   * QUESTION_NUMBERS at the bottom of this file.
+   */
   n?: number;
+  /**
+   * Forces a set of questions to be numbered as one asked question (12, 12a,
+   * 12b). Only needed for generated blocks, where the ids do not nest the way
+   * hand-written follow-ups do — one group per meal occasion, one per protein
+   * food. Everything else groups automatically from its id.
+   */
+  group?: string;
   label: string;
   type: QuestionType;
   tag?: QuestionTag;
@@ -202,7 +220,7 @@ const S1: Section = {
   stage: "Goals",
   minutes: "8–10 min",
   intro:
-    "Introduce yourself and the purpose first. Q1 is a conversation, not a form — let the client describe their day and fill the fields from what they say.",
+    "Introduce yourself and the purpose first. The opening is a conversation, not a form — let the client describe their day and fill the fields below from what they say.",
   questions: [
     // Q1 is one spoken question that fills ten fields. Age, gender, work type,
     // shift, country and city already have storage keys, so only the four
@@ -232,11 +250,6 @@ const S1: Section = {
     { id: "q34a", n: 1, tag: "core", type: "text", label: "Country", placeholder: "e.g. India" },
     { id: "q34d", n: 1, tag: "core", type: "text", label: "State", placeholder: "e.g. Punjab" },
     { id: "q34b", n: 1, tag: "core", type: "text", label: "City", placeholder: "e.g. Chandigarh" },
-    {
-      id: "q1_routine", n: 1, tag: "core", type: "textarea", label: "General daily routine",
-      placeholder: "Wake, work, meals, travel, training, sleep — in the client's own words.",
-      why: "Every later feasibility decision (meal timing, prep, carrying food) is judged against this routine.",
-    },
     {
       id: "q1", n: 2, tag: "core", type: "multi", max: 3, required: true,
       label: "What motivated you to begin your health journey with LeanR at this point in your life?",
@@ -285,23 +298,6 @@ const S1: Section = {
       ],
       why: "The deeper reason is what coaching messages are written from when motivation drops.",
     },
-    {
-      id: "q7", n: 6, tag: "core", type: "single",
-      label: "Do you have a target date or specific timeline for achieving your goal?",
-      options: [
-        "No Deadline", "Flexible Goal", "Wedding", "Competition", "Sports Event", "Birthday",
-        "Holiday", "Medical Follow-up", "Pregnancy Timeline", "Other",
-      ],
-    },
-    {
-      id: "q7a", n: 6, tag: "conditional", type: "date", label: "Target date",
-      showIf: (a) => answered(a, "q7") && !is(a, "q7", "No Deadline"),
-    },
-    {
-      id: "q7b", n: 6, tag: "conditional", type: "single", label: "Priority",
-      options: ["Flexible", "Important", "Fixed"],
-      showIf: (a) => answered(a, "q7") && !is(a, "q7", "No Deadline"),
-    },
   ],
 };
 
@@ -316,7 +312,10 @@ const S2: Section = {
   stage: "Goals",
   minutes: "8–10 min",
   questions: [
-    { id: "q9_height", n: 7, tag: "core", type: "number", label: "Height (cm)", required: true },
+    // Stored in centimetres whichever way it is typed — clients quote feet and
+    // inches far more often than centimetres, and converting in the dietitian's
+    // head mid-call is where height errors come from.
+    { id: "q9_height", n: 7, tag: "core", type: "height", label: "Height", required: true },
     { id: "q9_weight", n: 7, tag: "core", type: "number", label: "Current weight (kg)", required: true },
     {
       id: "q9_weight_high", n: 7, tag: "core", type: "number", label: "Highest adult weight (kg)",
@@ -338,7 +337,8 @@ const S2: Section = {
     },
     {
       id: "q10", n: 8, tag: "core", type: "multi", required: true,
-      label: "How has your weight and body shape changed during the last one year?",
+      label: "What changed in your weight or body shape, and over what period?",
+      note: "Record the change here, then how much and over how long in the two follow-ups.",
       options: [
         "Gradual Weight Gain", "Rapid Weight Gain", "Gradual Weight Loss", "Rapid Weight Loss",
         "Stable Weight", "Frequent Fluctuations", "Fat Gain", "Muscle Loss",
@@ -346,11 +346,11 @@ const S2: Section = {
       ],
     },
     {
-      id: "q10a", n: 8, tag: "conditional", type: "number", label: "Approximate weight change (kg)",
+      id: "q10a", n: 8, tag: "conditional", type: "number", label: "How much did it change (kg)",
       showIf: (a) => hasOther(a, "q10", ["Stable Weight", "Not Sure"]),
     },
     {
-      id: "q10b", n: 8, tag: "conditional", type: "single", label: "Time period",
+      id: "q10b", n: 8, tag: "conditional", type: "single", label: "Over what period",
       // Kept as bands rather than v3.0's free text: the trajectory arithmetic
       // downstream needs a period it can compare, and a typed phrase is not.
       options: [
@@ -480,7 +480,7 @@ const S3: Section = {
   stage: "Clinical",
   minutes: "5–6 min",
   intro:
-    "Baseline weight, waist, hip, body fat, sleep, stress and fluids come from Q7, Q12 and Stage 11 — they are not re-asked here. Everything future progress is judged against is fixed on this date.",
+    "Baseline weight, waist, hip, body fat, sleep, stress and fluids are captured in the body-profile and lifestyle sections — they are not re-asked here. Record only what the client has actually been measured with, and how: the counselling date itself is the baseline every future review trends against.",
   questions: [
     {
       id: "q15", n: 12, tag: "fitness", type: "multi",
@@ -536,12 +536,6 @@ const S3: Section = {
       showIf: (a) => hasOther(a, "q15", ["None"]),
     },
     {
-      id: "q15_assess", n: 12, tag: "planning", type: "single",
-      label: "Body-composition confidence",
-      options: ["High Confidence", "Moderate Confidence", "Low Confidence", "Insufficient Data"],
-      note: "Anything below High is a trend signal, not a number. A low-confidence body-fat or muscle figure must not set calorie targets or drive a clinical decision on its own.",
-    },
-    {
       id: "q15_src", n: 13, tag: "planning", type: "single", label: "Body-fat measurement source",
       options: [
         "DEXA", "Clinical/Validated BIA", "Professional/Gym BIA", "Consumer Smart Scale",
@@ -553,29 +547,6 @@ const S3: Section = {
       id: "q13_bf_conf", n: 13, tag: "planning", type: "single", label: "Body-fat confidence",
       options: ["High", "Moderate", "Low"],
       showIf: (a) => answered(a, "q15_bf"),
-    },
-    {
-      id: "q13_meal_consistency", n: 13, tag: "planning", type: "scale10",
-      label: "Current meal consistency (1–10)",
-    },
-    {
-      id: "q13_protein_adequacy", n: 13, tag: "planning", type: "single",
-      label: "Current protein adequacy",
-      options: ["Low", "Moderate", "Good", "Unknown"],
-      note: "A first impression only. The measured intake from the protein section is what the target is built from.",
-    },
-    { id: "q13_diet_quality", n: 13, tag: "planning", type: "scale10", label: "Current diet quality (1–10)" },
-    {
-      id: "q13_adherence", n: 13, tag: "planning", type: "scale10",
-      label: "Self-rated current nutrition adherence (1–10)",
-    },
-    {
-      id: "q13_date", n: 13, tag: "core", type: "date", label: "Baseline date", required: true,
-      why: "Every future review compares against this date, so a plan generated without it has nothing to trend from.",
-    },
-    {
-      id: "q13_completeness", n: 13, tag: "planning", type: "single", label: "Baseline completeness",
-      options: ["Complete", "Sufficient", "Partially Complete", "Insufficient"],
     },
   ],
 };
@@ -677,10 +648,22 @@ const S4: Section = {
         "Accident", "Fracture", "Severe Infection", "Other", "None",
       ],
     },
+    // What was done and when it happened, asked separately: a surgery whose
+    // procedure is known but whose date is not is still usable (bariatric and
+    // gallbladder surgery change the plan whenever they happened), and a date
+    // buried in free text can never be trended against.
     {
-      id: "q18b", n: 16, tag: "conditional", type: "textarea", label: "Event and date/year",
-      placeholder: "e.g. Gallbladder removal — 2019; ACL reconstruction — 2023",
+      id: "q18b", n: 16, tag: "conditional", type: "textarea",
+      label: "What was done during the surgery or event",
+      placeholder: "e.g. Gallbladder removed, laparoscopic; ACL reconstruction with graft",
       showIf: (a) => hasOther(a, "q18", ["None"]),
+      note: "One line per event if there is more than one.",
+    },
+    {
+      id: "q18c", n: 16, tag: "conditional", type: "date",
+      label: "Date of the surgery or event",
+      showIf: (a) => hasOther(a, "q18", ["None"]),
+      note: "Clients rarely remember the day. If only the year or month is known, leave this blank and write it in the box above.",
     },
     {
       id: "q18a", n: 16, tag: "conditional", type: "multi", label: "Current impact",
@@ -789,6 +772,67 @@ const S4: Section = {
       ],
       note: "Never push for an answer here. Pregnancy and breastfeeding stop any deficit-led plan outright.",
     },
+
+    // --- Menstrual cycle — female clients only ------------------------------
+    // Q21 above records the reproductive headline for everyone. These follow up
+    // on the cycle itself, which is the part that changes week-to-week planning:
+    // a 1.5 kg jump the week before a period is water and must not be read as a
+    // stalled plan, and cycle-driven cravings are an adherence problem the plan
+    // can be built around rather than a failure of willpower.
+    // Gated on gender rather than asked of everyone — a male client answering
+    // "Not applicable" four times is four questions of wasted call time.
+    {
+      id: "q66_cycle", n: 21, tag: "clinical", type: "single",
+      label: "Are your periods regular?",
+      options: [
+        "Regular (25–35 days)", "Irregular", "No period for 3+ months",
+        "Stopped — menopause", "No natural cycle — hormonal contraception",
+        "Prefer not to answer",
+      ],
+      showIf: (a) => is(a, "gender", "Female"),
+      note: "Never push. Move on the moment the client sounds uncomfortable.",
+    },
+    {
+      id: "q66_lmp", n: 21, tag: "conditional", type: "date",
+      label: "First day of the last period",
+      showIf: (a) =>
+        is(a, "gender", "Female") &&
+        answered(a, "q66_cycle") &&
+        !is(a, "q66_cycle", "Stopped — menopause") &&
+        !is(a, "q66_cycle", "Prefer not to answer"),
+      why: "Follow-up weight is read against the cycle — without this date, normal premenstrual water weight looks like a plateau.",
+    },
+    {
+      id: "q66_symptoms", n: 21, tag: "clinical", type: "multi",
+      label: "What changes around your period?",
+      options: [
+        "Increased appetite", "Sugar or carb cravings", "Bloating or water weight", "Fatigue",
+        "Low mood or irritability", "Poor sleep", "Digestive changes", "Headache or migraine",
+        "Painful cramps", "Heavy bleeding", "No noticeable change",
+      ],
+      showIf: (a) =>
+        is(a, "gender", "Female") && !is(a, "q66_cycle", "Prefer not to answer"),
+      note: "Heavy bleeding with fatigue is an iron and B12 question — check it against the blood-report answers in this section.",
+    },
+    {
+      id: "q66_phase", n: 21, tag: "conditional", type: "single",
+      label: "When is eating hardest?",
+      options: ["Week before the period", "During bleeding", "Mid-cycle", "No particular pattern"],
+      showIf: (a) =>
+        is(a, "gender", "Female") && hasOther(a, "q66_symptoms", ["No noticeable change"]),
+      why: "Names the days the plan has to survive — that is when the higher-protein, higher-volume meals and the planned treat belong.",
+    },
+    {
+      id: "q66_contraception", n: 21, tag: "clinical", type: "single",
+      label: "Hormonal contraception or hormone treatment",
+      options: [
+        "None", "Combined pill", "Progestin-only pill", "Hormonal IUD", "Injection or implant",
+        "HRT", "Fertility treatment", "Prefer not to answer",
+      ],
+      showIf: (a) => is(a, "gender", "Female"),
+      note: "Several of these drive appetite and water retention on their own — worth knowing before a stall gets blamed on the plan.",
+    },
+
     // CARRIED OVER from the pre-v3.0 bank. v3.0 Section 1 has no equivalent,
     // and each of these is the sole trigger for a clinical red flag that would
     // otherwise stop firing entirely (see scripts/tests/clinical-rules.test.mts).
@@ -869,30 +913,6 @@ const S5: Section = {
       ],
     },
     {
-      // Was a multi-select of stool experience. v3.0 asks for one consistency, so
-      // pain and incomplete emptying become their own yes/no fields rather than
-      // options buried in a list.
-      id: "q25a", n: 22, tag: "clinical", type: "single", label: "Consistency",
-      options: ["Normal", "Hard", "Loose", "Mixed"],
-    },
-    {
-      id: "q25b", n: 22, tag: "clinical", type: "single", label: "Pain",
-      options: ["Yes", "No"],
-    },
-    {
-      id: "q25c", n: 22, tag: "clinical", type: "single", label: "Incomplete emptying",
-      options: ["Yes", "No"],
-    },
-    {
-      id: "q108", n: 23, tag: "clinical", type: "multi",
-      label: "How would you classify each food that you cannot eat or that causes symptoms?",
-      options: [
-        "Medically Diagnosed Allergy", "Suspected Allergy", "Food Intolerance",
-        "Digestive Trigger", "Other Reaction",
-      ],
-      why: "A diagnosed allergy is a zero-tolerance exclusion; an intolerance is a dose and timing decision. Recording which is which stops the plan over-restricting.",
-    },
-    {
       id: "q27", n: 23, tag: "clinical", type: "multi", required: true,
       label: "Do you have any known food allergy?",
       // v3.0 leaves the allergen list free text. The named major allergens are
@@ -903,6 +923,16 @@ const S5: Section = {
         "Shellfish", "Sesame", "Other",
       ],
       note: "An allergen must never appear in any meal, in any form or preparation.",
+    },
+    {
+      // Asked in the client's own words before the severity band, because
+      // "throat tightens" and "stomach feels heavy" are both called severe by
+      // clients and only one of them is an emergency.
+      id: "q27d", n: 23, tag: "clinical", type: "textarea",
+      label: "What happens when they eat it?",
+      placeholder: "e.g. Egg — lips swell and throat tightens within minutes; Peanut — hives and vomiting",
+      showIf: (a) => hasOther(a, "q27", ["No known allergy"]),
+      note: "One line per allergen. Record the reaction as described, then classify it below.",
     },
     {
       id: "q27a", n: 23, tag: "clinical", type: "single", label: "Reaction severity",
@@ -956,7 +986,13 @@ const S5: Section = {
 };
 
 // ---------------------------------------------------------------------------
-// STAGE 6 — DETAILED DIETARY INTAKE & HABITUAL FOOD PATTERN (Q24–Q29)
+// STAGE 6 — DIETARY INTAKE, FOOD PATTERN & PROTEIN (Q24–Q29, Q33, Q50)
+//
+// The food pattern (q33) and the protein measurement (q50 and its per-food
+// follow-ups) used to be a section of their own after this one. They are here
+// now: a client who has just spent fifteen minutes describing what they eat and
+// is then asked about food again, in a different format, hears a second
+// interrogation — and re-derived answers drift from the ones already given.
 //
 // Occasion keys are kept from the current bank wherever the occasion survived,
 // so the per-occasion answer keys (q28_lunch_food and friends) keep pointing at
@@ -984,14 +1020,14 @@ function mealTimelineQuestions(): Question[] {
     const show = (a: Answers) => has(a, "q28", label);
     out.push(
       {
-        id: `q28_${key}_time`, n: 24, tag: "conditional", type: "time",
+        id: `q28_${key}_time`, n: 24, group: `q28_${key}`, tag: "conditional", type: "time",
         label: `${label} — exact or approximate time`, showIf: show,
       },
       {
         // Tap-to-count staples. Offered BEFORE the free text because this is
         // the one that carries the client's carbohydrate: everything the
         // estimate needs can be recorded here without typing a word.
-        id: stapleQuestionId(key), n: 24, tag: "conditional", type: "portions",
+        id: stapleQuestionId(key), n: 24, group: `q28_${key}`, tag: "conditional", type: "portions",
         label: `${label} — staples and how many`,
         options: STAPLE_LABELS,
         note:
@@ -1004,7 +1040,7 @@ function mealTimelineQuestions(): Question[] {
         // prefers tapping is never blocked on typing. Still the place for
         // everything the picker cannot hold — tea with sugar, a named sabzi,
         // outside food — and it is what the model reads as the food day.
-        id: `q28_${key}_food`, n: 24, tag: "conditional", type: "textarea",
+        id: `q28_${key}_food`, n: 24, group: `q28_${key}`, tag: "conditional", type: "textarea",
         required: (a: Answers) => list(a, stapleQuestionId(key)).length === 0,
         label: `${label} — anything else, with quantity`,
         placeholder: "e.g. tea with 1 tsp sugar · bhindi sabzi 1 katori · 2 samosas",
@@ -1012,28 +1048,28 @@ function mealTimelineQuestions(): Question[] {
         showIf: show,
       },
       {
-        id: `q28_${key}_prep`, n: 24, tag: "conditional", type: "multi",
+        id: `q28_${key}_prep`, n: 24, group: `q28_${key}`, tag: "conditional", type: "multi",
         label: `${label} — cooking method`, options: PREPARATION, showIf: show,
       },
       {
         // Doubles as v3.0's "Location" — where the food came from and where it
         // was eaten are the same answer for almost every occasion.
-        id: `q28_${key}_source`, n: 24, tag: "conditional", type: "single",
+        id: `q28_${key}_source`, n: 24, group: `q28_${key}`, tag: "conditional", type: "single",
         label: `${label} — food source`, options: FOOD_SOURCE, showIf: show,
       },
       {
-        id: `q28_${key}_extras`, n: 24, tag: "conditional", type: "multi",
+        id: `q28_${key}_extras`, n: 24, group: `q28_${key}`, tag: "conditional", type: "multi",
         label: `${label} — added oil/ghee, sugar, sauces & condiments`,
         options: EXTRA_COMPONENTS, showIf: show,
       },
       {
-        id: `q28_${key}_beverage`, n: 24, tag: "conditional", type: "text",
+        id: `q28_${key}_beverage`, n: 24, group: `q28_${key}`, tag: "conditional", type: "text",
         label: `${label} — beverage`,
         placeholder: "e.g. tea with 1 tsp sugar; buttermilk; water only",
         showIf: show,
       },
       {
-        id: `q28_${key}_unplanned`, n: 24, tag: "conditional", type: "single",
+        id: `q28_${key}_unplanned`, n: 24, group: `q28_${key}`, tag: "conditional", type: "single",
         label: `${label} — planned or unplanned?`,
         options: ["Planned", "Unplanned", "Partly unplanned"],
         showIf: show,
@@ -1043,15 +1079,64 @@ function mealTimelineQuestions(): Question[] {
   return out;
 }
 
+// Q50 records WHICH protein foods the client eats; these follow-ups record HOW
+// OFTEN and HOW MUCH, which is what turns the selection into a measured intake
+// (see src/lib/protein-intake.ts). One pair per food, shown whenever that food
+// is selected in Q50. Selection is the only condition on purpose: the food
+// pattern already narrows what Q50 offers, and gating these on it as well would
+// leave a food the dietitian deliberately selected impossible to measure.
+function proteinFrequencyQuestions(): Question[] {
+  const out: Question[] = [];
+  for (const food of PROTEIN_FOODS) {
+    const show = (a: Answers) => has(a, "q50", food.label);
+    out.push(
+      {
+        id: freqQuestionId(food.id), group: `q50p_${food.id}`, tag: "planning", type: "single",
+        label: `${food.label} — how often?`,
+        options: FREQUENCY_OPTIONS.map((f) => f.label),
+        showIf: show,
+      },
+      {
+        id: portionQuestionId(food.id), group: `q50p_${food.id}`, tag: "planning", type: "single",
+        label: `${food.label} — portion each time`,
+        // The whole portion, not just its protein: a dietitian choosing "3 or
+        // more portions" of chicken curry is committing the client to the fat
+        // and calories too, and that should be visible at the moment they
+        // choose it rather than only in the panel further down.
+        note:
+          `Standard portion: ${food.portion} — ${food.proteinPerPortion} g protein · ` +
+          `${food.carbsPerPortion} g carbs · ${food.fatPerPortion} g fat · ` +
+          `${food.kcalPerPortion} kcal. Leave blank if standard.`,
+        options: PORTION_OPTIONS.map((p) => p.label),
+        showIf: show,
+      }
+    );
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+
 const S6: Section = {
   id: "foodday",
   code: "6",
-  title: "Detailed dietary intake & habitual food pattern",
+  title: "Dietary intake, food pattern & protein",
   stage: "Diet",
-  minutes: "14–16 min",
+  minutes: "18–22 min",
   intro:
-    "Q24 is yesterday, occasion by occasion, waking to sleeping. Q25 is what a normal week looks like. Both are needed — one recalled day is not habitual intake and must not be treated as the client's usual calories.",
+    "One food conversation, in the order the client thinks about it: the pattern they follow, yesterday occasion by occasion, then a normal week — and only then the protein count, ticked off from the day already described rather than asked again from scratch. The recall is yesterday; the weekday description is what happens most days. One recalled day is not habitual intake and must not be treated as the client's usual calories.",
   questions: [
+    {
+      // Opens the food conversation: it is the first thing a client volunteers
+      // about their diet, and it decides which protein foods are offered later
+      // in this same section.
+      id: "q33", n: 33, tag: "core", type: "single",
+      label: "What food pattern do you follow?",
+      options: [
+        "Vegetarian", "Eggetarian", "Vegan", "Non-vegetarian", "Pescatarian",
+        "Flexitarian", "Jain", "Other",
+      ],
+    },
     {
       id: "q28", n: 24, tag: "core", type: "multi", required: true,
       label: "Eating occasions during the previous complete day",
@@ -1110,6 +1195,54 @@ const S6: Section = {
       options: ["High", "Moderate", "Low", "Additional Dietary Recall Required"],
       note: "Estimate calories from the habitual pattern and several data points. One reported day on its own does not support a calorie target.",
     },
+
+    // --- Protein, counted from the day just described -----------------------
+    // This used to be its own section, which meant the client finished a
+    // fifteen-minute account of what they eat and was then asked about food all
+    // over again in a different format. It reads as a second interrogation and
+    // the answers drift, because nobody re-derives the same day twice the same
+    // way. Kept here it is one conversation: the dietitian ticks the protein
+    // foods off the meals already on the table and only asks what is genuinely
+    // new — how often and how much.
+    {
+      id: "q50", n: 50, tag: "planning", type: "multi",
+      label: "Which protein foods are currently part of your diet?",
+      why: "Tick these off the day already described rather than asking again. Each one is then measured for frequency and portion and priced from the food database — that measurement, not a guess, is what the week-1 protein target is built from.",
+      // Narrowed to the recorded food pattern, so a vegetarian consultation is
+      // not a wall of chicken and fish, and nothing at all until Q33 says which
+      // pattern applies. Anything already selected still keeps its follow-up
+      // rows, even if the pattern is later changed.
+      optionsFor: (a) => {
+        const foods = foodsForPattern(a);
+        return foods.length === 0 ? [] : [...foods.map((f) => f.label), "Other"];
+      },
+      optionsEmptyHint:
+        "Answer “What food pattern do you follow?” at the top of this section first — the protein list is built from it.",
+      options: [
+        "Milk", "Curd", "Greek or high-protein yogurt", "Buttermilk or chaas", "Paneer",
+        "Tofu", "Soy chunks", "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans",
+        "Sprouts", "Roasted chana", "Nuts or seeds", "Eggs", "Chicken", "Fish",
+        "Seafood", "Meat", "Protein powder", "Other",
+      ],
+    },
+    ...proteinFrequencyQuestions(),
+    {
+      id: "q50a", tag: "planning", type: "single",
+      label: "Meals per day with a clear protein source",
+      options: ["0", "1", "2", "3", "4 or more", "Not sure"],
+    },
+    {
+      id: "q50b", tag: "planning", type: "multi", max: 3, label: "Protein barriers",
+      options: [
+        "Lack of knowledge", "Vegetarian pattern", "Vegan pattern", "Cooking", "Cost",
+        "Digestion", "Taste", "Low appetite", "Availability", "Family food pattern",
+        "Work schedule", "Carrying food", "Dislike protein foods", "Become too full",
+        "Protein-powder concern", "Kidney or liver concern", "Cultural restriction",
+        "No major barrier", "Other",
+      ],
+    },
+
+    // --- Back to the rest of the day: hidden calories ------------------------
     {
       id: "q110", n: 28, tag: "core", type: "multi",
       label: "What cooking fats and additions are commonly used in your household?",
@@ -1193,114 +1326,29 @@ const S6: Section = {
 // STAGE 7 — FOOD PREFERENCES, CULTURAL HABITS & HOUSEHOLD FEASIBILITY (Q30–Q35)
 //
 // v3.0's Q30 also asks the food pattern (vegetarian / eggetarian / …). That is
-// q33 in the protein section, which stays untouched — the protein food list is
-// built from it, so it is asked there and not repeated here.
+// q33, asked at the top of the food-intake section with the protein questions
+// it gates, so it is not repeated here.
 // ---------------------------------------------------------------------------
 
-
-// Q50 records WHICH protein foods the client eats; these follow-ups record HOW
-// OFTEN and HOW MUCH, which is what turns the selection into a measured intake
-// (see src/lib/protein-intake.ts). One pair per food, shown whenever that food
-// is selected in Q50. Selection is the only condition on purpose: the food
-// pattern already narrows what Q50 offers, and gating these on it as well would
-// leave a food the dietitian deliberately selected impossible to measure.
-function proteinFrequencyQuestions(): Question[] {
-  const out: Question[] = [];
-  for (const food of PROTEIN_FOODS) {
-    const show = (a: Answers) => has(a, "q50", food.label);
-    out.push(
-      {
-        id: freqQuestionId(food.id), tag: "planning", type: "single",
-        label: `${food.label} — how often?`,
-        options: FREQUENCY_OPTIONS.map((f) => f.label),
-        showIf: show,
-      },
-      {
-        id: portionQuestionId(food.id), tag: "planning", type: "single",
-        label: `${food.label} — portion each time`,
-        // The whole portion, not just its protein: a dietitian choosing "3 or
-        // more portions" of chicken curry is committing the client to the fat
-        // and calories too, and that should be visible at the moment they
-        // choose it rather than only in the panel further down.
-        note:
-          `Standard portion: ${food.portion} — ${food.proteinPerPortion} g protein · ` +
-          `${food.carbsPerPortion} g carbs · ${food.fatPerPortion} g fat · ` +
-          `${food.kcalPerPortion} kcal. Leave blank if standard.`,
-        options: PORTION_OPTIONS.map((p) => p.label),
-        showIf: show,
-      }
-    );
-  }
-  return out;
-}
-
-// ---------------------------------------------------------------------------
+/**
+ * Practices that can carry a weekday rule — "no non-veg on Tuesday and
+ * Saturday", a fasting day, a no-onion-and-garlic day. Whichever is ticked, the
+ * three day questions (q38a–c) follow, and what they record is enforced per
+ * weekday when the plan is generated (see weekdayFoodRules in src/lib/nim.ts).
+ */
+const dayRuleAsked = (a: Answers) =>
+  has(a, "q38", "No non-vegetarian food on selected days") ||
+  has(a, "q38", "Fasting practice") ||
+  has(a, "q38", "Other");
 
 const S7: Section = {
-  id: "protein",
-  code: "7",
-  title: "Food pattern & protein intake",
-  stage: "Diet",
-  minutes: "5–7 min",
-  intro:
-    "The food pattern decides which protein foods are offered below. Recording how often and how much of each is what turns this into a measured intake — and the week-1 protein target is built from it, not guessed.",
-  questions: [
-    {
-      id: "q33", n: 33, tag: "core", type: "single",
-      label: "What food pattern do you follow?",
-      options: [
-        "Vegetarian", "Eggetarian", "Vegan", "Non-vegetarian", "Pescatarian",
-        "Flexitarian", "Jain", "Other",
-      ],
-    },
-    {
-      id: "q50", n: 50, tag: "planning", type: "multi",
-      label: "Which protein foods are currently part of your diet?",
-      why: "Each one selected here is then measured for frequency and portion, and priced from the food database to estimate current protein intake. The list follows the food pattern recorded in Q33.",
-      // Narrowed to the recorded food pattern, so a vegetarian consultation is
-      // not a wall of chicken and fish, and nothing at all until Q33 says which
-      // pattern applies. Anything already selected still keeps its follow-up
-      // rows, even if the pattern is later changed.
-      optionsFor: (a) => {
-        const foods = foodsForPattern(a);
-        return foods.length === 0 ? [] : [...foods.map((f) => f.label), "Other"];
-      },
-      optionsEmptyHint:
-        "Answer “What food pattern do you follow?” at the top of this section first — the protein list is built from it.",
-      options: [
-        "Milk", "Curd", "Greek or high-protein yogurt", "Buttermilk or chaas", "Paneer",
-        "Tofu", "Soy chunks", "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans",
-        "Sprouts", "Roasted chana", "Nuts or seeds", "Eggs", "Chicken", "Fish",
-        "Seafood", "Meat", "Protein powder", "Other",
-      ],
-    },
-    ...proteinFrequencyQuestions(),
-    {
-      id: "q50a", tag: "planning", type: "single",
-      label: "Meals per day with a clear protein source",
-      options: ["0", "1", "2", "3", "4 or more", "Not sure"],
-    },
-    {
-      id: "q50b", tag: "planning", type: "multi", max: 3, label: "Protein barriers",
-      options: [
-        "Lack of knowledge", "Vegetarian pattern", "Vegan pattern", "Cooking", "Cost",
-        "Digestion", "Taste", "Low appetite", "Availability", "Family food pattern",
-        "Work schedule", "Carrying food", "Dislike protein foods", "Become too full",
-        "Protein-powder concern", "Kidney or liver concern", "Cultural restriction",
-        "No major barrier", "Other",
-      ],
-    },
-  ],
-};
-
-const S8: Section = {
   id: "preferences",
-  code: "8",
+  code: "7",
   title: "Food preferences, cultural habits & household feasibility",
   stage: "Diet",
   minutes: "8–10 min",
   intro:
-    "Household food first: the plan improves what is already cooked at home rather than introducing a second kitchen. Food pattern is recorded with the protein questions.",
+    "Household food first: the plan improves what is already cooked at home rather than introducing a second kitchen. Food pattern and protein intake are already recorded in the previous section — this is about what the household will actually cook and eat.",
   questions: [
     {
       id: "q34", n: 30, tag: "core", type: "multi", max: 3, required: true,
@@ -1335,12 +1383,17 @@ const S8: Section = {
         "Separate cooking not allowed", "Ethical or environmental restriction",
         "Prefer not to answer", "Other",
       ],
+      why: "Weekday rules live here — “no non-veg on Tuesday and Saturday”, Navratri or Shravan fasts, no onion and garlic on certain days. Select the practice and the day questions open up; the plan then holds those weekdays, so this must be asked even when the client does not raise it.",
     },
+    // Shown for any answer that can carry a weekday rule, "Other" included — a
+    // practice the dietitian had to type as Other is exactly the one whose days
+    // would otherwise never be recorded.
     {
-      id: "q38a", n: 30, tag: "conditional", type: "multi", label: "On which days?",
+      id: "q38a", n: 30, tag: "conditional", type: "multi",
+      label: "On which days do these rules apply?",
       options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-      showIf: (a) =>
-        has(a, "q38", "No non-vegetarian food on selected days") || has(a, "q38", "Fasting practice"),
+      showIf: dayRuleAsked,
+      note: "Tuesday and Saturday are the usual pair, but confirm rather than assume — Monday, Thursday and Friday are all common too.",
     },
     {
       id: "q38b", n: 30, tag: "conditional", type: "multi", label: "What is avoided on those days?",
@@ -1348,14 +1401,16 @@ const S8: Section = {
         "Non-vegetarian food", "Eggs", "Onion & garlic", "All animal products",
         "Specific grains (fasting)", "Other",
       ],
-      showIf: (a) =>
-        has(a, "q38", "No non-vegetarian food on selected days") || has(a, "q38", "Fasting practice"),
+      showIf: dayRuleAsked,
+      // Days without a "what" enforce nothing: the plan checker matches food
+      // names against the avoided categories, so a day list on its own passes
+      // every meal silently.
+      required: (a) => list(a, "q38a").length > 0,
     },
     {
       id: "q38c", n: 30, tag: "conditional", type: "text", label: "Day-rule details",
-      placeholder: "e.g. Tuesdays & Thursdays — no non-veg or eggs; Navratri fasts",
-      showIf: (a) =>
-        has(a, "q38", "No non-vegetarian food on selected days") || has(a, "q38", "Fasting practice"),
+      placeholder: "e.g. Tuesdays & Saturdays — no non-veg or eggs; Navratri fasts",
+      showIf: dayRuleAsked,
       note: "These day rules are enforced per weekday in the generated plan, so vague answers produce wrong days.",
     },
     {
@@ -1441,9 +1496,9 @@ const S8: Section = {
 // by several hundred calories a day on everything else.
 // ---------------------------------------------------------------------------
 
-const S9: Section = {
+const S8: Section = {
   id: "neat",
-  code: "9",
+  code: "8",
   title: "Daily activity & NEAT",
   stage: "Lifestyle",
   minutes: "5–6 min",
@@ -1532,9 +1587,9 @@ const S9: Section = {
 
 const isTraining = (a: Answers) => hasOther(a, "q43", ["Currently not exercising"]);
 
-const S10: Section = {
+const S9: Section = {
   id: "training",
-  code: "10",
+  code: "9",
   title: "Exercise, training & recovery",
   stage: "Fitness",
   minutes: "8–10 min",
@@ -1730,9 +1785,9 @@ const S10: Section = {
 // STAGE 10 — HUNGER & EATING BEHAVIOUR (Q46–Q52)
 // ---------------------------------------------------------------------------
 
-const S11: Section = {
+const S10: Section = {
   id: "routine",
-  code: "11",
+  code: "10",
   title: "Hunger & eating behaviour",
   stage: "Behaviour",
   minutes: "6–8 min",
@@ -1888,9 +1943,9 @@ const S11: Section = {
 // STAGE 11 — SLEEP, STRESS, HYDRATION & LIFESTYLE (Q53–Q58)
 // ---------------------------------------------------------------------------
 
-const S12: Section = {
+const S11: Section = {
   id: "lifestyle",
-  code: "12",
+  code: "11",
   title: "Sleep, stress, hydration & lifestyle",
   stage: "Lifestyle",
   minutes: "6–7 min",
@@ -1943,7 +1998,7 @@ const S12: Section = {
         "Less than 1 litre", "1–1.5 litres", "1.5–2 litres", "2–3 litres", "More than 3 litres",
         "Not sure",
       ],
-      note: "If a fluid restriction was recorded at Q20, that ceiling wins over any hydration target.",
+      note: "If a doctor-given fluid restriction was recorded in the medical section, that ceiling wins over any hydration target.",
     },
     {
       id: "q63c", n: 55, tag: "core", type: "text", label: "Other fluids",
@@ -2048,9 +2103,9 @@ const S12: Section = {
 // STAGE 12 — ADHERENCE, MINDSET & SUCCESS STRATEGY (Q59–Q64)
 // ---------------------------------------------------------------------------
 
-const S13: Section = {
+const S12: Section = {
   id: "coaching",
-  code: "13",
+  code: "12",
   title: "Adherence, mindset & success strategy",
   stage: "Behaviour",
   minutes: "5–6 min",
@@ -2154,14 +2209,21 @@ const S13: Section = {
 // ---------------------------------------------------------------------------
 
 
-const S14: Section = {
+const S13: Section = {
   id: "assessment",
-  code: "14",
+  code: "13",
   title: "Dietitian professional assessment",
   stage: "Assessment",
-  minutes: "8–10 min",
+  minutes: "3–4 min",
   intro:
-    "IMPORTANT: these answers are your professional hypothesis, not automatically the final LeanR nutrition strategy. The AI independently analyses the complete client data before accepting, modifying or replacing it.",
+    "IMPORTANT: these answers are your professional hypothesis, not automatically the final LeanR nutrition strategy. The AI independently analyses the complete client data before accepting, modifying or replacing it — the one exception is the hard constraints, which it must obey.",
+  // Trimmed from ~50 questions to five. The long version asked the dietitian to
+  // restate, in structured form, judgements the AI derives from the client data
+  // it already has — forty minutes of counselling followed by ten of form-filling,
+  // most of it a hypothesis the AI is explicitly told to test rather than follow.
+  // What survives is what the AI cannot derive: the dietitian's read of the case,
+  // what they believe is holding the client back, the smallest changes they would
+  // make, the energy direction, and the rules the plan may not break.
   questions: [
     {
       id: "ds1", tag: "planning", type: "textarea",
@@ -2209,171 +2271,6 @@ const S14: Section = {
       ],
     },
     {
-      id: "q78", n: 78, tag: "planning", type: "textarea",
-      label: "Current foods or habits that should be retained / protected (up to 5)",
-      placeholder: "Review the client's favourites (Q35), non-negotiables (Q37) and cultural foods (Q38). Write “none” if nothing requires protection.",
-    },
-    {
-      id: "q79", n: 79, tag: "clinical", type: "multi",
-      label: "Is there a risk of unnecessary food restriction?",
-      options: [
-        "No unnecessary restriction identified", "Client fears carbohydrates",
-        "Client fears rice", "Client fears roti", "Client fears fruit",
-        "Client fears dietary fat", "Client fears eating after a specific time",
-        "Previous restriction-regain cycle", "Client expects an overly strict diet",
-        "Client frequently skips meals", "Client compensates after off-plan eating",
-        "Food reintroduction may be required", "Senior review required",
-      ],
-    },
-    {
-      id: "q80", n: 80, tag: "planning", type: "single",
-      label: "Professional transformation objective you recommend",
-      options: [
-        "Fat loss", "Weight loss", "Fat loss with muscle preservation", "Body recomposition",
-        "Muscle gain", "Lean mass gain", "Healthy weight gain", "Performance improvement",
-        "Metabolic health improvement", "Plateau management", "Nutrition stabilisation",
-        "Further assessment required", "Other",
-      ],
-    },
-    {
-      id: "q81", n: 81, tag: "planning", type: "single",
-      label: "Transformation phase the client is currently in",
-      options: [
-        "Nutrition stabilisation or foundation", "Fat-loss phase", "Controlled weight-loss phase",
-        "Body-recomposition phase", "Muscle-preservation phase", "Lean-gain phase",
-        "Healthy weight-gain phase", "Performance-fuelling phase", "Recovery-support phase",
-        "Clinical or metabolic nutrition support", "Maintenance or lifestyle restructuring",
-        "Further assessment required",
-      ],
-    },
-    {
-      id: "q82a", n: 82, tag: "planning", type: "number",
-      label: "Initial weight target you recommend (kg)", note: "Leave blank for no numerical initial target.",
-    },
-    {
-      id: "q82b", tag: "planning", type: "number",
-      label: "Long-term weight target (kg)", note: "Leave blank to reassess later / no numerical target.",
-    },
-    {
-      id: "q82c", tag: "planning", type: "single", label: "Assessment of the client's own target",
-      options: [
-        "Client target appears appropriate", "Client target appears aggressive",
-        "Client target appears unrealistic in requested timeline",
-        "Initial target should differ from final target", "Weight should not be the primary target",
-        "Weight maintenance with recomposition may be preferred", "Weight gain may be appropriate",
-        "More assessment required",
-      ],
-    },
-    {
-      id: "q83", n: 83, tag: "planning", type: "multi", max: 5,
-      label: "Why do you recommend this target?",
-      options: [
-        "Current weight and height context", "Current body-fat level",
-        "Central fat or waist concern", "Muscle-preservation priority", "Muscle-gain priority",
-        "Body-recomposition objective", "Previous comfortable weight",
-        "Previous sustainable weight", "Previous rapid weight loss", "Previous weight regain",
-        "Restriction-regain history", "Current intake appears low", "Current intake appears high",
-        "Possible under-fuelling", "Training demand", "Strength objective",
-        "Performance objective", "Recovery concern", "Medical condition",
-        "Blood-report finding", "Medication consideration",
-        "Menstrual or reproductive consideration", "Client timeline appears aggressive",
-        "Sustainability concern", "Adherence concern", "More data required", "Other",
-      ],
-    },
-    {
-      id: "q83a", tag: "planning", type: "single", label: "Target confidence",
-      options: [
-        "High — sufficient baseline information", "Moderate — reassess after 2 weeks",
-        "Moderate — body-composition data required", "Moderate — blood reports required",
-        "Low — initial target only", "Target intentionally not numerically fixed",
-      ],
-    },
-    {
-      id: "q84", n: 84, tag: "planning", type: "single",
-      label: "Body-composition direction you recommend",
-      options: [
-        "Reduce body fat", "Reduce fat while preserving muscle",
-        "Reduce fat while increasing muscle", "Maintain body fat and increase muscle",
-        "Increase lean mass", "Maintain current composition", "Body recomposition",
-        "Insufficient data for numerical target", "Trend monitoring preferred",
-      ],
-    },
-    {
-      id: "q84a", tag: "planning", type: "text", label: "Body-fat target",
-      placeholder: "exact %, range, or “no numerical target”",
-    },
-    {
-      id: "q84b", tag: "planning", type: "single", label: "Muscle direction",
-      options: ["Preserve", "Increase", "Monitor", "Insufficient data"],
-    },
-    {
-      id: "q84c", tag: "planning", type: "single", label: "Visceral-fat direction",
-      options: ["Reduce", "Maintain", "Monitor", "Insufficient data"],
-    },
-    {
-      id: "q85", n: 85, tag: "planning", type: "multi",
-      label: "Measurement targets that are professionally relevant",
-      options: [
-        "Waist", "Hip", "Chest", "Arm", "Thigh", "Overall inches", "Clothing fit",
-        "No measurement target", "Baseline measurement required",
-      ],
-    },
-    {
-      id: "q85a", tag: "planning", type: "textarea", label: "Numeric measurement targets",
-      placeholder: "e.g. waist 34 → 31 in; overall −4 inches",
-      showIf: (a) => hasOther(a, "q85", ["No measurement target", "Baseline measurement required"]),
-    },
-    {
-      id: "q86", n: 86, tag: "fitness", type: "multi", max: 3,
-      label: "Fitness or performance objectives that should influence nutrition planning",
-      options: [
-        "Improve strength", "Improve workout energy", "Improve training performance",
-        "Improve training consistency", "Improve stamina", "Improve running performance",
-        "Improve sports performance", "Improve recovery", "Reduce workout fatigue",
-        "Support hypertrophy", "Maintain performance during fat loss", "Return to training",
-        "No specific performance target", "Other",
-      ],
-    },
-    {
-      id: "q87a", n: 87, tag: "planning", type: "single", label: "Initial strategy period",
-      options: ["1 week", "2 weeks", "3 weeks", "4 weeks"],
-    },
-    {
-      id: "q87b", tag: "planning", type: "single", label: "First reassessment",
-      options: ["1 week", "2 weeks", "3 weeks", "4 weeks"],
-    },
-    {
-      id: "q87c", tag: "planning", type: "single", label: "Initial target timeline",
-      options: ["4–6 weeks", "6–8 weeks", "8–12 weeks", "3–6 months", "More than 6 months", "Progress dependent"],
-    },
-    {
-      id: "q87d", tag: "planning", type: "single", label: "Long-term transformation period",
-      options: [
-        "Less than 3 months", "3–6 months", "6–9 months", "9–12 months",
-        "More than 12 months", "Cannot estimate yet",
-      ],
-    },
-    {
-      id: "q87e", tag: "planning", type: "single", label: "Timeline assessment",
-      options: [
-        "Client timeline appears realistic", "Aggressive", "Unrealistic", "Keep flexible",
-        "Clinical progress dependent", "Training adaptation dependent",
-        "Body-composition trend dependent", "Adherence data required",
-      ],
-    },
-    {
-      id: "q88", n: 88, tag: "planning", type: "multi", max: 5,
-      label: "Markers that should define transformation success",
-      note: RANK_NOTE,
-      options: [
-        "Weight", "Rate of weight change", "Body-fat trend", "Waist", "Overall inches",
-        "Progress photographs", "Clothing fit", "Muscle mass", "Strength",
-        "Workout performance", "Stamina", "Recovery", "Energy", "Hunger control",
-        "Digestive comfort", "Blood markers", "Menstrual or reproductive health",
-        "Diet adherence", "Sustainable routine", "Other",
-      ],
-    },
-    {
       id: "q89", n: 89, tag: "planning", type: "single",
       label: "Energy strategy you currently believe is appropriate",
       options: [
@@ -2385,236 +2282,106 @@ const S14: Section = {
       ],
     },
     {
-      id: "q90", n: 90, tag: "planning", type: "single", label: "Muscle priority",
-      options: [
-        "Standard", "Moderate", "High", "Critical due to restriction or low intake",
-        "Muscle gain is primary",
-      ],
-    },
-    {
-      id: "q90a", tag: "planning", type: "single", label: "Performance priority",
-      options: ["Low", "Moderate", "High", "Primary strategy driver"],
-    },
-    {
-      id: "q91", n: 91, tag: "planning", type: "multi", max: 3,
-      label: "First three nutrition priorities you recommend",
-      note: RANK_NOTE,
-      options: [
-        "Meal regularity", "Energy intake", "Protein quantity", "Protein distribution",
-        "Breakfast quality", "Lunch quality", "Dinner quality", "Snack structure",
-        "Carbohydrate quality", "Carbohydrate timing", "Fat quality", "Fibre",
-        "Fruit or vegetable variety", "Hydration", "Workout fuelling", "Post-workout nutrition",
-        "Recovery nutrition", "Appetite management", "Hunger management",
-        "Craving management", "Digestive strategy", "Weekend strategy", "Travel strategy",
-        "Restaurant strategy", "Meal preparation", "Nutrition education",
-        "Clinical strategy", "Other",
-      ],
-    },
-    {
-      id: "q92", n: 92, tag: "planning", type: "single", label: "Current protein assessment",
-      options: [
-        "Very low", "Low", "Moderate but poorly distributed",
-        "Moderate and reasonably distributed", "Likely adequate", "High", "Unable to assess",
-      ],
-    },
-    {
-      id: "q92a", tag: "planning", type: "multi", label: "Main protein gap",
-      options: [
-        "Total quantity", "Breakfast", "Lunch", "Dinner", "Snack", "Pre-workout",
-        "Post-workout", "Vegetarian protein variety", "Availability", "Affordability",
-        "Tolerance", "No major gap",
-      ],
-    },
-    {
-      id: "q92b", tag: "planning", type: "multi", label: "Recommended protein direction",
-      options: [
-        "Increase total protein", "Improve distribution", "Improve breakfast protein",
-        "Improve lunch protein", "Improve around-training protein",
-        "Improve post-workout protein", "Improve dinner protein", "Add high-protein snacks",
-        "Improve vegetarian variety", "Consider supplement", "Current pattern appears adequate",
-      ],
-    },
-    {
-      id: "q92c", tag: "planning", type: "single", label: "Supplement opinion",
-      options: [
-        "Not required", "Optional convenience", "Consider due to protein gap",
-        "Consider due to training", "Current product appears appropriate",
-        "Product or dose review required", "Avoid until clinical clarification",
-        "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q93", n: 93, tag: "planning", type: "multi", label: "Carbohydrate strategy",
-      options: [
-        "Maintain current pattern", "Reduce excessive portions", "Improve quality",
-        "Improve distribution", "Increase around training",
-        "Increase total carbohydrate availability", "Reduce refined carbohydrate frequency",
-        "Training-day adjustment", "Glycaemic consideration", "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q94", n: 94, tag: "planning", type: "multi", label: "Fat strategy",
-      options: [
-        "Maintain current pattern", "Reduce visible oil or ghee", "Standardise cooking fat",
-        "Improve fat quality", "Reduce fried food", "Reduce high-fat outside food",
-        "Increase appropriate healthy fats", "Clinical modification required",
-        "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q95", n: 95, tag: "planning", type: "multi", label: "Fibre & digestive strategy",
-      options: [
-        "Maintain current pattern", "Increase vegetables", "Increase fruit", "Increase legumes",
-        "Increase whole grains", "Increase food variety", "Gradual fibre increase",
-        "Modify trigger foods temporarily", "Digestive symptom strategy required",
-        "Clinical gastrointestinal modification required", "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q96", n: 96, tag: "planning", type: "multi", label: "Hydration strategy",
-      options: [
-        "Maintain current intake", "Increase total fluids", "Improve fluid distribution",
-        "Improve workout hydration", "Electrolytes may be relevant", "Reduce sugary beverages",
-        "Clinical fluid restriction applies", "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q97", n: 97, tag: "fitness", type: "multi", label: "Workout & recovery strategy",
-      options: [
-        "No specific modification", "Improve total energy intake", "Improve protein intake",
-        "Improve protein distribution", "Improve carbohydrate availability",
-        "Improve pre-workout nutrition", "Improve post-workout nutrition", "Improve hydration",
-        "Add electrolyte strategy where relevant", "Address sleep-related recovery",
-        "Possible under-fuelling correction", "Unsure — AI review required",
-      ],
-    },
-    {
-      id: "q98", n: 98, tag: "fitness", type: "multi", label: "Is PT coordination required?",
-      options: [
-        "Training timing", "Training frequency", "Training intensity", "Training volume or load",
-        "Workout energy", "Dizziness or weakness", "Recovery", "Injury or pain",
-        "Movement restriction", "Performance decline", "Hydration or sweat",
-        "Possible under-fuelling", "No coordination required",
-      ],
-    },
-    {
-      id: "q98a", tag: "fitness", type: "single", label: "Coordination priority",
-      options: ["Routine", "Important", "Urgent"],
-      showIf: (a) => hasOther(a, "q98", ["No coordination required"]),
-    },
-    {
-      id: "q99", n: 99, tag: "planning", type: "multi",
-      label: "Nutrition education areas that should be addressed",
-      options: [
-        "No significant issue", "Carbohydrate fear", "Rice or roti avoidance",
-        "Meal-timing misconception", "Fasting misconception", "Fruit or sugar concern",
-        "Dietary-fat fear", "Protein safety concern", "Protein-powder concern",
-        "Supplement dependency", "Detox belief", "Fasted-training belief",
-        "Social-media misinformation", "Other",
-      ],
-    },
-    {
-      id: "q99a", tag: "planning", type: "single", label: "Education approach",
-      options: [
-        "Clarify immediately", "Address gradually", "Retain familiar structure initially",
-        "Repeated education required", "Belief contributes to restrictive behaviour",
-      ],
-      showIf: (a) => hasOther(a, "q99", ["No significant issue"]),
-    },
-    {
-      id: "q100", n: 100, tag: "planning", type: "single",
-      label: "Diet structure you believe will fit the client best",
-      options: [
-        "Fixed structured diet", "Two options per meal", "Multiple meal options",
-        "Flexible food exchange", "Portion-based plan", "Habit-first plan",
-        "Macro-guided plan", "Hybrid structure", "Unsure — AI should determine",
-      ],
-    },
-    {
-      id: "q101", n: 101, tag: "planning", type: "scale10",
-      label: "Lifestyle Fit Score — how well does your proposed strategy fit the client's current life? (1–10)",
-    },
-    {
-      id: "q101a", tag: "conditional", type: "single", label: "Main fit concern",
-      options: [
-        "Too many changes", "Too much cooking", "Meal timing may be unrealistic", "Food cost",
-        "Food availability", "Travel", "Restaurant routine",
-        "Favourite foods not sufficiently protected", "Family compatibility", "Work routine", "Other",
-      ],
-      showIf: (a) => scaleAtMost(a, "q101", 7),
-    },
-    {
       id: "ds2", tag: "clinical", type: "textarea",
       label: "AI hard constraints — non-negotiable rules the AI must follow (one per line)",
       placeholder: "e.g. protein max 60 g/day per nephrologist; no fasting protocols; fluid cap 1.5 L",
       note: "Hard constraints override every other strategy choice except a doctor's instruction.",
     },
-    {
-      id: "ds3", tag: "planning", type: "textarea",
-      label: "Foods the AI must not force — with the nutritional objective needing an alternative",
-      placeholder: "e.g. client refuses paneer → protein objective via dal/soy; no raw salad → vegetables cooked",
-    },
-    {
-      id: "ds4", tag: "planning", type: "textarea",
-      label: "Special instruction to AI (optional)",
-      placeholder: "Anything the AI must know that no structured field captures.",
-    },
   ],
 };
 
-const S15: Section = {
-  id: "discussion",
-  code: "15",
-  title: "Client strategy discussion",
-  stage: "Assessment",
-  minutes: "3–4 min",
-  intro:
-    "Explain only the broad professional hypothesis. Do NOT promise that this is the final AI-generated diet strategy.",
-  questions: [
-    {
-      id: "q102", n: 102, tag: "core", type: "single",
-      label: "Does the client understand the main factors currently believed to be affecting progress?",
-      options: ["Yes", "Partially", "No"],
-    },
-    {
-      id: "q103", n: 103, tag: "core", type: "single",
-      label: "Does the client feel the proposed first-phase direction is realistic?",
-      options: ["Yes", "Mostly", "No"],
-    },
-    {
-      id: "q103a", tag: "conditional", type: "single", label: "Main concern",
-      options: [
-        "Too many changes", "Food options", "Cooking", "Cost", "Work schedule", "Travel",
-        "Family compatibility", "Hunger concern", "Craving concern", "Training concern",
-        "Favourite foods", "Feels too restrictive", "Does not understand strategy", "Other",
-      ],
-      showIf: (a) => is(a, "q103", "Mostly") || is(a, "q103", "No"),
-    },
-    {
-      id: "q104", n: 104, tag: "core", type: "multi",
-      label: "Was your proposed direction modified after the client discussion?",
-      options: [
-        "No", "Reduced number of changes", "Changed meal structure", "Added flexibility",
-        "Added food options", "Reduced cooking requirement", "Added favourite food",
-        "Modified timing", "Added travel consideration", "Added restaurant consideration",
-        "Modified initial target", "Modified timeline", "Other",
-      ],
-    },
-    {
-      id: "q105", n: 105, tag: "core", type: "scale10",
-      label: "Client's final confidence after the counselling discussion (1–10)",
-      note: "8–10 high confidence · 6–7 moderate · ≤5 strategy fit requires review.",
-    },
-  ],
-};
 
 export const SECTIONS: Section[] = [
-  CLIENT, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14, S15,
+  CLIENT, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13,
 ];
 
 export const STAGES: Stage[] = [
   "Client", "Goals", "Clinical", "Diet", "Fitness", "Behaviour", "Lifestyle", "Assessment",
 ];
+
+// ---------------------------------------------------------------------------
+// DISPLAY NUMBERING — "12" for a question the dietitian asks, "12a", "12b" for
+// the follow-ups that belong to it.
+//
+// Derived from document order rather than stored on each question, because a
+// stored number is a number that goes stale: the bank has been reordered and
+// trimmed repeatedly, and hand-kept numbers ended up duplicated (five questions
+// all showing "Q7") and out of sequence. Deriving them means inserting or
+// removing a question renumbers everything for free, and no two questions can
+// ever show the same number.
+//
+// Numbers are computed over the WHOLE bank, not over what is currently visible,
+// so a number never changes while the dietitian is filling the form. The cost
+// is that a hidden conditional block leaves a gap in the sequence — the same
+// thing every paper clinical form does.
+// ---------------------------------------------------------------------------
+
+/** 1 → "a", 26 → "z", 27 → "aa". */
+const letter = (i: number): string => {
+  let out = "";
+  for (let n = i; n > 0; n = Math.floor((n - 1) / 26)) {
+    out = String.fromCharCode(97 + ((n - 1) % 26)) + out;
+  }
+  return out;
+};
+
+/** `q10a` extends `q10`; `q9_weight_high` extends `q9_weight`; `q11` extends neither. */
+const extendsBase = (id: string, base: string): boolean =>
+  base !== "" &&
+  id.length > base.length &&
+  id.startsWith(base) &&
+  /[a-z0-9_]/.test(id[base.length]);
+
+export const QUESTION_NUMBERS: Record<string, string> = (() => {
+  const out: Record<string, string> = {};
+  let main = 0;
+  let baseId = "";
+  let baseGroup: string | undefined;
+  let subs = 0;
+
+  for (const section of SECTIONS) {
+    // Client details are the record header, not part of the counselling.
+    if (section.id === "client") continue;
+    for (const q of section.questions) {
+      const sameGroup = q.group
+        ? q.group === baseGroup
+        : baseGroup === undefined && extendsBase(q.id, baseId);
+
+      if (sameGroup) {
+        subs += 1;
+        out[q.id] = `${main}${letter(subs)}`;
+        continue;
+      }
+      main += 1;
+      subs = 0;
+      baseId = q.id;
+      baseGroup = q.group;
+      out[q.id] = String(main);
+    }
+  }
+  return out;
+})();
+
+/** What the dietitian sees next to a question — "12" or "12a". */
+export const questionNumber = (id: string): string => QUESTION_NUMBERS[id] ?? "";
+
+/**
+ * Consultation length, added up from the sections rather than asserted. The
+ * header used to claim a fixed "55–65 min", which stopped being true the first
+ * time a section was trimmed and had no way of noticing.
+ */
+export const CONSULTATION_MINUTES: { low: number; high: number } = (() => {
+  let low = 0;
+  let high = 0;
+  for (const s of SECTIONS) {
+    const m = /(\d+)\s*[–-]\s*(\d+)/.exec(s.minutes ?? "");
+    if (m) {
+      low += Number(m[1]);
+      high += Number(m[2]);
+    }
+  }
+  return { low, high };
+})();
 
 /** Sections currently visible for these answers. */
 export function visibleSections(a: Answers): Section[] {
@@ -2637,7 +2404,7 @@ const REQUIRED_IDS = new Set<string>([
   // Client details
   "name", "gender", "phone",
   // 1 — Goal & motivation
-  "q1", "q2", "q4", "q7", "q8", "gr_dietitian", "gr_client",
+  "q1", "q2", "q4", "q8", "gr_dietitian", "gr_client",
   // 2 — Body & transformation history
   "q9_age", "q9_height", "q9_weight", "q10", "q12", "q13", "q14",
   // 3 — Medical & clinical safety
@@ -2656,11 +2423,8 @@ const REQUIRED_IDS = new Set<string>([
   "q61", "q61a", "q62", "q63", "q64", "q65", "q67",
   // 10 — Success & coaching
   "q68", "q69", "q70", "q71", "q72", "q73", "q74", "q75",
-  // 11 — Dietitian assessment
-  "q76", "q77", "q79", "q80", "q81", "q82c", "q83a", "q84", "q87a", "q87b",
-  "q89", "q90", "q91", "q92", "q100", "q101",
-  // 12 — Client discussion
-  "q102", "q103", "q105",
+  // 11 — Dietitian assessment (trimmed to five questions; the rest are gone)
+  "q76", "q77", "q89",
 ]);
 
 for (const s of SECTIONS)

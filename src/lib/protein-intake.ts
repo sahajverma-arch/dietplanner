@@ -502,7 +502,12 @@ function medicalProteinCap(a: Answers): string | null {
   if (/kidney|renal|nephro|dialysis|liver|hepatic|cirrhosis/.test(conditions)) {
     return "kidney or liver condition recorded";
   }
-  const constraints = `${val(a, "q104")} ${val(a, "q19a")}`.toLowerCase();
+  // ds2 is the hard-constraints box ("protein max 60 g/day per nephrologist" is
+  // its own placeholder); q19a is the medicines box, where a renal protein limit
+  // is often written instead. This read q104 — a multi-select about whether the
+  // strategy changed after the client discussion — so `val` returned "" every
+  // time and a typed protein limit never capped anything.
+  const constraints = `${val(a, "ds2")} ${val(a, "q19a")}`.toLowerCase();
   if (/protein\s*(max|limit|cap|restrict|≤|<)/.test(constraints)) {
     return "a protein limit is recorded in the clinical constraints";
   }
@@ -567,7 +572,7 @@ export function proteinTarget(
       weeksToGoal: 0,
       basis: "unmeasured",
       explanation:
-        "No protein-food frequency recorded yet — complete Q50 to measure current intake and set the target.",
+        "No protein-food frequency recorded yet — record how often each protein food is eaten to measure current intake and set the target.",
     };
   }
 
@@ -597,6 +602,6 @@ export function proteinTarget(
       `This week: ${stepped} g/day, a ${Math.round(((stepped - base) / Math.max(1, base)) * 100)}% step. ` +
       (goal > 0
         ? `Goal ${goal} g/day (${perKg} g/kg) — about ${weeksBetween(stepped, goal, step)} more weekly steps away.`
-        : `Record bodyweight (Q9) to set the long-term goal.`),
+        : `Record the client's current weight to set the long-term goal.`),
   };
 }

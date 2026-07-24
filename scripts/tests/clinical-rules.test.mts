@@ -48,8 +48,11 @@ const cases: Case[] = [
   ["clearance: legacy cr1 still flags", { cr1: ["Senior Dietitian review required"] }, "clearance", true],
   ["clearance: v3.0 q21c equivalent flags", { q21c: "Doctor Clearance Recommended" }, "clearance", true],
 
-  // --- pregnancy / ED
+  // --- pregnancy / cycle / ED
   ["pregnant", { q66: ["Pregnant"] }, "pregnant", true],
+  ["cycle: 3+ months absent flags", { q66_cycle: "No period for 3+ months" }, "3+ months", true],
+  ["cycle: regular must NOT flag", { q66_cycle: "Regular (25–35 days)" }, "3+ months", false],
+  ["cycle: menopause must NOT flag", { q66_cycle: "Stopped — menopause" }, "3+ months", false],
   ["ED risk", { q60: ["Self-induced vomiting"] }, "disordered", true],
   ["ED review: v3.0 wording", { q60a: "Senior Clinical Review" }, "eating-behaviour", true],
 ];
