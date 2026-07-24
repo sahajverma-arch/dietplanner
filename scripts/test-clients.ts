@@ -129,7 +129,7 @@ export const PRIYA: Answers = {
 
   // 8 — Routine & behaviour
   q54: "Homemaker", q54a: "Not applicable", q54b: "Flexible",
-  q54c: "Lightly active", q54d: "5000",
+  q54c: "Lightly active", q106: "5,000–8,000", q112: "5000",
   q55: ["Evening", "Social events"], q55a: ["Cravings", "Family routine"],
   q56: "High evening hunger",
   q57: ["Good", "Increased by stress"],
@@ -314,7 +314,7 @@ export const RAHUL: Answers = {
 
   // 8 — Routine & behaviour
   q54: "Desk-based", q54a: "Day", q54b: "Flexible",
-  q54c: "Mostly seated", q54d: "6000",
+  q54c: "Mostly seated", q106: "5,000–8,000", q112: "6000",
   q55: ["Evening", "Late night"], q55a: ["Cravings", "Training timing"],
   q56: "High night hunger",
   q57: ["Very strong", "Increased after training"],
@@ -502,7 +502,7 @@ export const SNEHA: Answers = {
 
   // 8 — Routine & behaviour
   q54: "Desk-based", q54a: "Day", q54b: "Fixed",
-  q54c: "Mostly seated", q54d: "5000",
+  q54c: "Mostly seated", q106: "5,000–8,000", q112: "5000",
   q55: ["Evening"], q55a: ["Cravings"],
   q56: "Moderate night hunger",
   q57: ["Moderate"],
@@ -693,7 +693,7 @@ export const AADI: Answers = {
 
   // 8 — Routine & behaviour
   q54: "Desk-based", q54a: "Day", q54b: "Fixed",
-  q54c: "Mostly seated", q54d: "7000",
+  q54c: "Mostly seated", q106: "5,000–8,000", q112: "7000",
   q55: ["Evening"], q55a: ["Training timing"],
   q56: "Moderate night hunger",
   q57: ["Moderate"],

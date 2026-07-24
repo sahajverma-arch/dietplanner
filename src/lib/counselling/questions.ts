@@ -412,18 +412,6 @@ const S2: Section = {
       why: "The reason it stopped last time is the failure mode this plan has to design around.",
     },
     {
-      // Was the rapid-weight-loss follow-up (q13c). Same information, now hung off
-      // the previous-attempts question because v3.0 has no separate rapid-loss
-      // question — the id is kept so the answers already stored still read.
-      id: "q13c", n: 10, tag: "clinical", type: "multi", label: "Problems experienced, if any",
-      options: [
-        "Hair Fall", "Weakness", "Constipation", "Dizziness", "Menstrual Changes", "Fatigue",
-        "Poor Workout Performance", "Weight Regain", "None", "Other",
-      ],
-      showIf: (a) => hasOther(a, "q12", ["Never Tried"]),
-      note: "Hair fall, menstrual changes or repeated weakness after a diet mean the previous deficit was too aggressive — stabilise before running another one.",
-    },
-    {
       id: "q16", n: 11, tag: "core", type: "multi",
       label:
         "Looking back, when were you healthiest or most consistent, and what helped you succeed?",
@@ -565,10 +553,6 @@ const S3: Section = {
       id: "q13_bf_conf", n: 13, tag: "planning", type: "single", label: "Body-fat confidence",
       options: ["High", "Moderate", "Low"],
       showIf: (a) => answered(a, "q15_bf"),
-    },
-    {
-      id: "q54d", n: 13, tag: "core", type: "number", label: "Average daily steps",
-      note: "Tracking source is recorded at Q38. Leave blank if the client has no step data at all.",
     },
     {
       id: "q13_meal_consistency", n: 13, tag: "planning", type: "scale10",
@@ -1282,7 +1266,7 @@ const S7: Section = {
         return foods.length === 0 ? [] : [...foods.map((f) => f.label), "Other"];
       },
       optionsEmptyHint:
-        "Answer Q33 “What food pattern do you follow?” (Section 6) first — the protein list is built from it.",
+        "Answer “What food pattern do you follow?” at the top of this section first — the protein list is built from it.",
       options: [
         "Milk", "Curd", "Greek or high-protein yogurt", "Buttermilk or chaas", "Paneer",
         "Tofu", "Soy chunks", "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans",

@@ -487,6 +487,18 @@ const DIET_TYPE: Record<string, DietType> = {
 const joinList = (a: Answers, id: string, drop: string[] = []) =>
   list(a, id).filter((v) => !drop.includes(v)).join(", ");
 
+/**
+ * Best available daily-steps figure. Steps live only in the activity/NEAT
+ * section now (they used to be re-asked as a number in the baseline section):
+ * prefer the exact weekday count (q112), fall back to the band (q106).
+ */
+const stepsLabel = (a: Answers): string => {
+  const weekday = val(a, "q112");
+  if (weekday) return `~${weekday} steps/day`;
+  const band = val(a, "q106");
+  return band && band !== "Don't Know" ? `${band} steps/day` : "";
+};
+
 export interface ClinicalIntake extends IntakeForm {
   /** Every answer, keyed by question id. */
   answers: Answers;
@@ -547,9 +559,7 @@ export function toIntake(a: Answers, appointmentId?: string | null): ClinicalInt
     intolerances,
     cookingTime: joinList(a, "q41"),
 
-    activityLevel: [val(a, "q54c"), val(a, "q54d") ? `~${val(a, "q54d")} steps/day` : ""]
-      .filter(Boolean)
-      .join(", "),
+    activityLevel: [val(a, "q54c"), stepsLabel(a)].filter(Boolean).join(", "),
     exercise,
     sleepHours: val(a, "q61"),
     wakeTime: val(a, "q28_wake_time") || val(a, "q28_breakfast_time"),
@@ -831,7 +841,9 @@ export function aiProfile(a: Answers): Block {
     shift: val(a, "q54a"),
     meal_breaks: val(a, "q54b"),
     daily_activity: val(a, "q54c"),
-    average_steps: val(a, "q54d"),
+    average_steps: val(a, "q106"),
+    weekday_steps: val(a, "q112"),
+    weekend_steps: val(a, "q112a"),
     commute: val(a, "q54e"),
     hardest_food_situations: list(a, "q55").filter((v) => v !== "No specific time"),
     hardest_reasons: list(a, "q55a"),
