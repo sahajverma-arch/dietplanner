@@ -1018,6 +1018,59 @@ function dayRuleAsked(a: Answers): boolean {
   );
 }
 
+// Substances that carry their own habit. One shared frequency across all of
+// them was wrong in a way that reached the plan: someone who smokes daily and
+// drinks occasionally has one honest answer per substance, not one for both,
+// and the intake read whatever was recorded as the ALCOHOL frequency.
+export const SUBSTANCES: { key: string; label: string }[] = [
+  { key: "alcohol", label: "Alcohol" },
+  { key: "cigarette", label: "Cigarette" },
+  { key: "vaping", label: "Vaping" },
+  { key: "chewing", label: "Chewing tobacco" },
+  { key: "other", label: "Other nicotine or tobacco" },
+];
+
+export const substanceFreqId = (key: string) => `q65_${key}_freq`;
+export const substanceQtyId = (key: string) => `q65_${key}_qty`;
+export const substanceContextId = (key: string) => `q65_${key}_context`;
+
+const SUBSTANCE_QUANTITY_HINT: Record<string, string> = {
+  alcohol: "e.g. 3–4 pegs of whisky per sitting",
+  cigarette: "e.g. 5 cigarettes a day",
+  vaping: "e.g. one pod every two days",
+  chewing: "e.g. 4 sachets a day",
+  other: "e.g. 2 cigars a week",
+};
+
+/** Frequency, quantity and context per substance actually selected. */
+function substanceQuestions(): Question[] {
+  const out: Question[] = [];
+  for (const { key, label } of SUBSTANCES) {
+    const show = (a: Answers) => has(a, "q65", label);
+    out.push(
+      {
+        id: substanceFreqId(key), n: 57, group: `q65_${key}`, tag: "conditional", type: "single",
+        label: `${label} — how often?`,
+        options: ["Daily", "4–6 times weekly", "2–3 times weekly", "Weekly", "Monthly", "Occasionally"],
+        showIf: show,
+      },
+      {
+        id: substanceQtyId(key), n: 57, group: `q65_${key}`, tag: "conditional", type: "text",
+        label: `${label} — how much each time?`,
+        placeholder: SUBSTANCE_QUANTITY_HINT[key] ?? "",
+        showIf: show,
+      },
+      {
+        id: substanceContextId(key), n: 57, group: `q65_${key}`, tag: "conditional", type: "multi",
+        label: `${label} — when does it happen?`,
+        options: ["Routine use", "Social", "Weekend", "Stress-related", "Travel", "Other"],
+        showIf: show,
+      }
+    );
+  }
+  return out;
+}
+
 function mealTimelineQuestions(): Question[] {
   const out: Question[] = [];
   for (const { key, label } of MEAL_OCCASIONS) {
@@ -1920,21 +1973,7 @@ const S11: Section = {
       ],
       note: "Record sensitively and without comment — a judged answer here is an inaccurate answer.",
     },
-    {
-      id: "q65a", n: 57, tag: "conditional", type: "single", label: "Frequency",
-      options: ["Daily", "4–6 times weekly", "2–3 times weekly", "Weekly", "Monthly", "Occasionally"],
-      showIf: (a) => hasOther(a, "q65", ["None", "Prefer not to answer"]),
-    },
-    {
-      id: "q65c", n: 57, tag: "conditional", type: "text", label: "Quantity",
-      placeholder: "e.g. 3–4 pegs of whisky per sitting; 5 cigarettes a day",
-      showIf: (a) => hasOther(a, "q65", ["None", "Prefer not to answer"]),
-    },
-    {
-      id: "q65b", n: 57, tag: "conditional", type: "multi", label: "Context",
-      options: ["Routine use", "Social", "Weekend", "Stress-related", "Travel", "Other"],
-      showIf: (a) => hasOther(a, "q65", ["None", "Prefer not to answer"]),
-    },
+    ...substanceQuestions(),
     {
       id: "q67", n: 58, tag: "core", type: "multi", required: true,
       label: "How often do travel and social situations affect your eating routine?",

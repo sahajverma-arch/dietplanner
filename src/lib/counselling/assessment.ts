@@ -10,6 +10,10 @@
 import type { DietType, IntakeForm } from "../types";
 import { emptyIntake } from "../types";
 import {
+  SUBSTANCES,
+  substanceContextId,
+  substanceFreqId,
+  substanceQtyId,
   answered,
   has,
   hasAny,
@@ -27,6 +31,23 @@ import {
   variantLabel,
   variantsQuestionId,
 } from "./meal-variants";
+
+/**
+ * One substance's habit in words — "Cigarette daily (5 a day)".
+ *
+ * Each substance carries its own frequency and amount. A single shared
+ * frequency was wrong in a way that reached the plan: a daily smoker who
+ * drinks twice a year was recorded as drinking daily.
+ */
+function substanceDetail(a: Answers, label: string): string {
+  const sub = SUBSTANCES.find((x) => x.label === label);
+  if (!sub || !has(a, "q65", label)) return "";
+  // Counsellings taken before the split recorded one frequency for
+  // everything; fall back to it so their intake still reads correctly.
+  const freq = val(a, substanceFreqId(sub.key)) || val(a, "q65a");
+  const qty = val(a, substanceQtyId(sub.key)) || val(a, "q65c");
+  return [label, freq && freq.toLowerCase(), qty && `(${qty})`].filter(Boolean).join(" ");
+}
 
 /**
  * The protein-bearing foods the client actually eats, read off the recorded
@@ -621,8 +642,19 @@ export function toIntake(a: Answers, appointmentId?: string | null): ClinicalInt
     wakeTime: val(a, "q28_wake_time") || val(a, "q28_breakfast_time"),
     bedTime: val(a, "q28_beforesleep_time"),
     waterIntakeLitres: val(a, "q63"),
-    smoking: tobacco || (has(a, "q65", "None") ? "No" : ""),
-    alcohol: has(a, "q65", "Alcohol") ? val(a, "q65a") || "Yes" : "No",
+    smoking:
+      SUBSTANCES.filter((x) => x.label !== "Alcohol")
+        .map((x) => substanceDetail(a, x.label))
+        .filter(Boolean)
+        .join("; ") ||
+      tobacco ||
+      (has(a, "q65", "None") ? "No" : ""),
+    // The ALCOHOL frequency specifically — this used to read whichever single
+    // frequency was recorded, so a daily smoker who drinks twice a year was
+    // passed to the plan as drinking daily.
+    alcohol: has(a, "q65", "Alcohol")
+      ? val(a, substanceFreqId("alcohol")) || val(a, "q65a") || "Yes"
+      : "No",
     eatingOutPerWeek: val(a, "q31"),
     workSchedule: [val(a, "q54"), val(a, "q54a"), val(a, "q54b")].filter(Boolean).join(" · "),
 
@@ -936,8 +968,11 @@ export function aiProfile(a: Answers): Block {
     stress_affects: list(a, "q62b").filter((v) => v !== "No noticeable effect"),
     fluid_intake: val(a, "q63"),
     alcohol_nicotine_tobacco: list(a, "q65").filter((v) => !["None", "Prefer not to answer"].includes(v)),
-    alcohol_tobacco_frequency: val(a, "q65a"),
-    alcohol_tobacco_situation: list(a, "q65b"),
+    // One entry per substance, each with its own frequency and amount.
+    alcohol_tobacco_detail: SUBSTANCES.map((x) => substanceDetail(a, x.label)).filter(Boolean),
+    alcohol_tobacco_situation: SUBSTANCES.flatMap((x) =>
+      list(a, substanceContextId(x.key))
+    ).concat(list(a, "q65b")),
     hormonal_reproductive: list(a, "q66").filter(
       (v) => !["Nothing relevant", "Not applicable", "Prefer not to answer"].includes(v)
     ),
