@@ -367,6 +367,115 @@ export function normName(s: string): string {
   return out || base;
 }
 
+// ---------------------------------------------------------------------------
+// Composite item names.
+//
+// The model often writes a whole dish as one item — "Whole wheat roti with
+// paneer and vegetable curry", "Yogurt with honey and walnuts". No food table
+// can hold those rows, and in a corpus audit every unmatched item name was one
+// of them: 29 of 160 names, whose meals then shipped the model's unverified
+// calorie estimate. Splitting them into their components makes each part
+// priceable from the database.
+//
+// Used ONLY when the whole name fails to match, so nothing that already
+// grounds is disturbed. The components are priced at one standard serving
+// each, because the item's single quantity ("1 plate") cannot be divided
+// between them — an assumption, but a database-backed one, and the meal-level
+// divergence checks below still catch a total that runs away.
+// ---------------------------------------------------------------------------
+
+const COMPOSITE_SEPARATOR = /\s+with\s+|\s+and\s+|\s*\+\s*|\s*,\s*|\s*&\s*/i;
+const COMPOSITE_MAX_PARTS = 4;
+
+export function splitComposite(name: string): string[] {
+  const parts = name
+    .split(COMPOSITE_SEPARATOR)
+    // "a, b, and c" splits at the comma first, leaving "and c" — the
+    // conjunction has to come off the front of the part as well.
+    .map((p) => normName(p.trim().replace(/^(and|with)\s+/i, "")))
+    .filter((p) => p.length >= 3);
+  // One part means it was never composite; too many means a sentence the
+  // model wrote as prose, where per-serving pricing stops being meaningful.
+  if (parts.length < 2 || parts.length > COMPOSITE_MAX_PARTS) return [];
+  return Array.from(new Set(parts));
+}
+
+// ---------------------------------------------------------------------------
+// Wrong-food guard.
+//
+// Trigram similarity scores spelling, not meaning, so it happily returns a
+// different food that reads alike: a corpus audit of saved plans found "Tofu
+// tikka" matched to Fish tikka, "Grapes with cheese" to Baked fish with cheese
+// sauce, and "Soy nuts" to Semolina ladoo with nuts. Those are worse than no
+// match at all — the meal ships confident macros for a food the client is not
+// eating, and on a vegetarian plan a fish row is not only a macro error.
+//
+// The rule is deliberately narrow: reject only when the query names a food
+// from one of these groups and the match names a food from a DIFFERENT,
+// mutually exclusive group without naming anything from the query's own. A
+// rejected match becomes an honest "unmatched", which falls back to the
+// model's estimate — so over-rejecting costs accuracy too, and anything
+// ambiguous is left alone.
+// ---------------------------------------------------------------------------
+
+const IDENTITY_GROUPS: { name: string; pattern: RegExp }[] = [
+  {
+    name: "vegetarian protein",
+    pattern: /\bpaneer|\btofu|\bsoya?\b|soy\b|\bdal\b|\blentils?\b|\bchana\b|\brajma\b|\bchole\b|chickpeas?|\bsprouts?\b|\bmoong\b/i,
+  },
+  {
+    name: "meat, fish or egg",
+    pattern: /\bchicken|\bmutton|\bfish\b|\bprawns?\b|\bseafood\b|\begg\b|\beggs\b|\bmeat\b|\bbeef\b|\bpork\b|\blamb\b|\bkeema\b|\bcrab\b/i,
+  },
+  {
+    name: "fruit",
+    pattern: /\bapple|\bbanana|\bgrapes?\b|\borange|\bpear\b|\bpineapple|\bmango|\bpapaya|\bguava|\bmelon|\bpomegranate/i,
+  },
+];
+
+/**
+ * Below this a fuzzy match is a guess, and must additionally prove it names
+ * the same food the query does. Exact and staple hits score well above it.
+ */
+export const CONFIDENT_SIMILARITY = 0.75;
+
+/**
+ * Why a match must be rejected as a different food, or null to accept it.
+ * Exported so the audit explains a rejection the same way grounding made it.
+ *
+ * Two strengths, because one threshold could not separate the real cases:
+ *
+ *   - Naming a DIFFERENT group is always fatal, however well it scores.
+ *     "Tofu tikka" -> Fish tikka is not a near miss.
+ *   - Naming NOTHING from the query's group is fatal only for a low-scoring
+ *     match. "Soy nuts" -> Semolina ladoo (0.56) is wrong, but "Rajma curry"
+ *     -> Kidney bean curry (Rajmah curry) (0.81) is right and only fails the
+ *     token test on a spelling variant — measured against the saved-plan
+ *     corpus, this split rejects all three bad matches and keeps that one.
+ */
+export function identityConflict(
+  query: string,
+  matchName: string,
+  similarity = 1
+): string | null {
+  const queryGroups = IDENTITY_GROUPS.filter((g) => g.pattern.test(query));
+  // No group named, or two named ("chicken omelette") — nothing is constrained.
+  if (queryGroups.length !== 1) return null;
+  const [wanted] = queryGroups;
+  if (wanted.pattern.test(matchName)) return null;
+
+  const conflicting = IDENTITY_GROUPS.find(
+    (g) => g !== wanted && g.pattern.test(matchName)
+  );
+  if (conflicting) {
+    return `matched "${matchName}", which is ${conflicting.name} — the item is ${wanted.name}`;
+  }
+  if (similarity < CONFIDENT_SIMILARITY) {
+    return `matched "${matchName}" on spelling alone (${similarity.toFixed(2)}) — it does not name the ${wanted.name} in the item`;
+  }
+  return null;
+}
+
 /**
  * Fuzzy-matches food names against the foods table. Each name is queried both
  * as written and through the Hindi-synonym rewrite, and the higher-scoring
@@ -376,7 +485,9 @@ export function normName(s: string): string {
  */
 export async function fetchBestMatches(
   supabase: SupabaseClient,
-  names: Iterable<string>
+  names: Iterable<string>,
+  /** Optional: receives why each rejected name was dropped, for the QA audit. */
+  rejections?: Map<string, string>
 ): Promise<Map<string, FoodMatch>> {
   const originals = new Set<string>();
   Array.from(names).forEach((n) => {
@@ -423,7 +534,14 @@ export async function fetchBestMatches(
     const rw = rewriteQuery(name);
     const alt = rw ? bySimilarity.get(rw) ?? null : null;
     const winner = alt && (!orig || alt.similarity > orig.similarity) ? alt : orig;
-    if (winner && winner.similarity >= MIN_SIMILARITY) best.set(name, winner);
+    if (!winner || winner.similarity < MIN_SIMILARITY) return;
+    // A close-scoring row for a different food is worse than no row at all.
+    const conflict = identityConflict(name, winner.name, winner.similarity);
+    if (conflict) {
+      rejections?.set(name, conflict);
+      return;
+    }
+    best.set(name, winner);
   });
   return best;
 }

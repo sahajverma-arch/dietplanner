@@ -1,6 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DietPlan } from "./nim";
-import { fetchBestMatches, normName, type FoodMatch } from "./nutrition";
+import {
+  CONFIDENT_SIMILARITY,
+  fetchBestMatches,
+  normName,
+  splitComposite,
+  type FoodMatch,
+} from "./nutrition";
 
 // ---------------------------------------------------------------------------
 // Match audit — re-checks every item name a plan sends to the foods table and
@@ -27,10 +33,6 @@ export interface MatchFinding {
   verdict: "suspect" | "unmatched" | "weak" | "ok";
   reason: string;
 }
-
-// Below this, a fuzzy (non-staple) match is worth a human glance. Exact
-// staple hits score ~1.3 from the blended ranking.
-const CONFIDENT_SIMILARITY = 0.75;
 
 const FOOD_CLASSES: {
   pattern: RegExp;
@@ -79,19 +81,52 @@ export async function auditItems(
     const norm = normName(raw || "");
     if (norm && !unique.has(norm)) unique.set(norm, raw.trim());
   });
-  const matches = await fetchBestMatches(supabase, Array.from(unique.keys()));
+  // Components too, so the audit reports what groundPlan will actually do
+  // with a composite name rather than calling it unmatched.
+  const queries = new Set(unique.keys());
+  Array.from(unique.keys()).forEach((n) => splitComposite(n).forEach((p) => queries.add(p)));
+  const rejected = new Map<string, string>();
+  const matches = await fetchBestMatches(supabase, Array.from(queries), rejected);
+
+  /** The component matches groundPlan would price a composite from, if any. */
+  const composite = (norm: string): FoodMatch[] | null => {
+    const parts = splitComposite(norm);
+    if (parts.length === 0) return null;
+    const found: FoodMatch[] = [];
+    for (const part of parts) {
+      const m = matches.get(part);
+      if (!m || !m.serving_g || m.similarity < CONFIDENT_SIMILARITY) return null;
+      found.push(m);
+    }
+    return found;
+  };
 
   const findings: MatchFinding[] = [];
   for (const [norm, raw] of Array.from(unique.entries())) {
     const m = matches.get(norm) ?? null;
     if (!m) {
+      // A multi-food name is priced from its components instead.
+      const parts = composite(norm);
+      if (parts) {
+        findings.push({
+          query: raw,
+          matchedName: parts.map((p) => p.name).join(" + "),
+          source: parts[0].source,
+          similarity: Math.min(...parts.map((p) => p.similarity)),
+          verdict: "ok",
+          reason: "",
+        });
+        continue;
+      }
       findings.push({
         query: raw,
         matchedName: null,
         source: null,
         similarity: null,
         verdict: "unmatched",
-        reason: "no database food matches — meals with this item keep unverified AI estimates",
+        reason:
+          rejected.get(norm) ??
+          "no database food matches — meals with this item keep unverified AI estimates",
       });
       continue;
     }
