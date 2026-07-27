@@ -915,7 +915,6 @@ export function aiProfile(a: Answers): Block {
     average_steps: val(a, "q106"),
     weekday_steps: val(a, "q112"),
     weekend_steps: val(a, "q112a"),
-    commute: val(a, "q54e"),
     hardest_food_situations: list(a, "q55").filter((v) => v !== "No specific time"),
     hardest_reasons: list(a, "q55a"),
     hunger_pattern: val(a, "q56"),

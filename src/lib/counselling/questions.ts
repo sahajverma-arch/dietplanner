@@ -1448,26 +1448,6 @@ const S8: Section = {
       options: ["<1 Hour", "1–2 Hours", "2–4 Hours", "4–6 Hours", ">6 Hours", "Variable"],
     },
     {
-      id: "q111b", n: 36, tag: "core", type: "text", label: "Occupational movement",
-      placeholder: "e.g. shop floor rounds twice a day; site visits 3 days a week",
-    },
-    {
-      id: "q111c", n: 36, tag: "core", type: "text", label: "Household movement",
-      placeholder: "e.g. cooking and cleaning for five, school runs on foot",
-    },
-    {
-      id: "q111d", n: 36, tag: "core", type: "text", label: "Other routine movement",
-      placeholder: "e.g. evening walk with the dog, stairs to a 4th-floor flat",
-    },
-    {
-      id: "q54e", n: 37, tag: "core", type: "single", label: "Usual commute pattern",
-      options: ["Work From Home", "Walking", "Cycling", "Public Transport", "Car", "Two-Wheeler", "Mixed"],
-    },
-    {
-      id: "q54g", n: 37, tag: "core", type: "text", label: "Total daily commute",
-      placeholder: "e.g. 80 minutes each way",
-    },
-    {
       id: "q54h", n: 37, tag: "core", type: "single", label: "Walking involved",
       options: ["Minimal", "<15 Minutes", "15–30 Minutes", "30–60 Minutes", ">60 Minutes"],
       why: "Commute walking is often the only movement a desk-based client has, and it disappears the moment they switch to working from home.",
