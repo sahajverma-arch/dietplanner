@@ -697,7 +697,6 @@ function mealTimeline(a: Answers): Block[] {
         ]
           .filter((s) => s.trim())
           .join(" · "),
-        added_components: list(a, `q28_${key}_extras`).filter((v) => v !== "None"),
       }) ?? { occasion: label }
     );
   }

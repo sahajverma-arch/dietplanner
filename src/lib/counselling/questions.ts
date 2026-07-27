@@ -1008,9 +1008,6 @@ export { MEAL_OCCASIONS } from "./meal-occasions";
 import { MEAL_OCCASIONS } from "./meal-occasions";
 import { VARIANT_MEAL_KEYS, variantsQuestionId } from "./meal-variants";
 
-const EXTRA_COMPONENTS = [
-  "Oil", "Ghee", "Butter", "Sugar", "Milk", "Sauce", "Dressing", "Chutney", "Pickle", "None",
-];
 
 function mealTimelineQuestions(): Question[] {
   const out: Question[] = [];
@@ -1049,11 +1046,6 @@ function mealTimelineQuestions(): Question[] {
         placeholder: "e.g. tea with 1 tsp sugar · bhindi sabzi 1 katori · 2 samosas",
         probe: "Hunger before the meal, if useful.",
         showIf: show,
-      },
-      {
-        id: `q28_${key}_extras`, n: 24, group: `q28_${key}`, tag: "conditional", type: "multi",
-        label: `${label} — added oil/ghee, sugar, sauces & condiments`,
-        options: EXTRA_COMPONENTS, showIf: show,
       },
       {
         id: `q28_${key}_beverage`, n: 24, group: `q28_${key}`, tag: "conditional", type: "text",
