@@ -1284,7 +1284,13 @@ export async function generatePlanDays(
         daysSpec(names),
         `"days" must contain EXACTLY ${names.length} entries named ${names
           .map((n) => `"${n}"`)
-          .join(" and ")}. The other days of the week are requested separately.`,
+          .join(" and ")}. The other days of the week are requested separately.` +
+          // The first batch has no earlier days to vary against, and without
+          // this the model returned Day 1 and Day 2 as the same menu with the
+          // items reordered — the repetition the draft review exists to catch.
+          (names.length > 1
+            ? ` These ${names.length} days must also DIFFER FROM EACH OTHER: a different main dish and a different protein source at every occasion. The same menu written in a different order is one day written twice, not two days.`
+            : ""),
         weeklyNote + reviewNote
       ),
     },
@@ -1295,7 +1301,7 @@ export async function generatePlanDays(
         revisionNote +
         `\n\nDaily target: ~${Math.round(overview.daily_calories)} kcal (protein ${Math.round(overview.macros.protein_g)}g, carbs ${Math.round(overview.macros.carbs_g)}g, fat ${Math.round(overview.macros.fat_g)}g). Each of these days must hit that target on its own.` +
         (alreadyPlanned.length
-          ? `\n\nAlready planned this week (add variety, do not repeat these menus):\n${compactDays(alreadyPlanned)}`
+          ? `\n\nAlready planned this week — every one of these menus is taken, so use different main dishes and different protein sources:\n${compactDays(alreadyPlanned)}`
           : "") +
         `\n\nReturn ONLY the JSON object.`,
     },
