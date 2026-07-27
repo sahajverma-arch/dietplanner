@@ -1246,24 +1246,6 @@ const S6: Section = {
       placeholder: "e.g. butter chicken + 2 naan; masala dosa; chicken biryani full plate",
       showIf: (a) => answered(a, "q31") && !is(a, "q31", "Rarely"),
     },
-    {
-      id: "q32", n: 29, tag: "core", type: "multi", required: true,
-      label: "Which snacks, beverages, sweets or unplanned eating are part of your routine?",
-      options: [
-        "Tea", "Coffee", "Added sugar", "Milk beverages", "Juice", "Soft drinks",
-        "Diet soft drinks", "Energy drinks", "Biscuits", "Namkeen", "Chips", "Nuts or seeds",
-        "Sweets or mithai", "Chocolate", "Desserts", "Sauces", "Dressings", "Pickle", "Chutney",
-        "Office snacks", "Food from colleagues or friends", "Tasting while cooking",
-        "Children's leftovers", "Late-night bites", "Nothing significant", "Other",
-      ],
-      why: "Hidden intake — usually where the unexplained calorie gap actually is.",
-    },
-    {
-      id: "q32a", n: 29, tag: "conditional", type: "textarea",
-      label: "For each item — frequency, quantity, timing, main source, weekday vs weekend",
-      placeholder: "e.g. tea x3/day with 1 tsp sugar; biscuits 4–5 with evening tea; sweets only on weekends",
-      showIf: (a) => hasOther(a, "q32", ["Nothing significant"]),
-    },
   ],
 };
 

@@ -418,7 +418,6 @@ const RUBRIC: { name: string; items: Item[] }[] = [
       { points: 2, label: "Typicality", done: all("q29") },
       { points: 2, label: "Weekend pattern", done: all("q30") },
       { points: 2, label: "Outside food", done: all("q31") },
-      { points: 2, label: "Smaller foods & drinks", done: all("q32") },
     ],
   },
   {
@@ -851,8 +850,6 @@ export function aiProfile(a: Answers): Block {
     outside_food_frequency: val(a, "q31"),
     outside_food_sources: list(a, "q31a"),
     common_outside_orders: val(a, "q31b"),
-    hidden_intake_items: list(a, "q32").filter((v) => v !== "Nothing significant"),
-    hidden_intake_detail: val(a, "q32a"),
   }));
 
   put("training", clean({
