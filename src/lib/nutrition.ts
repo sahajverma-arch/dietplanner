@@ -564,146 +564,142 @@ const divergesFrom = (kcal: number, estimate: number) =>
   Math.abs(kcal - estimate) > DIVERGENCE_ABS_KCAL &&
   (kcal > estimate * DIVERGENCE_MAX_RATIO || kcal < estimate * DIVERGENCE_MIN_RATIO);
 
-export async function groundPlan(
-  supabase: SupabaseClient,
-  plan: DietPlan
-): Promise<{ plan: DietPlan; stats: GroundingStats }> {
-  const stats: GroundingStats = {
-    total_items: 0,
-    matched_items: 0,
-    grounded_meals: 0,
-    total_meals: 0,
-    sources: { INDB: 0, USDA: 0 },
-  };
+const emptyStats = (): GroundingStats => ({
+  total_items: 0,
+  matched_items: 0,
+  grounded_meals: 0,
+  total_meals: 0,
+  sources: { INDB: 0, USDA: 0 },
+});
 
-  // One round trip: all unique item names + their synonym rewrites.
+/** Every name these meals need matched — each item, plus its composite parts. */
+function mealItemNames(meals: PlanMeal[]): string[] {
   const names: string[] = [];
-  for (const day of plan.days)
-    for (const meal of day.meals)
-      for (const item of meal.items) names.push(item.food);
-  if (names.length === 0) return { plan, stats };
+  for (const meal of meals)
+    for (const item of meal.items) {
+      names.push(item.food);
+      // Queried up front so a composite costs no extra round trip.
+      names.push(...splitComposite(item.food));
+    }
+  return names;
+}
 
-  const matches = await fetchBestMatches(supabase, names);
+type MealCandidate = {
+  meal: PlanMeal;
+  grounded: PlanMeal | null;
+  sources: FoodMatch["source"][];
+  /**
+   * Items that contributed NOTHING to the totals — no database row, or a
+   * quantity that could not be turned into grams. Inside a plan these are
+   * absorbed by the model's own meal estimate, but a meal the dietitian typed
+   * has no estimate to fall back on, so an unpriced item silently drags the
+   * meal towards zero. It has to be reported, not swallowed.
+   */
+  unpriced: string[];
+};
+
+/**
+ * Prices one meal against already-fetched matches, returning the database
+ * version of it (or null when the meal could not be priced completely and must
+ * keep the model's own estimate). Shared by whole-plan grounding and the
+ * single-meal grounding behind the draft preview's alternatives, so a swapped
+ * meal is costed by exactly the same rules as a generated one.
+ */
+function makeMealGrounder(matches: Map<string, FoodMatch>, stats: GroundingStats) {
   const bestFor = (name: string): FoodMatch | null => matches.get(name) ?? null;
 
-  const grounded: DietPlan = {
-    ...plan,
-    days: plan.days.map((day) => {
-      type Candidate = {
-        meal: (typeof day.meals)[number];
-        grounded: (typeof day.meals)[number] | null;
-        sources: FoodMatch["source"][];
-      };
-      const candidates: Candidate[] = day.meals.map((rawMeal) => {
-        stats.total_meals++;
-        stats.total_items += rawMeal.items.length;
-        const meal = reconcileMeal(rawMeal);
+  /**
+   * A composite item priced component by component, at one serving each.
+   * All-or-nothing: a partial sum understates the meal while looking complete,
+   * which is exactly the failure the grounding is meant to prevent.
+   */
+  const groundComposite = (
+    itemFood: string
+  ): { kcal: number; protein: number; carbs: number; fat: number; sources: FoodMatch["source"][] } | null => {
+    const parts = splitComposite(itemFood);
+    if (parts.length === 0) return null;
+    let kcal = 0, protein = 0, carbs = 0, fat = 0;
+    const sources: FoodMatch["source"][] = [];
+    for (const part of parts) {
+      const match = bestFor(part);
+      // Components must match CONFIDENTLY, not merely above the floor. A
+      // composite is already an inference, and a weak component on top of it
+      // produces confident nonsense: at the ordinary floor this rescued
+      // "whole wheat poha/idli/dosa with ..." by pricing each as whole wheat
+      // ROTI. Requiring real confidence drops those and keeps the rest.
+      if (!match || !match.serving_g || match.similarity < CONFIDENT_SIMILARITY) return null;
+      const grams = match.serving_g;
+      if ((match.kcal * grams) / 100 > ITEM_KCAL_MAX) return null;
+      kcal += (match.kcal * grams) / 100;
+      protein += (match.protein_g * grams) / 100;
+      carbs += (match.carbs_g * grams) / 100;
+      fat += (match.fat_g * grams) / 100;
+      sources.push(match.source);
+    }
+    return { kcal, protein, carbs, fat, sources };
+  };
 
-        let kcal = 0,
-          protein = 0,
-          carbs = 0,
-          fat = 0;
-        const mealSources: FoodMatch["source"][] = [];
-        let complete = meal.items.length > 0;
-        const resolved: { idx: number; match: FoodMatch; grams: number }[] = [];
+  return function groundMeal(rawMeal: PlanMeal): MealCandidate {
+    stats.total_meals++;
+    stats.total_items += rawMeal.items.length;
+    const meal = reconcileMeal(rawMeal);
 
-        for (let i = 0; i < meal.items.length; i++) {
-          const item = meal.items[i];
-          const match = bestFor(normName(item.food));
-          if (!match) {
-            complete = false;
-            continue;
-          }
+    let kcal = 0,
+      protein = 0,
+      carbs = 0,
+      fat = 0;
+    const mealSources: FoodMatch["source"][] = [];
+    let complete = meal.items.length > 0;
+    const resolved: { idx: number; match: FoodMatch; grams: number }[] = [];
+    const unpriced: string[] = [];
+
+    for (let i = 0; i < meal.items.length; i++) {
+      const item = meal.items[i];
+      const match = bestFor(normName(item.food));
+      if (!match) {
+        // Nothing matches the whole name — try it as a composite before
+        // giving up and leaving the meal on the model's own estimate.
+        const parts = groundComposite(item.food);
+        if (parts) {
           stats.matched_items++;
-          const grams = toGrams(parseQuantity(item.quantity), match, item.food);
-          if (grams == null || (match.kcal * grams) / 100 > ITEM_KCAL_MAX) {
-            complete = false;
-            continue;
-          }
-          resolved.push({ idx: i, match, grams });
-          kcal += (match.kcal * grams) / 100;
-          protein += (match.protein_g * grams) / 100;
-          carbs += (match.carbs_g * grams) / 100;
-          fat += (match.fat_g * grams) / 100;
-          mealSources.push(match.source);
+          kcal += parts.kcal;
+          protein += parts.protein;
+          carbs += parts.carbs;
+          fat += parts.fat;
+          mealSources.push(...parts.sources);
+          continue;
         }
+        complete = false;
+        unpriced.push(item.food);
+        continue;
+      }
+      stats.matched_items++;
+      const grams = toGrams(parseQuantity(item.quantity), match, item.food);
+      if (grams == null || (match.kcal * grams) / 100 > ITEM_KCAL_MAX) {
+        // Matched a real food but the quantity would not convert (or prices
+        // absurdly high) — just as invisible in the totals as no match at all.
+        complete = false;
+        unpriced.push(item.food);
+        continue;
+      }
+      resolved.push({ idx: i, match, grams });
+      kcal += (match.kcal * grams) / 100;
+      protein += (match.protein_g * grams) / 100;
+      carbs += (match.carbs_g * grams) / 100;
+      fat += (match.fat_g * grams) / 100;
+      mealSources.push(match.source);
+    }
 
-        if (!complete || kcal > MEAL_KCAL_MAX) {
-          // A meal the model left with no calorie estimate (the schema
-          // defaults an omitted "calories" to 0) must never ship at 0 while
-          // it lists real food. If at least one item grounded, use that
-          // partial database sum: it understates (unmatched items are
-          // dropped), but every printed number is a real DB value — strictly
-          // better than a 0-kcal meal the client can't act on. Meals that
-          // DID carry a model estimate keep the existing behaviour.
-          const noEstimate = (meal.calories || 0) <= 0;
-          if (noEstimate && resolved.length > 0 && kcal > 0 && kcal <= MEAL_KCAL_MAX) {
-            return {
-              meal,
-              grounded: {
-                ...meal,
-                calories: Math.round(kcal),
-                protein_g: Math.round(protein),
-                carbs_g: Math.round(carbs),
-                fat_g: Math.round(fat),
-              },
-              sources: mealSources,
-            };
-          }
-          return { meal, grounded: null, sources: [] };
-        }
-
-        // Grounded far ABOVE the estimate usually means the model wrote a
-        // gram amount several times the food's real serving ("poha (150 g)"
-        // priced as a 150 kcal snack — a bowl is 55 g). Retry oversized
-        // items at one serving; if that lands near the estimate, that's the
-        // portion the model actually priced — use it and correct the
-        // printed quantity so the PDF agrees with its own numbers. In every
-        // other case the database total below wins outright.
-        const estimate = meal.calories || 0;
-        if (
-          estimate >= MEAL_KCAL_MIN &&
-          kcal - estimate > DIVERGENCE_ABS_KCAL &&
-          kcal > estimate * DIVERGENCE_MAX_RATIO
-        ) {
-          const retried = resolved.map((r) =>
-            r.match.serving_g && r.grams > 2 * r.match.serving_g
-              ? { ...r, grams: r.match.serving_g, shrunk: true }
-              : { ...r, shrunk: false }
-          );
-          if (retried.some((r) => r.shrunk)) {
-            const sum = retried.reduce(
-              (a, r) => ({
-                kcal: a.kcal + (r.match.kcal * r.grams) / 100,
-                p: a.p + (r.match.protein_g * r.grams) / 100,
-                c: a.c + (r.match.carbs_g * r.grams) / 100,
-                f: a.f + (r.match.fat_g * r.grams) / 100,
-              }),
-              { kcal: 0, p: 0, c: 0, f: 0 }
-            );
-            if (sum.kcal >= MEAL_KCAL_MIN && !divergesFrom(sum.kcal, estimate)) {
-              const items = meal.items.map((item, i) => {
-                const r = retried.find((x) => x.idx === i);
-                if (!r || !r.shrunk) return item;
-                const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
-                return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
-              });
-              return {
-                meal,
-                grounded: {
-                  ...meal,
-                  items,
-                  calories: Math.round(sum.kcal),
-                  protein_g: Math.round(sum.p),
-                  carbs_g: Math.round(sum.c),
-                  fat_g: Math.round(sum.f),
-                },
-                sources: mealSources,
-              };
-            }
-          }
-        }
-
+    if (!complete || kcal > MEAL_KCAL_MAX) {
+      // A meal the model left with no calorie estimate (the schema
+      // defaults an omitted "calories" to 0) must never ship at 0 while
+      // it lists real food. If at least one item grounded, use that
+      // partial database sum: it understates (unmatched items are
+      // dropped), but every printed number is a real DB value — strictly
+      // better than a 0-kcal meal the client can't act on. Meals that
+      // DID carry a model estimate keep the existing behaviour.
+      const noEstimate = (meal.calories || 0) <= 0;
+      if (noEstimate && resolved.length > 0 && kcal > 0 && kcal <= MEAL_KCAL_MAX) {
         return {
           meal,
           grounded: {
@@ -714,8 +710,96 @@ export async function groundPlan(
             fat_g: Math.round(fat),
           },
           sources: mealSources,
+          unpriced,
         };
-      });
+      }
+      return { meal, grounded: null, sources: [], unpriced };
+    }
+
+    // Grounded far ABOVE the estimate usually means the model wrote a
+    // gram amount several times the food's real serving ("poha (150 g)"
+    // priced as a 150 kcal snack — a bowl is 55 g). Retry oversized
+    // items at one serving; if that lands near the estimate, that's the
+    // portion the model actually priced — use it and correct the
+    // printed quantity so the PDF agrees with its own numbers. In every
+    // other case the database total below wins outright.
+    const estimate = meal.calories || 0;
+    if (
+      estimate >= MEAL_KCAL_MIN &&
+      kcal - estimate > DIVERGENCE_ABS_KCAL &&
+      kcal > estimate * DIVERGENCE_MAX_RATIO
+    ) {
+      const retried = resolved.map((r) =>
+        r.match.serving_g && r.grams > 2 * r.match.serving_g
+          ? { ...r, grams: r.match.serving_g, shrunk: true }
+          : { ...r, shrunk: false }
+      );
+      if (retried.some((r) => r.shrunk)) {
+        const sum = retried.reduce(
+          (a, r) => ({
+            kcal: a.kcal + (r.match.kcal * r.grams) / 100,
+            p: a.p + (r.match.protein_g * r.grams) / 100,
+            c: a.c + (r.match.carbs_g * r.grams) / 100,
+            f: a.f + (r.match.fat_g * r.grams) / 100,
+          }),
+          { kcal: 0, p: 0, c: 0, f: 0 }
+        );
+        if (sum.kcal >= MEAL_KCAL_MIN && !divergesFrom(sum.kcal, estimate)) {
+          const items = meal.items.map((item, i) => {
+            const r = retried.find((x) => x.idx === i);
+            if (!r || !r.shrunk) return item;
+            const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
+            return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
+          });
+          return {
+            meal,
+            grounded: {
+              ...meal,
+              items,
+              calories: Math.round(sum.kcal),
+              protein_g: Math.round(sum.p),
+              carbs_g: Math.round(sum.c),
+              fat_g: Math.round(sum.f),
+            },
+            sources: mealSources,
+            unpriced,
+          };
+        }
+      }
+    }
+
+    return {
+      meal,
+      grounded: {
+        ...meal,
+        calories: Math.round(kcal),
+        protein_g: Math.round(protein),
+        carbs_g: Math.round(carbs),
+        fat_g: Math.round(fat),
+      },
+      sources: mealSources,
+      unpriced,
+    };
+  };
+}
+
+export async function groundPlan(
+  supabase: SupabaseClient,
+  plan: DietPlan
+): Promise<{ plan: DietPlan; stats: GroundingStats }> {
+  const stats = emptyStats();
+
+  // One round trip: all unique item names + their synonym rewrites.
+  const names = plan.days.flatMap((day) => mealItemNames(day.meals));
+  if (names.length === 0) return { plan, stats };
+
+  const matches = await fetchBestMatches(supabase, names);
+  const groundMeal = makeMealGrounder(matches, stats);
+
+  const grounded: DietPlan = {
+    ...plan,
+    days: plan.days.map((day) => {
+      const candidates = day.meals.map((meal) => groundMeal(meal));
 
       // Grounded meals are always kept — hiding an under-portioned day behind
       // the model's invented rows misled dietitians twice. A day landing far
@@ -737,4 +821,27 @@ export async function groundPlan(
   };
 
   return { plan: grounded, stats };
+}
+
+/**
+ * Prices a handful of meals on their own — the meal alternatives a dietitian
+ * generates from the draft preview, which must show real database macros
+ * before anyone swaps one into the plan. Meals that cannot be priced come back
+ * unchanged, on the model's estimate, exactly as they would inside a plan.
+ */
+export async function groundMeals(
+  supabase: SupabaseClient,
+  meals: PlanMeal[]
+): Promise<{ meals: PlanMeal[]; unpriced: string[][] }> {
+  const names = mealItemNames(meals);
+  if (names.length === 0) return { meals, unpriced: meals.map(() => []) };
+
+  const matches = await fetchBestMatches(supabase, names);
+  const groundMeal = makeMealGrounder(matches, emptyStats());
+  const results = meals.map((meal) => groundMeal(meal));
+  return {
+    meals: results.map((c) => c.grounded ?? c.meal),
+    // Per meal, the foods that contributed nothing to the numbers above.
+    unpriced: results.map((c) => c.unpriced),
+  };
 }
