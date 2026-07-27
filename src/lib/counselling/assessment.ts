@@ -681,8 +681,6 @@ function mealTimeline(a: Answers): Block[] {
         food_and_quantity: [list(a, stapleQuestionId(key)).join(", "), val(a, `q28_${key}_food`)]
           .filter((s) => s.trim())
           .join(" · "),
-        preparation: list(a, `q28_${key}_prep`),
-        source: val(a, `q28_${key}_source`),
         added_components: list(a, `q28_${key}_extras`).filter((v) => v !== "None"),
       }) ?? { occasion: label }
     );

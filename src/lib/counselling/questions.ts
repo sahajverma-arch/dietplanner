@@ -1006,16 +1006,8 @@ const S5: Section = {
 
 export { MEAL_OCCASIONS } from "./meal-occasions";
 import { MEAL_OCCASIONS } from "./meal-occasions";
-import { VARIANT_MEALS, variantsQuestionId } from "./meal-variants";
+import { VARIANT_MEAL_KEYS, variantsQuestionId } from "./meal-variants";
 
-const PREPARATION = [
-  "Raw", "Boiled", "Steamed", "Grilled", "Roasted", "Air fried", "Shallow fried",
-  "Deep fried", "Curry", "Dry preparation", "Baked", "Mixed preparation", "Unknown",
-];
-const FOOD_SOURCE = [
-  "Home", "Office or canteen", "Restaurant", "Delivery", "Tiffin", "Hostel or PG",
-  "Packaged", "Other",
-];
 const EXTRA_COMPONENTS = [
   "Oil", "Ghee", "Butter", "Sugar", "Milk", "Sauce", "Dressing", "Chutney", "Pickle", "None",
 ];
@@ -1029,6 +1021,24 @@ function mealTimelineQuestions(): Question[] {
         id: `q28_${key}_time`, n: 24, group: `q28_${key}`, tag: "conditional", type: "time",
         label: `${label} — exact or approximate time`, showIf: show,
       },
+      // What they ACTUALLY have at this meal across a week, and how often —
+      // the client's measured protein comes from here. It sits inside the meal
+      // group on purpose: one conversation per meal, in the order the
+      // dietitian is already having it.
+      ...(VARIANT_MEAL_KEYS.includes(key as (typeof VARIANT_MEAL_KEYS)[number])
+        ? [
+            {
+              id: variantsQuestionId(key), n: 25, group: `q28_${key}`,
+              tag: "core" as const, type: "mealVariants" as const,
+              label: `${label} — what do they actually have, and how often?`,
+              note:
+                "One option per thing they eat, with foods and quantities, then how many " +
+                "days a week it happens. Costed against the food database as you type, and " +
+                "every number can be corrected.",
+              showIf: show,
+            },
+          ]
+        : []),
       {
         // Tap-to-count staples. Offered BEFORE the free text because this is
         // the one that carries the client's carbohydrate: everything the
@@ -1052,16 +1062,6 @@ function mealTimelineQuestions(): Question[] {
         placeholder: "e.g. tea with 1 tsp sugar · bhindi sabzi 1 katori · 2 samosas",
         probe: "Hunger before the meal, if useful.",
         showIf: show,
-      },
-      {
-        id: `q28_${key}_prep`, n: 24, group: `q28_${key}`, tag: "conditional", type: "multi",
-        label: `${label} — cooking method`, options: PREPARATION, showIf: show,
-      },
-      {
-        // Doubles as v3.0's "Location" — where the food came from and where it
-        // was eaten are the same answer for almost every occasion.
-        id: `q28_${key}_source`, n: 24, group: `q28_${key}`, tag: "conditional", type: "single",
-        label: `${label} — food source`, options: FOOD_SOURCE, showIf: show,
       },
       {
         id: `q28_${key}_extras`, n: 24, group: `q28_${key}`, tag: "conditional", type: "multi",
@@ -1091,27 +1091,6 @@ function mealTimelineQuestions(): Question[] {
 // is selected in Q50. Selection is the only condition on purpose: the food
 // pattern already narrows what Q50 offers, and gating these on it as well would
 // leave a food the dietitian deliberately selected impossible to measure.
-/**
- * One variant box per main meal and snack occasion — the places where what a
- * client eats actually varies, and where their protein lives. The rest of the
- * day keeps the simpler capture in the Q28 timeline.
- *
- * These carry the client's measured protein intake, so they are the questions
- * the week-1 target is built from. See src/lib/counselling/meal-variants.ts.
- */
-function mealVariantQuestions(): Question[] {
-  return VARIANT_MEALS.map(({ key, label }) => ({
-    id: variantsQuestionId(key),
-    n: 25,
-    tag: "core" as const,
-    type: "mealVariants" as const,
-    label: `${label} — what do they actually have, and how often?`,
-    note:
-      "Add one option per thing they eat, with the foods and quantities, then " +
-      "how many days a week it happens. Everything is costed against the food " +
-      "database as you type, and every number can be corrected.",
-  }));
-}
 
 function proteinFrequencyQuestions(): Question[] {
   const out: Question[] = [];
@@ -1223,19 +1202,6 @@ const S6: Section = {
       options: ["High", "Moderate", "Low", "Additional Dietary Recall Required"],
       note: "Estimate calories from the habitual pattern and several data points. One reported day on its own does not support a calorie target.",
     },
-
-    // --- What they eat across a week, and the protein that falls out of it ---
-    // This replaced a separate protein section that asked the client, food by
-    // food, how often and how much — after they had already spent fifteen
-    // minutes describing what they eat. It read as a second interrogation, and
-    // the answers drifted, because nobody re-derives the same week twice the
-    // same way.
-    //
-    // Recording the real variants of each meal instead ("bread omelette 3
-    // days, poha 1, chilla 1") captures the food ONCE, in the shape the client
-    // describes it, and the protein is measured from it against the same foods
-    // table the diet plan is costed with.
-    ...mealVariantQuestions(),
 
     {
       id: "q50a", tag: "planning", type: "single",
