@@ -1310,12 +1310,6 @@ const S6: Section = {
       placeholder: "e.g. ghee 1 tsp per roti, daily; pickle most lunches; cream in weekend gravies",
       showIf: (a) => hasOther(a, "q110", ["None"]),
     },
-    { id: "q110d", n: 28, tag: "core", type: "number", label: "Number of people sharing food" },
-    {
-      id: "q110e", n: 28, tag: "planning", type: "text", label: "Estimated per-person oil usage",
-      placeholder: "e.g. ~28 ml/day",
-      note: "Household tin ÷ people ÷ days. Rough, but far closer than asking the client how much oil they eat.",
-    },
     {
       id: "q110f", n: 28, tag: "core", type: "single", label: "Salt type",
       options: ["Iodized", "Himalayan Pink", "Rock", "Black", "Low Sodium", "Mixed", "Other"],
@@ -1499,11 +1493,6 @@ const S8: Section = {
     {
       id: "q111a", n: 36, tag: "core", type: "single", label: "Standing or moving time",
       options: ["<1 Hour", "1–2 Hours", "2–4 Hours", "4–6 Hours", ">6 Hours", "Variable"],
-    },
-    {
-      id: "q54h", n: 37, tag: "core", type: "single", label: "Walking involved",
-      options: ["Minimal", "<15 Minutes", "15–30 Minutes", "30–60 Minutes", ">60 Minutes"],
-      why: "Commute walking is often the only movement a desk-based client has, and it disappears the moment they switch to working from home.",
     },
     {
       id: "q106", n: 38, tag: "core", type: "single", required: true,
