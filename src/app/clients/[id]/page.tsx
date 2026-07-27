@@ -8,6 +8,7 @@ import PlanView from "@/components/PlanView";
 import PlanReviewControls from "@/components/PlanReviewControls";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import RegenerateButton from "@/components/RegenerateButton";
+import ResumePlanCard from "@/components/ResumePlanCard";
 import { AiReviewSchema, DietPlanSchema, isPauseDecision } from "@/lib/nim";
 import type { ClientRow, DietPlanRow } from "@/lib/types";
 
@@ -42,7 +43,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
     .order("week_number", { ascending: false })
     .returns<DietPlanRow[]>();
 
-  const planRows = plans ?? [];
+  const allRows = plans ?? [];
+  // A generation in flight is a partial row — it must never be read as a plan.
+  // It is surfaced separately so the dietitian can resume it.
+  const inFlight = allRows.find((p) => p.status === "generating") ?? null;
+  const planRows = allRows.filter((p) => p.status !== "generating");
   const latest = planRows[0] ?? null;
   const parsedLatest = latest ? DietPlanSchema.safeParse(latest.plan) : null;
   const latestPlan = parsedLatest?.success ? parsedLatest.data : null;
@@ -78,6 +83,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
+            {inFlight && (
+              <ResumePlanCard planId={inFlight.id} weekNumber={inFlight.week_number} />
+            )}
+
             {latestIsDraft && latest && (
               <PlanReviewControls
                 planId={latest.id}

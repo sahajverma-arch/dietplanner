@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { emptyFollowUp, type FollowUpInput } from "@/lib/types";
+import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
+import PlanProgressBar from "./PlanProgressBar";
 
 export default function FollowUpForm({
   clientId,
@@ -15,9 +17,10 @@ export default function FollowUpForm({
 }) {
   const router = useRouter();
   const [form, setForm] = useState<FollowUpInput>(emptyFollowUp);
-  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const submitting = progress !== null;
 
   function set<K extends keyof FollowUpInput>(key: K, value: FollowUpInput[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -27,25 +30,15 @@ export default function FollowUpForm({
     e.preventDefault();
     setError(null);
     setSuccess(false);
-    setSubmitting(true);
     try {
-      const res = await fetch("/api/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "followup", clientId, followup: form }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error || "Plan generation failed. Try again.");
-      } else {
-        setSuccess(true);
-        setForm(emptyFollowUp);
-        router.refresh();
-      }
-    } catch {
-      setError("Network error — try again.");
+      await runPlanSteps({ source: "followup", clientId, followup: form }, setProgress);
+      setSuccess(true);
+      setForm(emptyFollowUp);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Plan generation failed. Try again.");
     }
-    setSubmitting(false);
+    setProgress(null);
   }
 
   return (
@@ -150,6 +143,8 @@ export default function FollowUpForm({
           approve to create the PDF.
         </p>
       )}
+
+      {progress && <PlanProgressBar progress={progress} />}
 
       <button className="btn-primary mt-4 w-full" disabled={submitting}>
         {submitting ? `Generating Week ${nextWeek} preview…` : `Generate Week ${nextWeek} Preview`}

@@ -72,19 +72,11 @@ export const DietPlanSchema = z.object({
 
 export type DietPlan = z.infer<typeof DietPlanSchema>;
 
-// The plan is generated in two halves — the shared NIM serving functions cap
-// completions around ~2k tokens, and a full 7-day plan with per-meal macros
-// doesn't fit. Each half fits comfortably. Models sometimes return more days
-// than asked (e.g. echoing all 7 in the second call), so the count is a
-// minimum and pickDays() selects the ones that were requested.
-const PartOneSchema = DietPlanSchema.extend({
-  days: z.array(DaySchema).min(4),
-});
-const PartTwoSchema = z.object({
-  days: z.array(DaySchema).min(3),
-});
-
-/** Select (and rename) the requested days from a possibly over-long answer. */
+/**
+ * Select (and rename) the requested days from a possibly over-long answer.
+ * Models sometimes return more days than asked for (echoing the whole week
+ * back), so every day request treats its count as a minimum and picks.
+ */
 function pickDays(days: DietPlan["days"], names: string[]): DietPlan["days"] {
   const byName = names.map((n) =>
     days.find((d) => d.day.trim().toLowerCase() === n.toLowerCase())
@@ -137,23 +129,49 @@ const DAY_SPEC = `{
   ]
 }`;
 
-const PART_ONE_SPEC = `{
+// ---------------------------------------------------------------------------
+// Stepped generation: the plan's targets, then its days two at a time.
+//
+// A whole plan is 5 model calls instead of 2. That is slower overall, and it
+// exists for one reason: each response has to fit inside a single HTTP request
+// on hosting that caps a function at 60s. Response length drives latency —
+// measured calls for four days at a time ran 40s to over 100s, while a day
+// pair is a fraction of that — so the batch size, not the call count, is what
+// makes a step fit. Smaller responses also truncate less, which is the failure
+// this file has fought hardest.
+// ---------------------------------------------------------------------------
+
+const OVERVIEW_SPEC = `{
   "summary": string,                  // 2-3 sentence overview of the plan strategy for this client
   "daily_calories": number,           // target kcal/day
   "macros": { "protein_g": number, "carbs_g": number, "fat_g": number },
   "guidelines": string[],             // max 5 short practical rules (max 12 words each)
   "hydration": string,                // daily water guidance
-  "days": [                           // EXACTLY 4 entries: "Day 1" .. "Day 4"
-    ${DAY_SPEC}
-  ],
   "foods_to_avoid": string[]          // max 6 short entries
 }`;
 
-const PART_TWO_SPEC = `{
-  "days": [                           // EXACTLY 3 entries: "Day 5", "Day 6", "Day 7"
+const daysSpec = (names: string[]) => `{
+  "days": [                           // EXACTLY ${names.length} entries: ${names.map((n) => `"${n}"`).join(", ")}
     ${DAY_SPEC}
   ]
 }`;
+
+export const PlanOverviewSchema = DietPlanSchema.omit({ days: true });
+const OverviewSchema = PlanOverviewSchema;
+export type PlanOverview = z.infer<typeof PlanOverviewSchema>;
+
+/** Days generated so far, for validating a generation resumed from the row. */
+export const PlanDaysSchema = z.array(DaySchema);
+
+const daysSchema = (count: number) => z.object({ days: z.array(DaySchema).min(count) });
+
+/** Day names per step. Pairs keep each response small enough to fit a step. */
+export const DAY_BATCHES: string[][] = [
+  ["Day 1", "Day 2"],
+  ["Day 3", "Day 4"],
+  ["Day 5", "Day 6"],
+  ["Day 7"],
+];
 
 // ---------------------------------------------------------------------------
 // AI FIRST-DIET DECISION ENGINE (LeanR Premium, after Q105).
@@ -1167,12 +1185,13 @@ function stripDisliked(days: DietPlan["days"], rules: FoodRules): DietPlan["days
 }
 
 /**
- * Generates a validated 1-week diet plan in two model calls (overview + days
- * 1-4, then days 5-7) so each response stays within the completion-length
- * limits of NVIDIA's shared NIM endpoints.
+ * Prompt scaffolding every generation step for one plan shares: the decision
+ * engine's analysis, the dietitian's revision instructions, the weekday food
+ * rules, and the deterministic rule checks. Built once per step so a stepped
+ * generation reasons over exactly the same context as a one-shot one.
  */
-export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
-  const { intake, week, previousPlan, review, revision } = ctx;
+function planPromptParts(ctx: PlanContext) {
+  const { intake, review, revision } = ctx;
 
   // ---- Outcome of the AI first-diet decision engine, woven into the prompt
   const reviewNote = review ? reviewBlock(review) : "";
@@ -1195,90 +1214,145 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
       `. Meals on those days must contain none of these in any form or dish name — use compliant alternatives with equivalent protein.\n`
     : "";
 
-  // ---- Part 1: plan overview + days 1-4
-  const partOneMessages: ChatMessage[] = [
-    {
-      role: "system",
-      content: buildSystem(
-        intake,
-        PART_ONE_SPEC,
-        '"days" must contain EXACTLY 4 entries named "Day 1" through "Day 4" (days 5-7 are requested separately).',
-        weeklyNote + reviewNote
-      ),
-    },
-    {
-      role: "user",
-      content:
-        `Create the overview and days 1-4 of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
-        (previousPlan
-          ? `\n\nLast week's meals (keep what worked, introduce sensible variety, do not repeat the exact same menu):\n${compactDays(previousPlan.days)}`
-          : "") +
-        revisionNote +
-        `\n\nReturn ONLY the JSON object.`,
-    },
-  ];
   const rules = foodRules(intake);
   const checkDays = (days: DietPlan["days"]) => [
     ...violations(days, rules),
     ...dietTypeViolations(days, intake.dietType),
     ...(dayRules ? dayRuleViolations(days, dayRules, weekdays) : []),
   ];
-  const partOne = await generateValidated(
-    partOneMessages,
-    PartOneSchema,
-    'at least 4 days ("Day 1" to "Day 4")',
-    (p) => checkDays(p.days),
-    (p) => qualityIssues(p.days, p.daily_calories)
-  );
-  partOne.days = pickDays(partOne.days, ["Day 1", "Day 2", "Day 3", "Day 4"]);
 
-  // ---- Part 2: days 5-7, aware of days 1-4 for variety
-  const partTwoMessages: ChatMessage[] = [
+  return { reviewNote, revisionNote, weekdays, dayRules, weeklyNote, rules, checkDays };
+}
+
+/**
+ * The plan's strategy and daily targets, with no days. Small and quick — the
+ * days are then generated against these numbers, a batch per step.
+ */
+export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOverview> {
+  const { intake, week, previousPlan } = ctx;
+  const { reviewNote, revisionNote, weeklyNote } = planPromptParts(ctx);
+
+  const messages: ChatMessage[] = [
     {
       role: "system",
       content: buildSystem(
         intake,
-        PART_TWO_SPEC,
-        '"days" must contain EXACTLY 3 entries named "Day 5", "Day 6" and "Day 7".',
+        OVERVIEW_SPEC,
+        'Return the strategy and daily targets ONLY. Do NOT include a "days" array — the days are requested separately.',
         weeklyNote + reviewNote
       ),
     },
     {
       role: "user",
       content:
-        `Create days 5-7 of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        `Set the strategy and daily targets for the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        (previousPlan
+          ? `\n\nLast week's meals (keep what worked, introduce sensible variety):\n${compactDays(previousPlan.days)}`
+          : "") +
         revisionNote +
-        `\n\nDaily target: ~${Math.round(partOne.daily_calories)} kcal (protein ${Math.round(partOne.macros.protein_g)}g, carbs ${Math.round(partOne.macros.carbs_g)}g, fat ${Math.round(partOne.macros.fat_g)}g).` +
-        `\n\nDays 1-4 already planned (add variety, do not repeat the same menus):\n${compactDays(partOne.days)}` +
         `\n\nReturn ONLY the JSON object.`,
     },
   ];
-  const partTwo = await generateValidated(
-    partTwoMessages,
-    PartTwoSchema,
-    'at least 3 days ("Day 5" to "Day 7")',
-    (p) => checkDays(p.days),
-    (p) => qualityIssues(p.days, partOne.daily_calories)
+
+  const overview = await generateValidated(
+    messages,
+    OverviewSchema,
+    "the strategy and daily targets, with no days"
   );
+  return { ...overview, foods_to_avoid: cleanFoodsToAvoid(overview.foods_to_avoid, intake) };
+}
 
-  let days = [...partOne.days, ...pickDays(partTwo.days, ["Day 5", "Day 6", "Day 7"])];
+/**
+ * One batch of days, built to the overview's targets and aware of the days
+ * already planned so the week does not repeat itself. `alreadyPlanned` is
+ * every day generated so far, in order.
+ */
+export async function generatePlanDays(
+  ctx: PlanContext,
+  overview: PlanOverview,
+  names: string[],
+  alreadyPlanned: DietPlan["days"]
+): Promise<DietPlan["days"]> {
+  const { intake, week } = ctx;
+  const { reviewNote, revisionNote, weeklyNote, checkDays } = planPromptParts(ctx);
 
-  // Belt and braces: the model was told, then corrected. An allergen surviving
-  // that is a safety failure — refuse the plan rather than hand it to a client.
-  if (hasAllergen(days, rules)) {
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: buildSystem(
+        intake,
+        daysSpec(names),
+        `"days" must contain EXACTLY ${names.length} entries named ${names
+          .map((n) => `"${n}"`)
+          .join(" and ")}. The other days of the week are requested separately.`,
+        weeklyNote + reviewNote
+      ),
+    },
+    {
+      role: "user",
+      content:
+        `Create ${names.join(" and ")} of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        revisionNote +
+        `\n\nDaily target: ~${Math.round(overview.daily_calories)} kcal (protein ${Math.round(overview.macros.protein_g)}g, carbs ${Math.round(overview.macros.carbs_g)}g, fat ${Math.round(overview.macros.fat_g)}g). Each of these days must hit that target on its own.` +
+        (alreadyPlanned.length
+          ? `\n\nAlready planned this week (add variety, do not repeat these menus):\n${compactDays(alreadyPlanned)}`
+          : "") +
+        `\n\nReturn ONLY the JSON object.`,
+    },
+  ];
+
+  const result = await generateValidated(
+    messages,
+    daysSchema(names.length),
+    `exactly ${names.length} day(s): ${names.join(", ")}`,
+    (p) => checkDays(p.days),
+    (p) => qualityIssues(p.days, overview.daily_calories)
+  );
+  return pickDays(result.days, names);
+}
+
+/**
+ * Final enforcement over a complete set of days. An allergen surviving the
+ * prompt AND its corrective retries is a safety failure, so the plan is
+ * refused rather than handed to a client; everything else is stripped.
+ */
+export function assemblePlan(
+  ctx: PlanContext,
+  overview: PlanOverview,
+  allDays: DietPlan["days"]
+): DietPlan {
+  const { intake } = ctx;
+  const { weekdays, dayRules, rules } = planPromptParts(ctx);
+
+  if (hasAllergen(allDays, rules)) {
     throw new Error(
       "AI could not produce an allergen-safe plan (the client's allergen/intolerance kept appearing). Please regenerate."
     );
   }
-  days = stripDisliked(days, rules);
+  let days = stripDisliked(allDays, rules);
   days = stripDietTypeViolations(days, intake.dietType);
   if (dayRules) days = stripDayRuleViolations(days, dayRules, weekdays);
 
   return DietPlanSchema.parse({
-    ...partOne,
+    ...overview,
     days,
-    foods_to_avoid: cleanFoodsToAvoid(partOne.foods_to_avoid, intake),
+    foods_to_avoid: cleanFoodsToAvoid(overview.foods_to_avoid, intake),
   });
+}
+
+/**
+ * Generates a complete validated 1-week plan in one call site: the overview,
+ * then each day batch in turn. Used by scripts and anywhere not bound by a
+ * per-request time limit; the API drives the same functions one step per
+ * request so each fits inside the host's function timeout.
+ */
+export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
+  const overview = await generatePlanOverview(ctx);
+  const days: DietPlan["days"] = [];
+  for (const names of DAY_BATCHES) {
+    days.push(...(await generatePlanDays(ctx, overview, names, days)));
+  }
+  return assemblePlan(ctx, overview, days);
 }
 
 // ---------------------------------------------------------------------------

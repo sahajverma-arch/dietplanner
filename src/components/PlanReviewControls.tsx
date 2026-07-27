@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlanRevision } from "@/lib/types";
+import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
+import PlanProgressBar from "./PlanProgressBar";
 
 /**
  * Human-in-the-loop review of a draft plan preview. The dietitian either
@@ -23,6 +25,7 @@ export default function PlanReviewControls({
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState<"revise" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<PlanProgress | null>(null);
   // Meals swapped or given options from the pencil menu. A full regeneration
   // rewrites every day, so those edits do not survive it — say so before they
   // click, not after.
@@ -32,23 +35,29 @@ export default function PlanReviewControls({
     setBusy(type);
     setError(null);
     try {
-      const res = await fetch("/api/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          type === "revise" ? { type, planId, instructions: instructions.trim() } : { type, planId }
-        ),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error || "Something went wrong — try again.");
-      } else {
+      if (type === "revise") {
+        // A revision rebuilds the whole week — too long for one request, so it
+        // runs as steps like the original generation.
+        await runPlanSteps(
+          { source: "revise", planId, instructions: instructions.trim() },
+          setProgress
+        );
         setInstructions("");
-        router.refresh();
+      } else {
+        // Approval only renders the PDF: one short request.
+        const res = await fetch("/api/generate-plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type, planId }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || "Something went wrong — try again.");
       }
-    } catch {
-      setError("Network error — try again.");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong — try again.");
     }
+    setProgress(null);
     setBusy(null);
   }
 
@@ -105,6 +114,8 @@ export default function PlanReviewControls({
         }
       />
 
+      {progress && <PlanProgressBar progress={progress} />}
+
       {error && (
         <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
       )}
@@ -117,7 +128,7 @@ export default function PlanReviewControls({
           disabled={busy !== null || instructions.trim().length === 0}
         >
           {busy === "revise"
-            ? "Applying your changes… (~60s)"
+            ? "Applying your changes…"
             : "Apply changes & regenerate preview"}
         </button>
         <button

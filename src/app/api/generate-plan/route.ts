@@ -18,7 +18,12 @@ import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// The UI only calls this route for "approve", which renders a PDF in ~2s. The
+// generation types below still work anywhere WITHOUT a per-request cap (this
+// value is a Vercel hint; self-hosted Next ignores it), but on Vercel a whole
+// week no longer fits one request — /api/plan-step drives the same functions
+// one step at a time instead. 60 keeps this route deployable on every plan.
+export const maxDuration = 60;
 
 const BodySchema = z.discriminatedUnion("type", [
   z.object({

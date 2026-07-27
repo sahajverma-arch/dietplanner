@@ -2,38 +2,32 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
+import PlanProgressBar from "./PlanProgressBar";
 
 export default function RegenerateButton({ clientId }: { clientId: string }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = progress !== null;
 
   async function handleClick() {
-    setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "regenerate", clientId }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json.error || "Generation failed — try again.");
-      } else {
-        router.refresh();
-      }
-    } catch {
-      setError("Network error — try again.");
+      await runPlanSteps({ source: "regenerate", clientId }, setProgress);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Generation failed — try again.");
     }
-    setBusy(false);
+    setProgress(null);
   }
 
   return (
     <div className="mt-4">
       <button type="button" className="btn-primary" onClick={handleClick} disabled={busy}>
-        {busy ? "Generating… (30–60s)" : "Generate plan from counselling data"}
+        {busy ? "Generating…" : "Generate plan from counselling data"}
       </button>
+      {progress && <PlanProgressBar progress={progress} />}
       {error && (
         <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
       )}

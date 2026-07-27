@@ -17,6 +17,8 @@ import {
   type Section,
 } from "@/lib/counselling/questions";
 import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
+import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
+import PlanProgressBar from "./PlanProgressBar";
 import {
   decodeStaplePick,
   encodeStaplePick,
@@ -43,6 +45,7 @@ export default function ClinicalCounsellingForm({
   const [saveState, setSaveState] = useState<SaveState>(initialAnswers ? "saved" : "idle");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showScore, setShowScore] = useState(false);
   const mounted = useRef(false);
@@ -117,29 +120,31 @@ export default function ClinicalCounsellingForm({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch("/api/generate-plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "first",
+      // Generation runs as steps: each is saved before the next starts, so a
+      // dropped connection leaves a resumable plan rather than nothing.
+      const { clientId } = await runPlanSteps(
+        {
+          source: "first",
           form: toIntake(answers, appointmentId),
           ...(appointmentId ? { appointmentId } : {}),
-        }),
-      });
-      const json = await res.json();
-      if (res.ok || json.clientId) {
-        router.push(`/clients/${json.clientId}`);
+        },
+        setProgress
+      );
+      router.push(`/clients/${clientId}`);
+      return;
+    } catch (e) {
+      const err = e as Error & { clientId?: string };
+      // The client row exists once the first step succeeded — send them to it
+      // rather than risking a duplicate from a resubmit.
+      if (err.clientId) {
+        router.push(`/clients/${err.clientId}`);
         return;
       }
-      setError(json.error || "Something went wrong. Your counselling is still saved as a draft.");
-    } catch {
       setError(
-        "The connection dropped while the plan was generating — the server usually finishes anyway. " +
-          "Check My Clients in a minute: if the client is there, open it (the preview may already be " +
-          "waiting, or use its retry button). Only resubmit here if the client never appeared — " +
-          "your counselling is still saved as a draft."
+        err.message || "Something went wrong. Your counselling is still saved as a draft."
       );
     }
+    setProgress(null);
     setSubmitting(false);
   }
 
@@ -434,13 +439,14 @@ export default function ClinicalCounsellingForm({
                 </div>
               </div>
             )}
+            {progress && <PlanProgressBar progress={progress} />}
             <button
               onClick={handleSubmit}
               disabled={submitting || missing.length > 0}
               className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting
-                ? "Generating preview… (this takes ~60s)"
+                ? "Generating preview…"
                 : missing.length > 0
                   ? `Answer ${missing.length} mandatory question${missing.length > 1 ? "s" : ""} to generate the plan`
                   : "Generate Week 1 Diet Preview"}

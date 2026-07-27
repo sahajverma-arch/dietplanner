@@ -136,8 +136,15 @@ export interface DietPlanRow {
   dietitian_id: string;
   week_number: number;
   source: "first_counselling" | "follow_up";
-  /** Drafts await dietitian review; only approved (final) plans have a PDF. */
-  status: "draft" | "final";
+  /**
+   * "generating" rows are PARTIAL — a stepped generation in flight, whose
+   * `plan` does not satisfy the 7-day schema until the last step. Never read
+   * one as a plan. Drafts await dietitian review; only approved (final) plans
+   * have a PDF.
+   */
+  status: "generating" | "draft" | "final";
+  /** Next generation step while status is "generating"; null otherwise. */
+  stage: string | null;
   plan: unknown;
   /** AI independent clinical review of the dietitian hypothesis (week 1). */
   ai_review: unknown | null;

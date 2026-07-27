@@ -59,17 +59,26 @@ export interface ReconcileResult {
   reason: string;
 }
 
-export async function reconcileNutrition(
-  supabase: SupabaseClient,
-  plan: DietPlan,
-  ctx: Omit<PlanContext, "revision">
-): Promise<ReconcileResult> {
+/** What a correction round should ask for, decided without any model call. */
+export interface ReconcileNeed {
+  needed: boolean;
+  /** Revision instructions naming each off-target day; "" when not needed. */
+  instructions: string;
+  reason: string;
+}
+
+/**
+ * Whether this grounded plan needs a portion correction, and what to ask for.
+ * Pure, so the stepped API can decide in one request and spend the model calls
+ * in the next ones — the same decision the one-shot path makes inline.
+ */
+export function reconcileNeed(plan: DietPlan): ReconcileNeed {
   const proteinTarget = plan.macros?.protein_g ?? 0;
   const calorieTarget = plan.daily_calories ?? 0;
   const hasProtein = Number.isFinite(proteinTarget) && proteinTarget > 0;
   const hasCalories = Number.isFinite(calorieTarget) && calorieTarget > 0;
   if (!hasProtein && !hasCalories) {
-    return { plan, applied: false, reason: "no targets on plan" };
+    return { needed: false, instructions: "", reason: "no targets on plan" };
   }
   const bands = bandsFor(plan);
 
@@ -79,7 +88,11 @@ export async function reconcileNutrition(
       (x) => x.protein < bands.lowP || x.calories < bands.lowCal || x.calories > bands.highCal
     );
   if (offTarget.length === 0) {
-    return { plan, applied: false, reason: "all days within protein band and calorie band" };
+    return {
+      needed: false,
+      instructions: "",
+      reason: "all days within protein band and calorie band",
+    };
   }
 
   const lines = offTarget.map(({ day, protein, calories }) => {
@@ -127,13 +140,24 @@ export async function reconcileNutrition(
     `keep every meal's calories consistent with its macros, and use realistic portions — ` +
     `do not inflate or deflate numbers to hit a total.`;
 
-  const revised = await generateDietPlan({ ...ctx, revision: { draft: plan, instructions } });
-  // If grounding throws, the revision is unverifiable — the caller's catch
-  // keeps the original plan.
-  const { plan: grounded } = await groundPlan(supabase, revised);
+  return { needed: true, instructions, reason: `${offTarget.length} day(s) off target` };
+}
 
-  const before = deviationScore(plan, bands);
-  const after = deviationScore(grounded, bands);
+/**
+ * Whether a re-grounded correction is actually better than what it replaces.
+ * Pure, and shared by both paths so a stepped generation can never keep a
+ * revision the one-shot path would have rejected.
+ */
+export function acceptRevision(
+  original: DietPlan,
+  groundedRevision: DietPlan
+): { accept: boolean; reason: string } {
+  const calorieTarget = original.daily_calories ?? 0;
+  const hasCalories = Number.isFinite(calorieTarget) && calorieTarget > 0;
+  const bands = bandsFor(original);
+
+  const before = deviationScore(original, bands);
+  const after = deviationScore(groundedRevision, bands);
   // The ceiling stops a revision SMUGGLING IN a blowout; it must not demand the
   // revision fix a breach the draft already had. Holding it to the absolute
   // ceiling rejected a revision that had genuinely improved (deviation
@@ -143,21 +167,38 @@ export async function reconcileNutrition(
   const worstDay = (p: DietPlan) => Math.max(...p.days.map(dayCalories));
   const ceilingOk =
     !hasCalories ||
-    worstDay(grounded) <= Math.max(calorieTarget * CALORIE_HARD_CEILING, worstDay(plan));
+    worstDay(groundedRevision) <= Math.max(calorieTarget * CALORIE_HARD_CEILING, worstDay(original));
 
   if (after < before && ceilingOk) {
-    return {
-      plan: grounded,
-      applied: true,
-      reason: `deviation ${Math.round(before)} -> ${Math.round(after)} over ${offTarget.length} day(s)`,
-    };
+    return { accept: true, reason: `deviation ${Math.round(before)} -> ${Math.round(after)}` };
   }
-  const avgKcal = grounded.days.reduce((s, d) => s + dayCalories(d), 0) / grounded.days.length;
+  const avgKcal =
+    groundedRevision.days.reduce((s, d) => s + dayCalories(d), 0) / groundedRevision.days.length;
   return {
-    plan,
-    applied: false,
+    accept: false,
     reason: `revision rejected (deviation ${Math.round(before)} -> ${Math.round(after)}${
       ceilingOk ? "" : ", a day exceeded the calorie ceiling"
     }, avg ${Math.round(avgKcal)} kcal vs target ${Math.round(calorieTarget)})`,
   };
+}
+export async function reconcileNutrition(
+  supabase: SupabaseClient,
+  plan: DietPlan,
+  ctx: Omit<PlanContext, "revision">
+): Promise<ReconcileResult> {
+  const need = reconcileNeed(plan);
+  if (!need.needed) return { plan, applied: false, reason: need.reason };
+
+  const revised = await generateDietPlan({
+    ...ctx,
+    revision: { draft: plan, instructions: need.instructions },
+  });
+  // If grounding throws, the revision is unverifiable — the caller's catch
+  // keeps the original plan.
+  const { plan: grounded } = await groundPlan(supabase, revised);
+
+  const verdict = acceptRevision(plan, grounded);
+  return verdict.accept
+    ? { plan: grounded, applied: true, reason: `${verdict.reason} over ${need.reason}` }
+    : { plan, applied: false, reason: verdict.reason };
 }
