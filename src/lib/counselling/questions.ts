@@ -1009,6 +1009,15 @@ import { MEAL_OCCASIONS } from "./meal-occasions";
 import { VARIANT_MEAL_KEYS, variantsQuestionId } from "./meal-variants";
 
 
+/** Practices that can carry a weekday rule, so the day questions open up. */
+function dayRuleAsked(a: Answers): boolean {
+  return (
+    has(a, "q38", "No non-vegetarian food on selected days") ||
+    has(a, "q38", "Fasting practice") ||
+    has(a, "q38", "Other")
+  );
+}
+
 function mealTimelineQuestions(): Question[] {
   const out: Question[] = [];
   for (const { key, label } of MEAL_OCCASIONS) {
@@ -1123,6 +1132,46 @@ const S6: Section = {
         "Vegetarian", "Eggetarian", "Vegan", "Non-vegetarian", "Pescatarian",
         "Flexitarian", "Jain", "Other",
       ],
+    },
+    {
+      id: "q38", n: 30, tag: "clinical", type: "multi", required: true,
+      label: "Cultural or religious food practices",
+      options: [
+        "No restriction", "Vegetarian household", "Vegan preference", "Jain restrictions",
+        "Halal", "Kosher", "No beef", "No pork", "No egg",
+        "No non-vegetarian food on selected days", "Fasting practice",
+        "Separate cooking not allowed", "Ethical or environmental restriction",
+        "Prefer not to answer", "Other",
+      ],
+      why: "Weekday rules live here — “no non-veg on Tuesday and Saturday”, Navratri or Shravan fasts, no onion and garlic on certain days. Select the practice and the day questions open up; the plan then holds those weekdays, so this must be asked even when the client does not raise it.",
+    },
+    // Shown for any answer that can carry a weekday rule, "Other" included — a
+    // practice the dietitian had to type as Other is exactly the one whose days
+    // would otherwise never be recorded.
+    {
+      id: "q38a", n: 30, tag: "conditional", type: "multi",
+      label: "On which days do these rules apply?",
+      options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+      showIf: dayRuleAsked,
+      note: "Tuesday and Saturday are the usual pair, but confirm rather than assume — Monday, Thursday and Friday are all common too.",
+    },
+    {
+      id: "q38b", n: 30, tag: "conditional", type: "multi", label: "What is avoided on those days?",
+      options: [
+        "Non-vegetarian food", "Eggs", "Onion & garlic", "All animal products",
+        "Specific grains (fasting)", "Other",
+      ],
+      showIf: dayRuleAsked,
+      // Days without a "what" enforce nothing: the plan checker matches food
+      // names against the avoided categories, so a day list on its own passes
+      // every meal silently.
+      required: (a) => list(a, "q38a").length > 0,
+    },
+    {
+      id: "q38c", n: 30, tag: "conditional", type: "text", label: "Day-rule details",
+      placeholder: "e.g. Tuesdays & Saturdays — no non-veg or eggs; Navratri fasts",
+      showIf: dayRuleAsked,
+      note: "These day rules are enforced per weekday in the generated plan, so vague answers produce wrong days.",
     },
     {
       id: "q28", n: 24, tag: "core", type: "multi", required: true,
@@ -1263,11 +1312,6 @@ const S6: Section = {
  * three day questions (q38a–c) follow, and what they record is enforced per
  * weekday when the plan is generated (see weekdayFoodRules in src/lib/nim.ts).
  */
-const dayRuleAsked = (a: Answers) =>
-  has(a, "q38", "No non-vegetarian food on selected days") ||
-  has(a, "q38", "Fasting practice") ||
-  has(a, "q38", "Other");
-
 const S7: Section = {
   id: "preferences",
   code: "7",
@@ -1299,46 +1343,6 @@ const S7: Section = {
     {
       id: "q34f", n: 30, tag: "planning", type: "textarea", label: "Frequency of major staples",
       placeholder: "e.g. roti twice daily (3–4 each time); rice at lunch only; poha 2 mornings a week",
-    },
-    {
-      id: "q38", n: 30, tag: "clinical", type: "multi", required: true,
-      label: "Cultural or religious food practices",
-      options: [
-        "No restriction", "Vegetarian household", "Vegan preference", "Jain restrictions",
-        "Halal", "Kosher", "No beef", "No pork", "No egg",
-        "No non-vegetarian food on selected days", "Fasting practice",
-        "Separate cooking not allowed", "Ethical or environmental restriction",
-        "Prefer not to answer", "Other",
-      ],
-      why: "Weekday rules live here — “no non-veg on Tuesday and Saturday”, Navratri or Shravan fasts, no onion and garlic on certain days. Select the practice and the day questions open up; the plan then holds those weekdays, so this must be asked even when the client does not raise it.",
-    },
-    // Shown for any answer that can carry a weekday rule, "Other" included — a
-    // practice the dietitian had to type as Other is exactly the one whose days
-    // would otherwise never be recorded.
-    {
-      id: "q38a", n: 30, tag: "conditional", type: "multi",
-      label: "On which days do these rules apply?",
-      options: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-      showIf: dayRuleAsked,
-      note: "Tuesday and Saturday are the usual pair, but confirm rather than assume — Monday, Thursday and Friday are all common too.",
-    },
-    {
-      id: "q38b", n: 30, tag: "conditional", type: "multi", label: "What is avoided on those days?",
-      options: [
-        "Non-vegetarian food", "Eggs", "Onion & garlic", "All animal products",
-        "Specific grains (fasting)", "Other",
-      ],
-      showIf: dayRuleAsked,
-      // Days without a "what" enforce nothing: the plan checker matches food
-      // names against the avoided categories, so a day list on its own passes
-      // every meal silently.
-      required: (a) => list(a, "q38a").length > 0,
-    },
-    {
-      id: "q38c", n: 30, tag: "conditional", type: "text", label: "Day-rule details",
-      placeholder: "e.g. Tuesdays & Saturdays — no non-veg or eggs; Navratri fasts",
-      showIf: dayRuleAsked,
-      note: "These day rules are enforced per weekday in the generated plan, so vague answers produce wrong days.",
     },
     {
       id: "q35", n: 31, tag: "planning", type: "textarea", required: true,
