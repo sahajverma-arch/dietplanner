@@ -1059,12 +1059,6 @@ function mealTimelineQuestions(): Question[] {
         label: `${label} — beverage`,
         placeholder: "e.g. tea with 1 tsp sugar; buttermilk; water only",
         showIf: show,
-      },
-      {
-        id: `q28_${key}_unplanned`, n: 24, group: `q28_${key}`, tag: "conditional", type: "single",
-        label: `${label} — planned or unplanned?`,
-        options: ["Planned", "Unplanned", "Partly unplanned"],
-        showIf: show,
       }
     );
   }
@@ -1137,13 +1131,6 @@ const S6: Section = {
       note: "Include tasting while cooking, small bites and anything drunk — these are the occasions clients leave out unless asked by name.",
     },
     ...mealTimelineQuestions(),
-    {
-      id: "q109", n: 25, tag: "core", type: "textarea", required: true,
-      label: "Now describe what you normally eat on a typical weekday, meal by meal",
-      placeholder:
-        "Per usual meal: time · food · typical quantity · preparation · source · how many days a week.",
-      why: "The recall says what happened yesterday; this says what happens most days, and the calorie estimate is built from this one.",
-    },
     {
       id: "q109a", n: 25, tag: "core", type: "multi",
       label: "Which meals are usually skipped, delayed or replaced?",
