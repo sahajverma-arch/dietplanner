@@ -1421,6 +1421,76 @@
       "source_id": "ASC165",
       "serving_g": 150,
       "serving_unit": "katori"
+    },
+    {
+      "name": "Pistachios",
+      "source": "USDA",
+      "source_id": "170185",
+      "serving_g": 0.8,
+      "serving_unit": "pistachio"
+    },
+    {
+      "name": "Avocado",
+      "source": "USDA",
+      "source_id": "171705",
+      "serving_g": 100,
+      "serving_unit": "g"
+    },
+    {
+      "name": "Paneer sabzi",
+      "source": "INDB",
+      "source_id": "ASC195",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Matar paneer",
+      "source": "INDB",
+      "source_id": "ASC191",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Vegetable omelette",
+      "source": "INDB",
+      "source_id": "ASC061",
+      "serving_g": 68,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Tofu scramble",
+      "source": "USDA",
+      "source_id": "174290",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Tofu stir-fry",
+      "source": "USDA",
+      "source_id": "174290",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Cottage cheese",
+      "source": "USDA",
+      "source_id": "172223",
+      "serving_g": 100,
+      "serving_unit": "g"
+    },
+    {
+      "name": "Fresh berries",
+      "source": "USDA",
+      "source_id": "167762",
+      "serving_g": 100,
+      "serving_unit": "g"
+    },
+    {
+      "name": "Berries",
+      "source": "USDA",
+      "source_id": "167762",
+      "serving_g": 100,
+      "serving_unit": "g"
     }
   ]
 }

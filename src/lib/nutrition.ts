@@ -349,8 +349,26 @@ const LEADING_SIZE = /^(extra\s+large|small|medium|large|big|xl)\s+/;
 const TRAILING_QUANTITY =
   /\s+[\d./½¼¾⅓⅔]+\s*(g|gm|grams?|ml|kg|l|litres?|katoris?|cups?|bowls?|plates?|glass(?:es)?|pieces?|slices?|tbsps?|tsps?|scoops?|handfuls?|servings?|portions?)\s*$/;
 
+/**
+ * How a food was CUT, which is never part of its identity but sabotages the
+ * match completely: "apple slices" scored 0.51 against "Apple snowballs" (a
+ * dessert) while plain "apple" matches Apple at 1.32, and "carrot sticks"
+ * found "Cream of carrot soup". Both foods were in the table all along.
+ *
+ * Only stripped when something remains — "sliced bread" is a bread, but a
+ * bare "slices" is not a food and must not become an empty query.
+ */
+const TRAILING_CUT =
+  /\s+(slices?|sticks?|cubes?|pieces?|chunks?|wedges?|halves|florets?|strips?|rings?|shreds?|batons?)\s*$/;
+const LEADING_CUT =
+  /^(sliced|chopped|diced|grated|shredded|cubed|minced|mashed|crushed|halved)\s+/;
+
 export function normName(s: string): string {
-  const base = s.trim().toLowerCase().replace(TRAILING_QUANTITY, "").trim();
+  let base = s.trim().toLowerCase().replace(TRAILING_QUANTITY, "").trim();
+  for (const cut of [TRAILING_CUT, LEADING_CUT]) {
+    const trimmed = base.replace(cut, "").trim();
+    if (trimmed) base = trimmed;
+  }
   // The parts stack in any order — "2 small bowls of dal" is a count, a size,
   // a vessel and a filler word before the food — so strip repeatedly until
   // nothing more comes off.
