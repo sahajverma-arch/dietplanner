@@ -1393,6 +1393,34 @@
       "source_id": "172183",
       "serving_g": 33,
       "serving_unit": "egg white"
+    },
+    {
+      "name": "Fruit",
+      "source": "USDA",
+      "source_id": "173944",
+      "serving_g": 118,
+      "serving_unit": "fruit"
+    },
+    {
+      "name": "Chicken",
+      "source": "INDB",
+      "source_id": "ASC240",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Nuts or seeds",
+      "source": "USDA",
+      "source_id": "170567",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Rajma or beans",
+      "source": "INDB",
+      "source_id": "ASC165",
+      "serving_g": 150,
+      "serving_unit": "katori"
     }
   ]
 }

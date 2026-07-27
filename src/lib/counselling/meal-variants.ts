@@ -58,6 +58,11 @@ export const VARIANT_MEAL_KEYS = [
   "lunch",
   "afternoon",
   "evening",
+  // Post-workout is where a training client's protein concentrates — shakes,
+  // eggs, milk. Leaving it out understated their measured intake, and since
+  // the week-1 target is that intake raised 10-15%, it understated the target
+  // too: Aadi's two post-workout eggs alone are 8 g/day.
+  "postworkout",
   "dinner",
 ] as const;
 

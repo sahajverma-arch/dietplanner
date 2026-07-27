@@ -73,7 +73,17 @@ export const PRIYA: Answers = {
   q27a: "Severe", q27b: "Yes",
 
   // 5 — Actual food day
-  q28: ["Breakfast", "Mid-morning", "Lunch", "Evening snack", "Dinner"],
+  q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Poha\",\"items\":[{\"food\":\"Poha\",\"qty\":\"1 bowl\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":177,\"protein_g\":5,\"carbs_g\":21,\"fat_g\":8}},{\"id\":\"breakfast2\",\"label\":\"Upma\",\"items\":[{\"food\":\"Upma\",\"qty\":\"1 bowl\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":160,\"protein_g\":3,\"carbs_g\":19,\"fat_g\":8}}]",
+  "q112_midmorning_variants":
+    "[{\"id\":\"midmorning1\",\"label\":\"Fruit\",\"items\":[{\"food\":\"Fruit\",\"qty\":\"1\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":105,\"protein_g\":1,\"carbs_g\":27,\"fat_g\":0}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Roti, dal and sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"},{\"food\":\"Salad\",\"qty\":\"1 bowl\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":472,\"protein_g\":17,\"carbs_g\":57,\"fat_g\":19}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Tea and biscuits\",\"items\":[{\"food\":\"Biscuits\",\"qty\":\"4\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":215,\"protein_g\":4,\"carbs_g\":41,\"fat_g\":4}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Roti and paneer sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Paneer\",\"qty\":\"100 g\"}],\"daysPerWeek\":3,\"measured\":{\"calories\":445,\"protein_g\":22,\"carbs_g\":29,\"fat_g\":26}},{\"id\":\"dinner2\",\"label\":\"Roti, dal and sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":455,\"protein_g\":16,\"carbs_g\":54,\"fat_g\":19}}]",
   q28_breakfast_time: "08:30",
   q28_breakfast_food: "Poha 1 plate + tea with 1 tsp sugar",
   q109: "08:30 poha 1 plate or 2 rotis with sabzi, tea with 1 tsp sugar, most mornings. 11:00 a fruit, 4-5 days a week. 13:30 lunch — 2 rotis, dal 1 katori, sabzi, salad, home cooked, daily. 17:30 tea with 4 biscuits, daily. 21:00 dinner — 2 rotis with paneer or a vegetable sabzi, home cooked, daily.",
@@ -253,7 +263,17 @@ export const RAHUL: Answers = {
   q27: ["No known allergy"],
 
   // 5 — Actual food day
-  q28: ["Breakfast", "Lunch", "Evening snack", "Post-workout", "Dinner"],
+  q28: ["Breakfast", "Lunch", "Evening", "Post-Workout", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Aloo paratha and curd\",\"items\":[{\"food\":\"Paratha\",\"qty\":\"2\"},{\"food\":\"Curd\",\"qty\":\"1 katori\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":505,\"protein_g\":16,\"carbs_g\":53,\"fat_g\":25}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Office thali\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1 katori\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"},{\"food\":\"Roti\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":631,\"protein_g\":20,\"carbs_g\":92,\"fat_g\":19}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Tea and samosa\",\"items\":[{\"food\":\"Biscuits\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":108,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":2}}]",
+  "q112_postworkout_variants":
+    "[{\"id\":\"postworkout1\",\"label\":\"Banana and shake\",\"items\":[{\"food\":\"Fruit\",\"qty\":\"1\"},{\"food\":\"Protein powder\",\"qty\":\"1 scoop\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":211,\"protein_g\":25,\"carbs_g\":29,\"fat_g\":1}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Chicken curry and roti\",\"items\":[{\"food\":\"Chicken\",\"qty\":\"1 katori\"},{\"food\":\"Roti\",\"qty\":\"2\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":339,\"protein_g\":22,\"carbs_g\":31,\"fat_g\":14}},{\"id\":\"dinner2\",\"label\":\"Dal and roti\",\"items\":[{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Roti\",\"qty\":\"2\"}],\"daysPerWeek\":3,\"measured\":{\"calories\":330,\"protein_g\":12,\"carbs_g\":43,\"fat_g\":12}}]",
   q28_breakfast_time: "09:00",
   q28_breakfast_food: "2 aloo parathas + curd 1 katori",
   q109: "09:00 breakfast — 2 aloo parathas with curd, 4-5 days a week, skipped when late. 13:00 office thali — rice, dal, sabzi, 2 rotis, 5 days a week. 17:30 tea with a samosa or fried snack from the office vendor, 3-4 days. 20:00 post-workout banana and a protein shake on the 4 gym days. 21:30 dinner — chicken curry with 2 rotis on 3 nights, dal on the others; eats out or orders in 3 nights a week.",
@@ -445,7 +465,17 @@ export const SNEHA: Answers = {
   q27: ["No known allergy"],
 
   // 5 — Actual food day
-  q28: ["Breakfast", "Mid-morning", "Lunch", "Evening snack", "Dinner"],
+  q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Roti and sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":270,\"protein_g\":8,\"carbs_g\":36,\"fat_g\":10}}]",
+  "q112_midmorning_variants":
+    "[{\"id\":\"midmorning1\",\"label\":\"Milk\",\"items\":[{\"food\":\"Milk\",\"qty\":\"1 glass\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":149,\"protein_g\":8,\"carbs_g\":12,\"fat_g\":8}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Rice, dal, sabzi and curd\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1 katori\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"},{\"food\":\"Curd\",\"qty\":\"1 katori\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":576,\"protein_g\":21,\"carbs_g\":74,\"fat_g\":21}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Tea and biscuits\",\"items\":[{\"food\":\"Biscuits\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":108,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":2}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Roti and sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":270,\"protein_g\":8,\"carbs_g\":36,\"fat_g\":10}},{\"id\":\"dinner2\",\"label\":\"Roti and paneer\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Paneer\",\"qty\":\"100 g\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":445,\"protein_g\":22,\"carbs_g\":29,\"fat_g\":26}}]",
   q28_breakfast_time: "08:00",
   q28_breakfast_food: "2 rotis + sabzi + tea with 1 tsp sugar",
   q109: "08:00 breakfast — 2 rotis with sabzi and tea with 1 tsp sugar, daily. 11:00 a glass of milk, daily. 13:30 lunch — rice 1 cup, dal 1 katori, sabzi, curd 1 katori, carried from home, daily. 17:00 tea with 2 biscuits, daily. 21:00 dinner — 2 rotis with sabzi, paneer twice a week, cooked at home with the family.",
@@ -628,7 +658,17 @@ export const AADI: Answers = {
   q27: ["No known allergy"],
 
   // 5 — Actual food day
-  q28: ["Breakfast", "Lunch", "Evening snack", "Post-workout", "Dinner"],
+  q28: ["Breakfast", "Lunch", "Evening", "Post-Workout", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Egg omelette and bread\",\"items\":[{\"food\":\"Eggs\",\"qty\":\"3\"},{\"food\":\"Bread\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":394,\"protein_g\":27,\"carbs_g\":29,\"fat_g\":18}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Rice, dal, sabzi and curd\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1 katori\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"},{\"food\":\"Curd\",\"qty\":\"1 katori\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":576,\"protein_g\":21,\"carbs_g\":74,\"fat_g\":21}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Tea and biscuits\",\"items\":[{\"food\":\"Biscuits\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":108,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":2}}]",
+  "q112_postworkout_variants":
+    "[{\"id\":\"postworkout1\",\"label\":\"Banana and boiled eggs\",\"items\":[{\"food\":\"Fruit\",\"qty\":\"1\"},{\"food\":\"Eggs\",\"qty\":\"2\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":260,\"protein_g\":14,\"carbs_g\":28,\"fat_g\":11}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Roti and paneer sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"3\"},{\"food\":\"Paneer\",\"qty\":\"100 g\"}],\"daysPerWeek\":3,\"measured\":{\"calories\":517,\"protein_g\":24,\"carbs_g\":41,\"fat_g\":28}},{\"id\":\"dinner2\",\"label\":\"Roti and dal\",\"items\":[{\"food\":\"Roti\",\"qty\":\"3\"},{\"food\":\"Dal\",\"qty\":\"1 katori\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":403,\"protein_g\":14,\"carbs_g\":56,\"fat_g\":13}}]",
   q28_breakfast_time: "08:30",
   q28_breakfast_food: "3 egg omelette + 2 bread slices + tea",
   q109: "08:30 breakfast — 3 egg omelette with 2 bread slices and tea, most days. 13:30 lunch — rice 1 cup, dal 1 katori, sabzi, curd 1 katori, daily. 17:30 tea with biscuits, daily. 19:30 post-workout banana and 2 boiled eggs on the 5 training days. 21:00 dinner — 3 rotis with paneer sabzi or dal, home cooked, daily.",
