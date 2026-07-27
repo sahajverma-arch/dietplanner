@@ -236,12 +236,18 @@ NVIDIA_API_KEY=nvapi-...
    ```
 2. On [vercel.com](https://vercel.com) → **Add New → Project** → import the repo
    (framework auto-detected as Next.js).
-3. Add the three environment variables from `.env.example` under
-   **Settings → Environment Variables** (Production + Preview).
-4. Deploy. The generate route declares `maxDuration = 60`, which is supported on the
-   Vercel Hobby plan.
+3. Add the environment variables from `.env.example` under
+   **Settings → Environment Variables** (Production + Preview). Vercel bakes
+   these at build time, so changing one later needs a redeploy to take effect.
+4. Deploy. **This requires a paid plan**: plan generation makes two sequential
+   model calls and takes 2-5 minutes, so `/api/generate-plan` declares
+   `maxDuration = 300` and `/api/plan-meal` declares `120`. Hobby caps Node
+   functions at 60s, which no amount of tuning fits — the model call alone
+   exceeds it.
 5. In Supabase, add your Vercel domain under
    **Authentication → URL Configuration → Site URL / Redirect URLs**.
+6. Run every migration in `supabase/migrations/` in the SQL Editor, and
+   `npm run seed:foods` locally, before first use.
 
 ## Environment variables
 
@@ -251,8 +257,9 @@ NVIDIA_API_KEY=nvapi-...
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server | Safe to expose — RLS enforces access |
 | `NVIDIA_API_KEY` | **server only** | Never exposed to the browser |
 | `SUPABASE_SERVICE_ROLE_KEY` | **local seeding only** | Only needed to run `npm run seed:foods`; never deploy it to Vercel |
-| `NVIDIA_MODEL` | server, optional | Defaults to `meta/llama-3.1-70b-instruct`; if that shared endpoint is congested, `mistralai/mistral-small-4-119b-2603` is a fast, strong alternative |
-| `NVIDIA_FALLBACK_MODEL` | server, optional | Tried automatically when the primary model times out or errors; defaults to `meta/llama-3.1-8b-instruct` |
+| `NVIDIA_MODEL` | server | `meta/llama-3.1-8b-instruct`. NVIDIA retires models without notice — `mistral-small-4` went 410 Gone mid-project — so verify with `npx tsx scripts/bench-nim-models.ts` before relying on one |
+| `NVIDIA_FALLBACK_MODEL` | server | `nvidia/llama-3.3-nemotron-super-49b-v1`. Tried automatically when the primary times out or fails validation. **Must differ from `NVIDIA_MODEL`** — `callNim` skips the fallback path when they match |
+| `NVIDIA_TIMEOUT_MS` | server, optional | Per-call cap, default `120000`. A congestion setting, not a model property; above ~`140000` the failure moves from the model call to the route's own limit |
 | `NVIDIA_NIM_URL` | server, optional | Defaults to the hosted NIM endpoint |
 
 ## AI output contract
