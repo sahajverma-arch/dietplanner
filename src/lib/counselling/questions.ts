@@ -1208,11 +1208,6 @@ const S6: Section = {
       placeholder: "e.g. ghee 1 tsp per roti, daily; pickle most lunches; cream in weekend gravies",
       showIf: (a) => hasOther(a, "q110", ["None"]),
     },
-    { id: "q110b", n: 28, tag: "core", type: "text", label: "Cooking oil type", placeholder: "e.g. mustard, refined sunflower, ghee" },
-    {
-      id: "q110c", n: 28, tag: "core", type: "text", label: "Approximate household oil usage",
-      placeholder: "e.g. 5 litre tin per month",
-    },
     { id: "q110d", n: 28, tag: "core", type: "number", label: "Number of people sharing food" },
     {
       id: "q110e", n: 28, tag: "planning", type: "text", label: "Estimated per-person oil usage",
