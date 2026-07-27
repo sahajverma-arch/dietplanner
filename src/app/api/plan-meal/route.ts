@@ -15,7 +15,10 @@ import { groundMeals } from "@/lib/nutrition";
 import type { IntakeForm, PlanRevision } from "@/lib/types";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// 60s is the Vercel Hobby ceiling, and everything here fits inside it: one
+// meal's alternatives measured 7-33s, and parsing a typed meal is faster
+// still. Unlike whole-plan generation, per-meal editing never needs more.
+export const maxDuration = 60;
 
 /** How many "or have this instead" choices one meal may carry in the PDF. */
 const MAX_ALTERNATES = 4;
