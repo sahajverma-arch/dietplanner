@@ -51,7 +51,12 @@ export type QuestionType =
   // A list of options each carrying a count ("Roti × 2"), stored as string[].
   // Exists so the food day can be tapped instead of typed — see
   // STAPLE_LABELS in src/lib/protein-intake.ts.
-  | "portions";
+  | "portions"
+  // What the client eats at one meal across a week: several variants, each
+  // with its foods and how many days it happens. Stored as JSON in a single
+  // answer — see src/lib/counselling/meal-variants.ts. This is where the
+  // client's protein intake is measured from.
+  | "mealVariants";
 
 export type Answers = Record<string, string | string[]>;
 
@@ -1001,6 +1006,7 @@ const S5: Section = {
 
 export { MEAL_OCCASIONS } from "./meal-occasions";
 import { MEAL_OCCASIONS } from "./meal-occasions";
+import { VARIANT_MEALS, variantsQuestionId } from "./meal-variants";
 
 const PREPARATION = [
   "Raw", "Boiled", "Steamed", "Grilled", "Roasted", "Air fried", "Shallow fried",
@@ -1085,6 +1091,28 @@ function mealTimelineQuestions(): Question[] {
 // is selected in Q50. Selection is the only condition on purpose: the food
 // pattern already narrows what Q50 offers, and gating these on it as well would
 // leave a food the dietitian deliberately selected impossible to measure.
+/**
+ * One variant box per main meal and snack occasion — the places where what a
+ * client eats actually varies, and where their protein lives. The rest of the
+ * day keeps the simpler capture in the Q28 timeline.
+ *
+ * These carry the client's measured protein intake, so they are the questions
+ * the week-1 target is built from. See src/lib/counselling/meal-variants.ts.
+ */
+function mealVariantQuestions(): Question[] {
+  return VARIANT_MEALS.map(({ key, label }) => ({
+    id: variantsQuestionId(key),
+    n: 25,
+    tag: "core" as const,
+    type: "mealVariants" as const,
+    label: `${label} — what do they actually have, and how often?`,
+    note:
+      "Add one option per thing they eat, with the foods and quantities, then " +
+      "how many days a week it happens. Everything is costed against the food " +
+      "database as you type, and every number can be corrected.",
+  }));
+}
+
 function proteinFrequencyQuestions(): Question[] {
   const out: Question[] = [];
   for (const food of PROTEIN_FOODS) {
@@ -1196,36 +1224,19 @@ const S6: Section = {
       note: "Estimate calories from the habitual pattern and several data points. One reported day on its own does not support a calorie target.",
     },
 
-    // --- Protein, counted from the day just described -----------------------
-    // This used to be its own section, which meant the client finished a
-    // fifteen-minute account of what they eat and was then asked about food all
-    // over again in a different format. It reads as a second interrogation and
-    // the answers drift, because nobody re-derives the same day twice the same
-    // way. Kept here it is one conversation: the dietitian ticks the protein
-    // foods off the meals already on the table and only asks what is genuinely
-    // new — how often and how much.
-    {
-      id: "q50", n: 50, tag: "planning", type: "multi",
-      label: "Which protein foods are currently part of your diet?",
-      why: "Tick these off the day already described rather than asking again. Each one is then measured for frequency and portion and priced from the food database — that measurement, not a guess, is what the week-1 protein target is built from.",
-      // Narrowed to the recorded food pattern, so a vegetarian consultation is
-      // not a wall of chicken and fish, and nothing at all until Q33 says which
-      // pattern applies. Anything already selected still keeps its follow-up
-      // rows, even if the pattern is later changed.
-      optionsFor: (a) => {
-        const foods = foodsForPattern(a);
-        return foods.length === 0 ? [] : [...foods.map((f) => f.label), "Other"];
-      },
-      optionsEmptyHint:
-        "Answer “What food pattern do you follow?” at the top of this section first — the protein list is built from it.",
-      options: [
-        "Milk", "Curd", "Greek or high-protein yogurt", "Buttermilk or chaas", "Paneer",
-        "Tofu", "Soy chunks", "Tempeh", "Dal", "Chickpeas or chole", "Rajma or beans",
-        "Sprouts", "Roasted chana", "Nuts or seeds", "Eggs", "Chicken", "Fish",
-        "Seafood", "Meat", "Protein powder", "Other",
-      ],
-    },
-    ...proteinFrequencyQuestions(),
+    // --- What they eat across a week, and the protein that falls out of it ---
+    // This replaced a separate protein section that asked the client, food by
+    // food, how often and how much — after they had already spent fifteen
+    // minutes describing what they eat. It read as a second interrogation, and
+    // the answers drifted, because nobody re-derives the same week twice the
+    // same way.
+    //
+    // Recording the real variants of each meal instead ("bread omelette 3
+    // days, poha 1, chilla 1") captures the food ONCE, in the shape the client
+    // describes it, and the protein is measured from it against the same foods
+    // table the diet plan is costed with.
+    ...mealVariantQuestions(),
+
     {
       id: "q50a", tag: "planning", type: "single",
       label: "Meals per day with a clear protein source",

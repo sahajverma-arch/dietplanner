@@ -19,6 +19,9 @@ import {
 import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import PlanProgressBar from "./PlanProgressBar";
+import MealVariantsInput, { StapleFoodOptions } from "./MealVariantsInput";
+import IntakeOverride from "./IntakeOverride";
+import { INTAKE_OVERRIDE_ID } from "@/lib/counselling/meal-variants";
 import {
   decodeStaplePick,
   encodeStaplePick,
@@ -177,6 +180,7 @@ export default function ClinicalCounsellingForm({
 
   return (
     <div>
+      <StapleFoodOptions />
       {/* Header */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -352,7 +356,10 @@ export default function ClinicalCounsellingForm({
             </div>
           </div>
 
-          <ProteinIntakePanel answers={answers} />
+          <ProteinIntakePanel
+            answers={answers}
+            onOverride={(v) => set(INTAKE_OVERRIDE_ID, v)}
+          />
 
           {/* Footer nav */}
           <div className="mt-4 flex items-center justify-between gap-3">
@@ -466,7 +473,14 @@ export default function ClinicalCounsellingForm({
  * number while the client is still in front of them — a target built on a
  * frequency nobody questioned is worse than no target at all.
  */
-export function ProteinIntakePanel({ answers }: { answers: Answers }) {
+export function ProteinIntakePanel({
+  answers,
+  onOverride,
+}: {
+  answers: Answers;
+  /** Omitted where the panel is read-only (the dev preview). */
+  onOverride?: (encoded: string) => void;
+}) {
   const estimate = useMemo(() => estimateProteinIntake(answers), [answers]);
   const target = useMemo(() => proteinTarget(answers, estimate), [answers, estimate]);
 
@@ -484,8 +498,50 @@ export function ProteinIntakePanel({ answers }: { answers: Answers }) {
     <div className={`card mt-4 border ${tone}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">Measured current intake</h3>
-        <span className="text-xs text-zinc-500">from the recorded frequency × food database</span>
+        <span className="text-xs text-zinc-500">
+          {estimate.source === "variants"
+            ? "from the recorded meals × how often × food database"
+            : "from the recorded frequency × food database"}
+        </span>
       </div>
+
+      {/* Per-meal breakdown, so the dietitian can see WHERE the number came
+          from and which meal is dragging it down. */}
+      {estimate.variants && estimate.variants.meals.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {estimate.variants.meals.map((m) => (
+            <div key={m.key} className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="text-zinc-400">
+                {m.label}
+                <span className="text-zinc-600">
+                  {" "}
+                  · {m.variants.length} option{m.variants.length > 1 ? "s" : ""}
+                  {m.daysCovered !== 7 ? ` · ${m.daysCovered}/7 days` : ""}
+                </span>
+              </span>
+              <span className="shrink-0 tabular-nums text-zinc-300">
+                {m.perDay.protein_g} g · {m.perDay.calories} kcal
+              </span>
+            </div>
+          ))}
+          {estimate.variants.unpriced.length > 0 && (
+            <p className="rounded bg-amber-500/10 px-2 py-1 text-[11px] leading-relaxed text-amber-400">
+              Excluded from these totals (not in the food database):{" "}
+              <strong>{estimate.variants.unpriced.join(", ")}</strong>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* The last word is the dietitian's: a database match is a good estimate,
+          and the person in the room knows when it is wrong. */}
+      {estimate.source === "variants" && onOverride && (
+        <IntakeOverride
+          estimate={estimate}
+          value={answers[INTAKE_OVERRIDE_ID]}
+          onChange={onOverride}
+        />
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="rounded-lg bg-zinc-900/60 px-3 py-2">
@@ -1070,6 +1126,16 @@ function Field({
             );
           })}
         </div>
+      )}
+
+      {/* What the client eats at this meal across a week, priced as it is
+          entered. This is where the protein intake is measured from. */}
+      {!blocked && q.type === "mealVariants" && (
+        <MealVariantsInput
+          mealLabel={q.label.split("—")[0].trim()}
+          value={answers[q.id]}
+          onChange={(encoded) => set(q.id, encoded)}
+        />
       )}
 
       {q.type === "scale10" && (

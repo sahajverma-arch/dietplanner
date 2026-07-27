@@ -21,6 +21,30 @@ import {
   type Answers,
 } from "./questions";
 import { estimateProteinIntake, proteinTarget, stapleQuestionId } from "../protein-intake";
+import { variantIntake, variantLabel } from "./meal-variants";
+
+/**
+ * The protein-bearing foods the client actually eats, read off the recorded
+ * meal variants. Replaces the separate q50 tick-list: the same information is
+ * already in the meals, and asking for it twice is what made the protein
+ * section feel like an interrogation.
+ */
+const MEANINGFUL_PROTEIN_G = 3;
+
+function proteinSourcesFromVariants(a: Answers): string[] {
+  const seen = new Set<string>();
+  for (const meal of variantIntake(a).meals) {
+    for (const v of meal.variants) {
+      // Only variants carrying meaningful protein — a plain roti-and-tea
+      // breakfast is not a "protein source", and listing it as one would
+      // mislead the model about where this client's protein comes from.
+      const macros = v.override ?? v.measured;
+      if (!macros || macros.protein_g < MEANINGFUL_PROTEIN_G) continue;
+      for (const item of v.items) if (item.food.trim()) seen.add(item.food.trim());
+    }
+  }
+  return Array.from(seen);
+}
 
 // ---------------------------------------------------------------------------
 // RED FLAGS — clinical stops. "escalate" ones mean the plan should not be
@@ -406,7 +430,7 @@ const RUBRIC: { name: string; items: Item[] }[] = [
     items: [
       { points: 2, label: "Current training", done: all("q43") },
       { points: 2, label: "Experience & goal", done: all("q44d", "q44f") },
-      { points: 2, label: "Protein sources", done: all("q50") },
+      { points: 2, label: "Protein sources", done: (a: Answers) => variantIntake(a).recorded },
       { points: 2, label: "Protein meals/day", done: all("q50a") },
       { points: 1, label: "Supplements", done: all("q51") },
       { points: 1, label: "Under-fuelling screen", done: all("q52") },
@@ -842,7 +866,9 @@ export function aiProfile(a: Answers): Block {
   const target = proteinTarget(a, proteinEstimate);
 
   put("protein_and_supplements", clean({
-    protein_sources: list(a, "q50"),
+    // Named from what they actually eat, since the separate protein
+    // tick-list was replaced by the measured meal variants.
+    protein_sources: proteinSourcesFromVariants(a),
     measured_protein_intake_g_per_day: proteinEstimate.measured
       ? proteinEstimate.gramsPerDay
       : "",

@@ -3,6 +3,7 @@
 // its per-food questions, so a value import in this direction would create a
 // runtime import cycle.
 import type { Answers } from "./counselling/questions";
+import { variantIntake, type VariantIntake } from "./counselling/meal-variants";
 // Value import is safe: meal-occasions.ts imports nothing, so no cycle.
 import { MEAL_KEYS } from "./counselling/meal-occasions";
 
@@ -347,6 +348,14 @@ export interface ProteinIntakeEstimate {
   foodDay: "counted" | "unmatched" | "none";
   /** True once at least one food has a frequency — the estimate is meaningful. */
   measured: boolean;
+  /**
+   * Where the numbers came from. "variants" is the measured meal capture;
+   * "legacy" is the food-by-food frequency/portion form it replaced, kept so
+   * counsellings taken before the change still open and still generate.
+   */
+  source: "variants" | "legacy";
+  /** The per-meal breakdown, when source is "variants". */
+  variants?: VariantIntake;
 }
 
 const bodyWeightKg = (a: Answers): number | null => {
@@ -361,6 +370,39 @@ const bodyWeightKg = (a: Answers): number | null => {
  * form reads as incomplete rather than as a genuinely low intake.
  */
 export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
+  // Recorded meal variants supersede everything below. They measure the same
+  // thing far better: real portions of real meals, priced against the foods
+  // table the diet plan is costed with, weighted by how many days a week each
+  // one is actually eaten. The legacy path stays for counsellings taken before
+  // variants existed, which still have to open and still have to generate.
+  const variants = variantIntake(a);
+  if (variants.recorded) {
+    const { protein_g, carbs_g, fat_g, calories } = variants.perDay;
+    const weight = bodyWeightKg(a);
+    const macroKcal = 4 * protein_g + 4 * carbs_g + 9 * fat_g;
+    const share = (kcal: number) => (macroKcal > 0 ? Math.round((kcal / macroKcal) * 100) : 0);
+    return {
+      gramsPerDay: protein_g,
+      gramsPerKg: weight ? Math.round((protein_g / weight) * 100) / 100 : null,
+      carbsPerDay: carbs_g,
+      fatPerDay: fat_g,
+      kcalPerDay: calories,
+      energySplit: {
+        protein: share(4 * protein_g),
+        carbs: share(4 * carbs_g),
+        fat: share(9 * fat_g),
+      },
+      contributions: [],
+      unrecorded: [],
+      staples: [],
+      stapleGramsPerDay: 0,
+      foodDay: "counted",
+      measured: true,
+      source: "variants",
+      variants,
+    };
+  }
+
   const selected = list(a, "q50");
   const contributions: FoodContribution[] = [];
   const unrecorded: ProteinFood[] = [];
@@ -431,6 +473,7 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
           ? "unmatched"
           : "none",
     measured: contributions.length > 0 || staples.length > 0,
+    source: "legacy",
   };
 }
 
