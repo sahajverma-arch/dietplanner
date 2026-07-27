@@ -92,6 +92,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 weekNumber={latest.week_number}
                 createdAt={formatDate(latest.created_at)}
                 draft={latestIsDraft}
+                planId={latest.id}
               />
             ) : (
               <div className="card text-center">

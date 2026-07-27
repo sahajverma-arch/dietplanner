@@ -1,17 +1,22 @@
 import type { DietPlan } from "@/lib/nim";
 import { dayTargetVerdict } from "@/lib/day-targets";
+import MealActions from "./MealActions";
 
 export default function PlanView({
   plan,
   weekNumber,
   createdAt,
   draft = false,
+  /** Draft plans can be edited meal by meal; approved ones are read-only. */
+  planId,
 }: {
   plan: DietPlan;
   weekNumber: number;
   createdAt: string;
   draft?: boolean;
+  planId?: string;
 }) {
+  const editable = draft && !!planId;
   return (
     <div className="card">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -79,34 +84,68 @@ export default function PlanView({
             </summary>
             <div className="divide-y divide-zinc-800 border-t border-zinc-800">
               {day.meals.map((meal, mi) => (
-                <div key={mi} className="flex gap-3 px-3 py-2.5">
-                  <div className="w-28 shrink-0">
-                    <div className="text-sm font-medium">{meal.name}</div>
-                    {meal.time && <div className="text-xs text-zinc-500">{meal.time}</div>}
-                  </div>
-                  <div className="min-w-0 flex-1 text-sm text-zinc-300">
-                    {meal.items.map((item, ii) => (
-                      <div key={ii}>
-                        {item.food}
-                        {item.quantity ? ` — ${item.quantity}` : ""}
+                <div key={mi} className="px-3 py-2.5">
+                  <div className="flex gap-3">
+                    <div className="w-28 shrink-0">
+                      <div className="text-sm font-medium">{meal.name}</div>
+                      {meal.time && <div className="text-xs text-zinc-500">{meal.time}</div>}
+                    </div>
+                    <div className="min-w-0 flex-1 text-sm text-zinc-300">
+                      {meal.items.map((item, ii) => (
+                        <div key={ii}>
+                          {item.food}
+                          {item.quantity ? ` — ${item.quantity}` : ""}
+                        </div>
+                      ))}
+                      {meal.notes && (
+                        <div className="mt-0.5 text-xs italic text-zinc-500">{meal.notes}</div>
+                      )}
+                      {/* Client-facing choices for this slot — the client eats
+                          the meal above OR one of these, never both. */}
+                      {meal.alternates.map((alt, ai) => (
+                        <div key={ai} className="mt-1 flex gap-1.5 text-xs text-zinc-400">
+                          <span className="font-semibold text-zinc-600">OR</span>
+                          <span>
+                            {alt.items
+                              .map((it) => (it.quantity ? `${it.food} — ${it.quantity}` : it.food))
+                              .join(", ")}
+                            {(alt.calories || 0) > 0 && (
+                              <span className="text-zinc-600">
+                                {" "}
+                                ({Math.round(alt.calories)} kcal · P {Math.round(alt.protein_g)})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {(meal.calories || 0) > 0 && (
+                      <div className="shrink-0 text-right text-xs">
+                        <div className="font-semibold text-zinc-300">
+                          {Math.round(meal.calories)} kcal
+                        </div>
+                        <div className="mt-0.5 text-zinc-500">
+                          <span className="text-sky-400">P {Math.round(meal.protein_g)}</span>
+                          {" · "}
+                          <span className="text-amber-400">C {Math.round(meal.carbs_g)}</span>
+                          {" · "}
+                          <span className="text-red-400">F {Math.round(meal.fat_g)}</span>
+                        </div>
                       </div>
-                    ))}
-                    {meal.notes && (
-                      <div className="mt-0.5 text-xs italic text-zinc-500">{meal.notes}</div>
                     )}
                   </div>
-                  {(meal.calories || 0) > 0 && (
-                    <div className="shrink-0 text-right text-xs">
-                      <div className="font-semibold text-zinc-300">
-                        {Math.round(meal.calories)} kcal
-                      </div>
-                      <div className="mt-0.5 text-zinc-500">
-                        <span className="text-sky-400">P {Math.round(meal.protein_g)}</span>
-                        {" · "}
-                        <span className="text-amber-400">C {Math.round(meal.carbs_g)}</span>
-                        {" · "}
-                        <span className="text-red-400">F {Math.round(meal.fat_g)}</span>
-                      </div>
+                  {editable && planId && (
+                    <div className="sm:pl-[7.75rem]">
+                      <MealActions
+                        planId={planId}
+                        dayIndex={di}
+                        mealIndex={mi}
+                        dayLabel={day.day}
+                        mealName={meal.name}
+                        calories={meal.calories || 0}
+                        proteinG={meal.protein_g || 0}
+                        alternates={meal.alternates}
+                      />
                     </div>
                   )}
                 </div>

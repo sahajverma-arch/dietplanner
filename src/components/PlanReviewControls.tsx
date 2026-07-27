@@ -23,6 +23,10 @@ export default function PlanReviewControls({
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState<"revise" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Meals swapped or given options from the pencil menu. A full regeneration
+  // rewrites every day, so those edits do not survive it — say so before they
+  // click, not after.
+  const handEdits = revisions.filter((r) => r.kind === "manual").length;
 
   async function send(type: "revise" | "approve") {
     setBusy(type);
@@ -60,7 +64,8 @@ export default function PlanReviewControls({
       </div>
       <p className="mt-1.5 text-sm text-zinc-400">
         Check the preview below: repeated foods, protein/calorie targets, meal timing, portions.
-        Approve it as-is, or write the changes you want and regenerate.
+        Edit any single meal with its pencil, approve the draft as-is, or write the changes you
+        want and regenerate the whole week.
       </p>
 
       {revisions.length > 0 && (
@@ -70,10 +75,24 @@ export default function PlanReviewControls({
           </h3>
           <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-zinc-400">
             {revisions.map((r, i) => (
-              <li key={i}>{r.instructions}</li>
+              <li key={i}>
+                {r.instructions}
+                {r.kind === "manual" && (
+                  <span className="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    by hand
+                  </span>
+                )}
+              </li>
             ))}
           </ul>
         </div>
+      )}
+
+      {handEdits > 0 && (
+        <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+          You edited {handEdits} meal{handEdits > 1 ? "s" : ""} by hand. Regenerating rewrites the
+          whole week, so those edits — and any &ldquo;OR&rdquo; options you added — will be lost.
+        </p>
       )}
 
       <textarea
