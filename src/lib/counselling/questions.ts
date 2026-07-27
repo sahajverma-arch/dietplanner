@@ -1912,50 +1912,6 @@ const S11: Section = {
       note: "If a doctor-given fluid restriction was recorded in the medical section, that ceiling wins over any hydration target.",
     },
     {
-      id: "q63c", n: 55, tag: "core", type: "text", label: "Other fluids",
-      placeholder: "e.g. 3 teas, 1 buttermilk, occasional juice",
-    },
-    {
-      id: "q63d", n: 55, tag: "fitness", type: "text", label: "Workout hydration",
-      placeholder: "e.g. 500 ml during a 60-minute session",
-    },
-    {
-      id: "q63a", n: 55, tag: "conditional", type: "multi", label: "Factors affecting requirements",
-      options: [
-        "Hot climate", "Heavy sweating", "Long workouts", "Outdoor training",
-        "Endurance exercise", "Physical job", "Frequent travel", "None",
-      ],
-    },
-    {
-      id: "q63b", n: 55, tag: "conditional", type: "single", label: "Electrolytes",
-      options: ["Regularly", "Sometimes", "Only during long or hard exercise", "Never", "Unsure when required"],
-    },
-    {
-      id: "q64", n: 56, tag: "core", type: "multi", required: true,
-      label: "Which caffeinated drinks do you regularly consume?",
-      options: ["Tea", "Coffee", "Energy drink", "Pre-workout", "Caffeine tablet", "None"],
-    },
-    {
-      id: "q64a", n: 56, tag: "conditional", type: "number", label: "Quantity (servings per day)",
-      showIf: (a) => hasOther(a, "q64", ["None"]),
-    },
-    {
-      id: "q64c", n: 56, tag: "conditional", type: "single", label: "Added sugar",
-      options: ["No", "Yes", "Sometimes"],
-      showIf: (a) => hasOther(a, "q64", ["None"]),
-      why: "Four sugared teas a day is a meal's worth of calories that never appears in a food recall.",
-    },
-    {
-      id: "q64d", n: 56, tag: "conditional", type: "multi", label: "Timing",
-      options: ["On waking", "With breakfast", "Mid-morning", "After lunch", "Evening", "Pre-workout", "Night"],
-      showIf: (a) => hasOther(a, "q64", ["None"]),
-    },
-    {
-      id: "q64b", n: 56, tag: "conditional", type: "single", label: "Last intake timing",
-      options: ["Before 12 PM", "12–3 PM", "3–6 PM", "6–9 PM", "After 9 PM", "Variable"],
-      showIf: (a) => hasOther(a, "q64", ["None"]),
-    },
-    {
       id: "q65", n: 57, tag: "core", type: "multi", required: true,
       label: "Do you consume alcohol, tobacco or nicotine?",
       options: [
