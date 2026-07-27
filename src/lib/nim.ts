@@ -1296,36 +1296,97 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
   return { ...overview, foods_to_avoid: cleanFoodsToAvoid(overview.foods_to_avoid, intake) };
 }
 
+/** A meal's foods, lowercased and deduplicated, for comparing two menus. */
+const foodSet = (meal: DietPlan["days"][number]["meals"][number]): Set<string> =>
+  new Set(meal.items.map((i) => i.food.trim().toLowerCase()).filter(Boolean));
+
 /**
- * Days that repeat a menu already used this week, or each other.
+ * How alike two menus are, 0 to 1 (shared foods over total distinct foods).
  *
- * Telling the model in the prompt was not enough — batches came back with two
- * identical days, and with the same foods merely reordered, which is the
- * repetition the whole draft review exists to catch. Compared as a SET of
- * foods so a reordered menu counts as the duplicate it is.
+ * Set overlap rather than equality because the model varies a dish name while
+ * serving the same meal: "Roti, Dal fry, Mixed vegetables, Curd" and "Roti,
+ * Dal makhani, Mixed vegetables, Curd" are one dinner written twice, and a
+ * client eating them on consecutive days would say so.
  */
-function duplicateDayIssues(
+function menuOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  a.forEach((food) => {
+    if (b.has(food)) shared++;
+  });
+  return shared / (a.size + b.size - shared);
+}
+
+// Two menus this alike are the same meal for variety purposes. Set where
+// "roti + dal fry + veg + curd" vs "roti + dal makhani + veg + curd" (0.6)
+// counts, but "roti + curd + paneer sabzi" vs "roti + curd + rajma" (0.5)
+// does not — sharing the staples a household actually eats is the point, and
+// rule 20 says keep 50-70% of the familiar pattern.
+const SAME_MENU_OVERLAP = 0.6;
+
+// How many days a week one menu may appear at the same occasion. Twice is
+// ordinary home eating; a third time is the repetition dietitians flag.
+const MAX_MEAL_REPEATS = 2;
+
+/**
+ * Repetition a dietitian would send back: a whole day repeated, or the same
+ * meal served at the same occasion too many days running.
+ *
+ * Telling the model in the prompt was not enough — a run with that instruction
+ * returned Day 1 and Day 2 identical, and later, seven days whose dinner was
+ * the same four foods. Compared against the days already planned as well as
+ * the others in the batch, so repetition cannot creep in one batch at a time.
+ *
+ * Exported for the regression test: this is the complaint the whole draft
+ * review was built for, and it has now been got wrong twice.
+ */
+export function varietyIssues(
   fresh: DietPlan["days"],
   alreadyPlanned: DietPlan["days"]
 ): string[] {
-  const key = (day: DietPlan["days"][number]) =>
-    Array.from(new Set(day.meals.flatMap((m) => m.items.map((i) => i.food.trim().toLowerCase()))))
+  const issues: string[] = [];
+
+  // ---- whole days
+  const dayKey = (day: DietPlan["days"][number]) =>
+    Array.from(new Set(day.meals.flatMap((m) => Array.from(foodSet(m)))))
       .sort()
       .join("|");
-  const seen = new Map<string, string>();
-  for (const day of alreadyPlanned) seen.set(key(day), day.day);
-  const issues: string[] = [];
+  const daysSeen = new Map<string, string>();
+  for (const day of alreadyPlanned) daysSeen.set(dayKey(day), day.day);
   for (const day of fresh) {
-    const k = key(day);
-    const clash = seen.get(k);
+    const key = dayKey(day);
+    const clash = daysSeen.get(key);
     if (clash) {
       issues.push(
         `${day.day} repeats ${clash}'s menu exactly — give it different main dishes and a different protein source`
       );
     } else {
-      seen.set(k, day.day);
+      daysSeen.set(key, day.day);
     }
   }
+
+  // ---- the same meal, occasion by occasion, across the week
+  const byOccasion = new Map<string, { day: string; foods: Set<string> }[]>();
+  const record = (day: DietPlan["days"][number], report: boolean) => {
+    for (const meal of day.meals) {
+      const occasion = meal.name.trim().toLowerCase();
+      const foods = foodSet(meal);
+      if (foods.size === 0) continue;
+      const prior = byOccasion.get(occasion) ?? [];
+      const alike = prior.filter((p) => menuOverlap(p.foods, foods) >= SAME_MENU_OVERLAP);
+      if (report && alike.length >= MAX_MEAL_REPEATS) {
+        issues.push(
+          `${day.day} ${meal.name} is the same meal as ${alike
+            .map((p) => p.day)
+            .join(" and ")} — this week already has it ${alike.length} times, so give this one a different main dish`
+        );
+      }
+      byOccasion.set(occasion, [...prior, { day: day.day, foods }]);
+    }
+  };
+  for (const day of alreadyPlanned) record(day, false);
+  for (const day of fresh) record(day, true);
+
   return issues;
 }
 
@@ -1384,7 +1445,7 @@ export async function generatePlanDays(
     // repetitive one only in theory.
     (p) => [
       ...qualityIssues(p.days, overview.daily_calories),
-      ...duplicateDayIssues(pickDays(p.days, names), alreadyPlanned),
+      ...varietyIssues(pickDays(p.days, names), alreadyPlanned),
     ]
   );
   return pickDays(result.days, names);
