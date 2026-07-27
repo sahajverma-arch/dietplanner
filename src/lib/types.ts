@@ -118,10 +118,16 @@ export interface ClientRow {
   updated_at: string;
 }
 
-/** One round of dietitian change instructions applied to a plan draft. */
+/**
+ * One change a dietitian made to a plan draft during review: either a round of
+ * written instructions sent back to the AI, or a meal they edited by hand from
+ * the preview. Entries written before per-meal editing existed carry no `kind`
+ * and are instructions.
+ */
 export interface PlanRevision {
   instructions: string;
   at: string;
+  kind?: "instructions" | "manual";
 }
 
 export interface DietPlanRow {

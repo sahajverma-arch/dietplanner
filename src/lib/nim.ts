@@ -16,6 +16,24 @@ const MealItemSchema = z.object({
   quantity: z.string().default(""),
 });
 
+/**
+ * A swap-in choice for one meal slot — the "OR" line a dietitian writes under a
+ * meal so the client can pick. Carries no name/time: it stands in for its
+ * parent meal, at that meal's occasion. Plan generation never produces these;
+ * the dietitian adds them meal by meal while reviewing the draft, and they are
+ * macro-grounded against the foods table exactly like a meal.
+ */
+export const MealAlternateSchema = z.object({
+  items: z.array(MealItemSchema).min(1),
+  notes: z.string().default(""),
+  calories: z.number().default(0),
+  protein_g: z.number().default(0),
+  carbs_g: z.number().default(0),
+  fat_g: z.number().default(0),
+});
+
+export type MealAlternate = z.infer<typeof MealAlternateSchema>;
+
 const MealSchema = z.object({
   name: z.string(),
   time: z.string().default(""),
@@ -25,7 +43,12 @@ const MealSchema = z.object({
   protein_g: z.number().default(0),
   carbs_g: z.number().default(0),
   fat_g: z.number().default(0),
+  /** Client-facing "or have this instead" choices. Defaulted so plans stored
+   *  before per-meal editing existed still parse. */
+  alternates: z.array(MealAlternateSchema).default([]),
 });
+
+export type PlanMeal = z.infer<typeof MealSchema>;
 
 const DaySchema = z.object({
   day: z.string(),
@@ -87,7 +110,11 @@ const NIM_MODEL = process.env.NVIDIA_MODEL || "meta/llama-3.1-70b-instruct";
 const NIM_FALLBACK_MODEL =
   process.env.NVIDIA_FALLBACK_MODEL || "meta/llama-3.1-8b-instruct";
 // Fail fast instead of waiting for NVIDIA's multi-minute gateway timeout.
-const NIM_TIMEOUT_MS = 120_000;
+// Tunable because it is a congestion setting, not a model property: the shared
+// endpoints answer a short prompt in ~2s and the full plan prompt in anywhere
+// from 40s to over three minutes on a bad day, and the right cap depends on
+// how long the deployment's own request budget allows (Vercel maxDuration).
+const NIM_TIMEOUT_MS = Number(process.env.NVIDIA_TIMEOUT_MS) || 120_000;
 // Extra attempts on the fallback model when it fails TRANSIENTLY (timeout or
 // network). A model that genuinely cannot produce a valid plan is not retried.
 const FALLBACK_TRANSIENT_RETRIES = 2;
@@ -355,21 +382,27 @@ function compactDays(days: DietPlan["days"]): string {
     .join("\n");
 }
 
-function buildSystem(intake: IntakeForm, spec: string, dayRule: string, weeklyNote = ""): string {
+/**
+ * Everything this client must never be served, as the prominent prompt block
+ * shared by full-plan generation and single-meal alternatives. Diet-type
+ * exclusions (egg for vegetarians, all animal products for vegans, …) sit
+ * alongside allergens — the diet-type hard rule alone was not enough to stop
+ * "boiled egg" appearing in a vegetarian plan.
+ */
+function forbiddenBlock(intake: IntakeForm): string {
   const rules = foodRules(intake);
-  // Diet-type exclusions (egg for vegetarians, all animal products for
-  // vegans, …) sit in the same prominent block as allergens — rule 1 alone
-  // was not enough to stop "boiled egg" appearing in a vegetarian plan.
   const forbidden = Array.from(
     new Set([...rules.allergens, ...rules.disliked, ...(DIET_TYPE_TERMS[intake.dietType] ?? [])])
   );
-  const forbiddenBlock = forbidden.length
+  return forbidden.length
     ? `\n\nFORBIDDEN FOODS — these must NEVER appear in any meal, in any form, dish or preparation (not even as part of a dish name):\n${forbidden
         .map((f) => `- ${f}`)
         .join("\n")}\n`
     : "";
+}
 
-  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.${forbiddenBlock}${weeklyNote}
+function buildSystem(intake: IntakeForm, spec: string, dayRule: string, weeklyNote = ""): string {
+  return `You are a senior clinical dietitian creating safe, practical, culturally appropriate diet plans.${forbiddenBlock(intake)}${weeklyNote}
 
 You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON. Output MINIFIED JSON on a single line without indentation or unnecessary whitespace.
 
@@ -1246,4 +1279,413 @@ export async function generateDietPlan(ctx: PlanContext): Promise<DietPlan> {
     days,
     foods_to_avoid: cleanFoodsToAvoid(partOne.foods_to_avoid, intake),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Per-meal alternatives (the pencil menu on the draft preview).
+// The dietitian opens ONE meal and asks for swap-in choices for that slot. One
+// short model call, not a plan regeneration: the dietitian is waiting on it,
+// and the other six days must not move because they changed Tuesday's lunch.
+// Every rule that constrains a plan constrains an alternative — allergens,
+// dislikes, diet type and the weekday (q38) rules are enforced on the way in
+// and again on the way out.
+// ---------------------------------------------------------------------------
+
+const ALTERNATES_SPEC = `{
+  "alternates": [
+    {
+      "items": [ { "food": string, "quantity": string } ],  // 1-4 items, ONE food each
+      "notes": string,                                      // usually "", max 5 words
+      "calories": number,
+      "protein_g": number,
+      "carbs_g": number,
+      "fat_g": number
+    }
+  ]
+}`;
+
+const AlternatesSchema = z.object({
+  alternates: z.array(MealAlternateSchema).min(1),
+});
+
+/** Calorie band an alternative must land in to be interchangeable with the meal. */
+const ALTERNATE_KCAL_TOLERANCE = 0.25;
+
+export interface MealAlternatesContext {
+  intake: IntakeForm;
+  week: number;
+  plan: DietPlan;
+  dayIndex: number;
+  mealIndex: number;
+  /** Day 1 of the plan, so weekday food rules apply to the right day. */
+  startsOn?: string | null;
+  /** How many options to ask for (1-6, default 4). */
+  count?: number;
+}
+
+function buildAlternatesSystem(intake: IntakeForm, weeklyNote: string): string {
+  return `You are a senior clinical dietitian. A supervising dietitian is reviewing a draft weekly diet and wants alternative options for ONE meal, so the client can choose between them on the day.${forbiddenBlock(intake)}${weeklyNote}
+
+You MUST return ONLY one valid JSON object — no markdown, no code fences, no explanations, no text before or after the JSON. Output MINIFIED JSON on a single line.
+
+The JSON must match this exact shape:
+${ALTERNATES_SPEC}
+
+Hard rules:
+1. ${dietRules(intake.dietType)}
+2. NEVER include a food the client is allergic or intolerant to, in any form or preparation, and never a food they dislike.
+3. Every alternative REPLACES the given meal — same occasion, same eating window. It must land within 10% of that meal's calories and carry AT LEAST as much protein. These are interchangeable choices, NOT extra food and NOT a lighter option.
+4. Each alternative is a COMPLETE meal the client can cook and eat, not a single-ingredient swap.
+5. ONE FOOD PER ITEM, each with its own quantity: {"food":"Roti","quantity":"2"}, {"food":"Paneer bhurji","quantity":"1 katori"} — never a sentence describing a whole plate. Max 4 items per alternative.
+6. NAME THE ACTUAL DISH, never a bare category — "Bhindi sabzi" not "Sabzi", "Cucumber tomato salad" not "Salad". Food names under 5 words.
+7. Every quantity is re-costed against a food database using these household weights, so size portions by them: ${PORTION_GUIDE.map(
+    (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
+  ).join(", ")}. VERIFIED PROTEIN (plan by these numbers, not by intuition): ${PROTEIN_REFERENCE.map(
+    (p) => `${p.food} ${p.portion} = ${p.protein_g} g`
+  ).join("; ")}.
+8. Each alternative must be genuinely DIFFERENT from the original meal AND from the other alternatives — a different main dish and, where possible, a different protein source. The same meal with one item changed is not an alternative.
+9. Stay inside this client's real life: their cuisine, cooking time, budget, kitchen access and the foods they already like. Do not introduce exotic or expensive foods to look varied.
+10. Keep "notes" empty unless essential (max 5 words).`;
+}
+
+const itemLine = (items: MealAlternate["items"]) =>
+  items.map((i) => (i.quantity ? `${i.food} (${i.quantity})` : i.food)).join(", ");
+
+/**
+ * Everything wrong with serving these meals on day `dayIndex` of this plan:
+ * allergens, disliked foods, diet pattern and the client's weekday (q38) food
+ * rules. An empty result means they are safe to store.
+ *
+ * Applied when alternatives are generated AND again when the dietitian swaps
+ * one into the plan — the meal arrives back from the browser, which is never
+ * trusted with the client's allergen list.
+ */
+export function mealRuleIssues(args: {
+  intake: IntakeForm;
+  plan: DietPlan;
+  dayIndex: number;
+  meals: PlanMeal[];
+  startsOn?: string | null;
+}): string[] {
+  const { blocking, warnings } = mealRuleReport(args);
+  return [...blocking, ...warnings];
+}
+
+/**
+ * The same rules, split by who is allowed to overrule them.
+ *
+ * `blocking` — an allergen/intolerance, or a food outside the client's diet
+ * pattern. Never overridable: rule 1 of the whole system is that a documented
+ * allergy outranks everyone, the dietitian included.
+ *
+ * `warnings` — a disliked food or a weekday (q38) rule. These are preferences
+ * and observances, and the supervising dietitian is the authority on them:
+ * when they type a meal by hand they may have a reason the form never
+ * captured, so these are shown and consciously confirmed rather than refused.
+ *
+ * AI-generated options are held to BOTH (see mealRuleIssues) — the model gets
+ * no such benefit of the doubt.
+ */
+export function mealRuleReport({
+  intake,
+  plan,
+  dayIndex,
+  meals,
+  startsOn,
+}: {
+  intake: IntakeForm;
+  plan: DietPlan;
+  dayIndex: number;
+  meals: PlanMeal[];
+  startsOn?: string | null;
+}): { blocking: string[]; warnings: string[] } {
+  const day = plan.days[dayIndex];
+  if (!day) return { blocking: ["That day is not part of this plan"], warnings: [] };
+  const weekdays = planWeekdays(startsOn);
+  const dayRules = weekdayFoodRules(intake);
+  const rules = foodRules(intake);
+  // Every checker reads a day's worth of meals, so the meals under test are
+  // presented as that day — same rules, same wording as plan generation.
+  const days: DietPlan["days"] = [{ ...day, meals }];
+  return {
+    blocking: [
+      ...violations(days, { allergens: rules.allergens, disliked: [] }),
+      ...dietTypeViolations(days, intake.dietType),
+    ],
+    warnings: [
+      ...violations(days, { allergens: [], disliked: rules.disliked }),
+      ...(dayRules ? dayRuleViolations(days, dayRules, weekdays) : []),
+    ],
+  };
+}
+
+/** Identity of a meal by its foods, so duplicates can be dropped. */
+const alternateKey = (items: MealAlternate["items"]) =>
+  items
+    .map((i) => i.food.trim().toLowerCase())
+    .sort()
+    .join(" | ");
+
+/**
+ * Generates swap-in options for a single meal of a draft plan. The returned
+ * alternatives carry the model's own macro estimates — callers ground them
+ * against the foods table before showing or storing them.
+ */
+export async function generateMealAlternates(
+  ctx: MealAlternatesContext
+): Promise<MealAlternate[]> {
+  const { intake, plan, dayIndex, mealIndex } = ctx;
+  const day = plan.days[dayIndex];
+  const meal = day?.meals[mealIndex];
+  if (!day || !meal) throw new Error("That meal is not part of this plan");
+
+  const count = Math.min(Math.max(ctx.count ?? 4, 1), 6);
+
+  // ---- Weekday rules for THIS day only (e.g. no non-veg on a Tuesday)
+  const weekdays = planWeekdays(ctx.startsOn);
+  const dayRules = weekdayFoodRules(intake);
+  const dayNumber = parseInt(day.day.replace(/\D+/g, ""), 10);
+  const weekday =
+    Number.isFinite(dayNumber) && dayNumber >= 1 && dayNumber <= 7 ? weekdays[dayNumber - 1] : "";
+  const restricted = dayRules?.days.includes(weekday) ?? false;
+  const weeklyNote =
+    dayRules && restricted
+      ? `\n\nDAY-SPECIFIC FOOD RULE (religious/cultural — must be respected exactly):\n` +
+        `This meal falls on a ${weekday}, when the client does NOT consume: ${dayRules.avoided.join(", ")}` +
+        (dayRules.details ? ` (${dayRules.details})` : "") +
+        `. No alternative may contain any of these in any form or dish name — use compliant options with equivalent protein.\n`
+      : "";
+
+  const kcal = Math.round(meal.calories || 0);
+  const protein = Math.round(meal.protein_g || 0);
+  const otherMeals = day.meals
+    .filter((_, i) => i !== mealIndex)
+    .map((m) => `${m.name}: ${itemLine(m.items)}`)
+    .join("\n");
+  const weekDishes = Array.from(
+    new Set(
+      plan.days.flatMap((d, di) =>
+        d.meals.flatMap((m, mi) =>
+          di === dayIndex && mi === mealIndex ? [] : m.items.map((i) => i.food.trim())
+        )
+      )
+    )
+  ).join(", ");
+
+  const messages: ChatMessage[] = [
+    { role: "system", content: buildAlternatesSystem(intake, weeklyNote) },
+    {
+      role: "user",
+      content:
+        `Client profile:\n${profileText({ intake, week: ctx.week })}\n\n` +
+        `Give exactly ${count} alternative options for this ONE meal of the Week ${ctx.week} plan.\n\n` +
+        `MEAL: ${day.day}${weekday ? ` (${weekday})` : ""} — ${meal.name}${meal.time ? ` at ${meal.time}` : ""}\n` +
+        `Currently: ${itemLine(meal.items)}\n` +
+        (kcal > 0
+          ? `Its macros: ${kcal} kcal, protein ${protein} g, carbs ${Math.round(meal.carbs_g || 0)} g, fat ${Math.round(meal.fat_g || 0)} g.\n` +
+            `Every alternative must land near ${kcal} kcal with at least ${protein} g protein.\n`
+          : "") +
+        (meal.alternates.length
+          ? `\nAlready offered as alternatives for this meal (do not repeat these):\n${meal.alternates
+              .map((a) => itemLine(a.items))
+              .join("\n")}\n`
+          : "") +
+        (otherMeals ? `\nThe rest of ${day.day} (do not duplicate these meals):\n${otherMeals}\n` : "") +
+        (weekDishes ? `\nFoods already used elsewhere this week — prefer something else:\n${weekDishes}\n` : "") +
+        `\nReturn ONLY the JSON object.`,
+    },
+  ];
+
+  const breaksRules = (alternates: MealAlternate[]) =>
+    mealRuleIssues({
+      intake,
+      plan,
+      dayIndex,
+      meals: alternates.map((a) => ({ ...meal, ...a })),
+      startsOn: ctx.startsOn,
+    });
+
+  const result = await generateValidated(
+    messages,
+    AlternatesSchema,
+    `exactly ${count} alternatives for the one meal`,
+    (v) => breaksRules(v.alternates),
+    (v) =>
+      kcal > 0
+        ? v.alternates
+            .filter(
+              (a) => Math.abs((a.calories || 0) - kcal) > ALTERNATE_KCAL_TOLERANCE * kcal
+            )
+            .map(
+              (a) =>
+                `"${itemLine(a.items)}" is ${Math.round(a.calories || 0)} kcal — the meal it replaces is ${kcal} kcal`
+            )
+        : []
+  );
+
+  // Belt and braces, per option: a single unsafe alternative is dropped rather
+  // than failing the whole request, and near-duplicates of the meal it would
+  // replace are worthless as a choice.
+  const seen = new Set([
+    alternateKey(meal.items),
+    ...meal.alternates.map((a) => alternateKey(a.items)),
+  ]);
+  const safe: MealAlternate[] = [];
+  for (const alternate of result.alternates) {
+    if (breaksRules([alternate]).length > 0) continue;
+    const key = alternateKey(alternate.items);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    safe.push(alternate);
+    if (safe.length === count) break;
+  }
+
+  if (safe.length === 0) {
+    throw new Error(
+      "The AI could not produce a safe, different alternative for this meal — try again, or use the change instructions box."
+    );
+  }
+  return safe;
+}
+
+// ---------------------------------------------------------------------------
+// The dietitian's own meal, typed in their own words.
+// When none of the generated options fit, they write the meal themselves
+// ("2 roti, paneer bhurji 1 katori, curd and a salad") and the model's ONLY
+// job is to structure it — one food per item, with the household quantity the
+// grounding math understands. It must not invent, substitute or drop food:
+// the macros are then computed from the foods table, not guessed, so a
+// dietitian who writes their own meal still gets real protein/calorie numbers.
+// ---------------------------------------------------------------------------
+
+const PARSED_MEAL_SPEC = `{
+  "items": [ { "food": string, "quantity": string } ],  // ONE food each, max 8
+  "notes": string                                        // "" unless the dietitian wrote an instruction
+}`;
+
+const ParsedMealSchema = z.object({
+  items: z.array(MealItemSchema).min(1).max(8),
+  notes: z.string().default(""),
+});
+
+// Words that qualify a food rather than name one, so a coverage check does not
+// demand them back. Household measures come from the same list the grounding
+// math uses; the rest are quantifiers and filler.
+const NON_FOOD_WORDS = new Set([
+  "katori", "bowl", "bowls", "cup", "cups", "glass", "glasses", "plate", "plates",
+  "tbsp", "tsp", "spoon", "spoons", "grams", "gram", "piece", "pieces", "slice",
+  "slices", "handful", "small", "medium", "large", "half", "quarter", "some",
+  "with", "and", "plus", "each", "one", "two", "three", "four", "five", "little",
+]);
+
+// A phrase that instructs rather than names a food ("no oil", "less salt") —
+// it belongs in notes, so it must never be demanded back as an item.
+const INSTRUCTION_PHRASE =
+  /^\s*(no|not|without|avoid|skip|less|low|extra|only|keep|make|use|cook|eat|prefer)\b/i;
+
+/**
+ * The foods the dietitian appears to have written, for checking the parse gave
+ * them all back. Deliberately crude and forgiving: it drives a corrective
+ * retry, never a rejection, because the dietitian sees the parsed items before
+ * anything is applied and is the real check.
+ */
+function writtenFoodWords(text: string): string[] {
+  return text
+    .split(/[,;\n+]|\band\b|\bwith\b/i)
+    .filter((phrase) => phrase.trim().length > 2 && !INSTRUCTION_PHRASE.test(phrase))
+    .flatMap((phrase) =>
+      phrase
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, " ")
+        .split(/\s+/)
+        // 4+ letters keeps this conservative: it can miss a dropped "egg",
+        // which the dietitian will see, but it will not invent a complaint.
+        .filter((w) => w.length >= 4 && !NON_FOOD_WORDS.has(w))
+    );
+}
+
+/**
+ * Structures a dietitian's free-text meal into priceable items. Returns the
+ * items only — macros stay at zero for the caller to fill from the foods
+ * table, because the whole point is that these numbers are measured.
+ */
+export async function parseMealText(ctx: {
+  intake: IntakeForm;
+  text: string;
+  mealName: string;
+}): Promise<MealAlternate> {
+  const text = ctx.text.trim();
+  if (!text) throw new Error("Write the meal first");
+
+  const system = `You convert a dietitian's handwritten meal note into structured data. You are a PARSER, not a planner.
+
+You MUST return ONLY one valid JSON object — no markdown, no code fences, no commentary. Output MINIFIED JSON on a single line.
+
+The JSON must match this exact shape:
+${PARSED_MEAL_SPEC}
+
+Hard rules:
+1. NEVER invent, add, remove, substitute or "improve" a food. Every item you return must be a food the dietitian actually wrote. If they wrote three foods, return exactly those three.
+2. ONE FOOD PER ITEM. "2 roti with dal and curd" becomes three items: Roti (2), Dal (1 katori), Curd (1 katori) — never one item describing the plate.
+3. Keep the dietitian's own quantity whenever they gave one, rewritten in a standard household form: "2", "1 katori", "150 g", "1 cup", "1 glass", "1 bowl".
+4. When they gave NO quantity for a food, fill in the ordinary single serving of that dish for one adult — never leave a quantity empty, and never guess large.
+5. These are the weights every quantity is re-costed against, so choose units from this list wherever they fit: ${PORTION_GUIDE.map(
+    (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
+  ).join(", ")}.
+6. Write each food as the specific dish, in title case, under 5 words: "Paneer bhurji", "Cucumber tomato salad". Expand obvious shorthand to the dish the dietitian means ("bhurji" -> "Paneer bhurji" only if they wrote paneer; otherwise keep it as written).
+7. "notes" stays "" unless the dietitian wrote an actual instruction (e.g. "no oil", "eat by 8pm"). Never put food in notes.`;
+
+  // Dropping a food the dietitian wrote is the failure that matters — an 8B
+  // model turned "idli sambar and coconut chutney" into "Idli" alone. This is
+  // a SOFT check: it buys a corrective retry, and on the last attempt the
+  // parse still ships, because the dietitian reviews the items on screen
+  // before applying and a refusal would just strand them.
+  const expected = writtenFoodWords(text);
+  const missingFoods = (v: z.infer<typeof ParsedMealSchema>) => {
+    const got = v.items.map((i) => i.food.toLowerCase()).join(" | ");
+    const dropped = Array.from(new Set(expected.filter((w) => !got.includes(w))));
+    return dropped.length
+      ? [`you left out what the dietitian wrote: ${dropped.join(", ")}`]
+      : [];
+  };
+
+  const parsed = await generateValidated(
+    [
+      { role: "system", content: system },
+      {
+        role: "user",
+        content:
+          `Meal slot: ${ctx.mealName}\n` +
+          `The dietitian wrote:\n"""\n${text}\n"""\n\n` +
+          `Return ONLY the JSON object with each food they wrote as its own item.`,
+      },
+    ],
+    ParsedMealSchema,
+    "one object with the foods the dietitian wrote",
+    undefined,
+    missingFoods
+  );
+
+  const dropped = missingFoods(parsed);
+  if (dropped.length > 0) {
+    console.warn(`parseMealText: ${dropped[0]} — text: "${text}"`);
+  }
+
+  return {
+    // Rule 4 of the prompt says every item carries a portion; a small model
+    // ignores it often enough that the guarantee belongs in code. "1 serving"
+    // resolves to the food's own serving weight during grounding, so an
+    // unquantified item is still priced instead of silently counting as zero.
+    items: parsed.items.map((i) => ({
+      food: i.food.trim(),
+      quantity: i.quantity.trim() || "1 serving",
+    })),
+    notes: parsed.notes,
+    // Deliberately zero — groundMeals() fills these from the foods table. A
+    // model-guessed calorie count is exactly what this feature exists to avoid.
+    calories: 0,
+    protein_g: 0,
+    carbs_g: 0,
+    fat_g: 0,
+  };
 }
