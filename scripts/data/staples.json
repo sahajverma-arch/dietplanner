@@ -1,214 +1,1398 @@
 {
   "comment": "Curated staple foods: exact names the AI commonly emits, each pointing at a canonical INDB/USDA food already present in indb_foods.json / usda_foods.json. Seeded as extra rows (source_id 'alias:<slug>') so short generic queries like 'banana' or 'roti' get an exact match instead of losing to longer recipe names. serving_g/serving_unit override the canonical serving when the USDA portion is awkward for counting (e.g. '2 boiled eggs').",
   "staples": [
-    { "name": "Roti", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Chapati", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Phulka", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Whole wheat roti", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Rice", "source": "INDB", "source_id": "ASC113", "serving_g": 150, "serving_unit": "cup" },
-    { "name": "Steamed rice", "source": "INDB", "source_id": "ASC113", "serving_g": 150, "serving_unit": "cup" },
-    { "name": "Plain rice", "source": "INDB", "source_id": "ASC113", "serving_g": 150, "serving_unit": "cup" },
-    { "name": "Boiled rice", "source": "INDB", "source_id": "ASC113", "serving_g": 150, "serving_unit": "cup" },
-    { "name": "Cooked rice", "source": "INDB", "source_id": "ASC113", "serving_g": 150, "serving_unit": "cup" },
-    { "name": "White rice", "source": "USDA", "source_id": "168935" },
-    { "name": "Dal", "source": "INDB", "source_id": "ASC155" },
-    { "name": "Yellow dal", "source": "INDB", "source_id": "ASC151" },
-    { "name": "Moong dal", "source": "INDB", "source_id": "ASC151" },
-    { "name": "Urad dal", "source": "INDB", "source_id": "ASC152" },
-    { "name": "Khichdi", "source": "INDB", "source_id": "BFP144" },
-    { "name": "Dosa", "source": "INDB", "source_id": "BFP148" },
-    { "name": "Buttermilk", "source": "INDB", "source_id": "ASC022" },
-    { "name": "Chaas", "source": "INDB", "source_id": "ASC022" },
-    { "name": "Chhach", "source": "INDB", "source_id": "ASC022" },
-    { "name": "Sprouts salad", "source": "INDB", "source_id": "ASC259" },
-    { "name": "Moong sprouts salad", "source": "INDB", "source_id": "ASC259" },
-
-    { "name": "Banana", "source": "USDA", "source_id": "173944", "serving_g": 118, "serving_unit": "medium banana" },
-    { "name": "Apple", "source": "USDA", "source_id": "167793", "serving_g": 180, "serving_unit": "medium apple" },
-    { "name": "Orange", "source": "USDA", "source_id": "169097", "serving_g": 130, "serving_unit": "medium orange" },
-    { "name": "Papaya", "source": "USDA", "source_id": "169926", "serving_g": 145, "serving_unit": "cup" },
-    { "name": "Mango", "source": "USDA", "source_id": "169910", "serving_g": 165, "serving_unit": "cup" },
-    { "name": "Watermelon", "source": "USDA", "source_id": "167765", "serving_g": 154, "serving_unit": "cup" },
-    { "name": "Grapes", "source": "USDA", "source_id": "174683", "serving_g": 151, "serving_unit": "cup" },
-    { "name": "Guava", "source": "USDA", "source_id": "173044", "serving_g": 55, "serving_unit": "guava" },
-    { "name": "Pomegranate", "source": "USDA", "source_id": "169134", "serving_g": 87, "serving_unit": "cup arils" },
-
-    { "name": "Brown rice", "source": "USDA", "source_id": "169704" },
-    { "name": "Quinoa", "source": "USDA", "source_id": "168917" },
-    { "name": "Oats", "source": "USDA", "source_id": "173904", "serving_g": 40, "serving_unit": "cup" },
-    { "name": "Rolled oats", "source": "USDA", "source_id": "173904", "serving_g": 40, "serving_unit": "cup" },
-    { "name": "Dry oats", "source": "USDA", "source_id": "173904", "serving_g": 40, "serving_unit": "cup" },
-    { "name": "Oatmeal", "source": "USDA", "source_id": "173905" },
-    { "name": "Oats porridge", "source": "USDA", "source_id": "173905" },
-    { "name": "Masala oats", "source": "USDA", "source_id": "173905", "serving_g": 234, "serving_unit": "bowl" },
-
-    { "name": "Sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Vegetable sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Mixed vegetable sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Mixed vegetable curry", "source": "INDB", "source_id": "BFP241" },
-
-    { "name": "Curd", "source": "USDA", "source_id": "171284", "serving_g": 150, "serving_unit": "katori" },
-    { "name": "Dahi", "source": "USDA", "source_id": "171284", "serving_g": 150, "serving_unit": "katori" },
-    { "name": "Plain curd", "source": "USDA", "source_id": "171284", "serving_g": 150, "serving_unit": "katori" },
-    { "name": "Yogurt", "source": "USDA", "source_id": "171284", "serving_g": 170, "serving_unit": "cup" },
-    { "name": "Milk", "source": "USDA", "source_id": "171265", "serving_g": 244, "serving_unit": "cup" },
-    { "name": "Toned milk", "source": "USDA", "source_id": "170871", "serving_g": 246, "serving_unit": "cup" },
-    { "name": "Low fat milk", "source": "USDA", "source_id": "170871", "serving_g": 246, "serving_unit": "cup" },
-    { "name": "Paneer", "source": "USDA", "source_id": "172223", "serving_g": 50, "serving_unit": "serving" },
-
-    { "name": "Grilled chicken breast", "source": "USDA", "source_id": "171477", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Grilled chicken", "source": "USDA", "source_id": "171477", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Chicken breast", "source": "USDA", "source_id": "171477", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Boiled egg", "source": "USDA", "source_id": "173424", "serving_g": 50, "serving_unit": "egg" },
-    { "name": "Egg", "source": "USDA", "source_id": "173424", "serving_g": 50, "serving_unit": "egg" },
-
-    { "name": "Almonds", "source": "USDA", "source_id": "170567", "serving_g": 1.2, "serving_unit": "almond" },
-    { "name": "Walnuts", "source": "USDA", "source_id": "170187", "serving_g": 4, "serving_unit": "walnut" },
-    { "name": "Peanuts", "source": "USDA", "source_id": "172430", "serving_g": 28, "serving_unit": "handful" },
-    { "name": "Chia seeds", "source": "USDA", "source_id": "170554", "serving_g": 12, "serving_unit": "tbsp" },
-    { "name": "Flax seeds", "source": "USDA", "source_id": "169414", "serving_g": 10, "serving_unit": "tbsp" },
-
-    { "name": "Green tea", "source": "USDA", "source_id": "171917", "serving_g": 245, "serving_unit": "cup" },
-    { "name": "Black coffee", "source": "USDA", "source_id": "171890", "serving_g": 240, "serving_unit": "cup" },
-    { "name": "Coconut water", "source": "USDA", "source_id": "170174", "serving_g": 240, "serving_unit": "glass" },
-
-    { "name": "Sweet potato", "source": "USDA", "source_id": "168483", "serving_g": 130, "serving_unit": "medium" },
-    { "name": "Cucumber", "source": "USDA", "source_id": "168409", "serving_g": 200, "serving_unit": "cucumber" },
-    { "name": "Carrot", "source": "USDA", "source_id": "170393", "serving_g": 61, "serving_unit": "medium carrot" },
-    { "name": "Tomato", "source": "USDA", "source_id": "170457", "serving_g": 123, "serving_unit": "medium tomato" },
-    { "name": "Spinach", "source": "USDA", "source_id": "168462", "serving_g": 30, "serving_unit": "cup" },
-    { "name": "Sprouts", "source": "USDA", "source_id": "169957", "serving_g": 104, "serving_unit": "cup" },
-    { "name": "Moong sprouts", "source": "USDA", "source_id": "169957", "serving_g": 104, "serving_unit": "cup" },
-
-    { "name": "Honey", "source": "USDA", "source_id": "169640", "serving_g": 21, "serving_unit": "tbsp" },
-    { "name": "Ghee", "source": "USDA", "source_id": "173412", "serving_g": 13, "serving_unit": "tbsp" },
-    { "name": "Olive oil", "source": "USDA", "source_id": "171413", "serving_g": 14, "serving_unit": "tbsp" },
-
-    { "name": "Pear", "source": "USDA", "source_id": "167776", "serving_g": 178, "serving_unit": "medium pear" },
-    { "name": "Lemon", "source": "USDA", "source_id": "167746", "serving_g": 58, "serving_unit": "lemon" },
-    { "name": "Lemon wedge", "source": "USDA", "source_id": "167746", "serving_g": 7, "serving_unit": "wedge" },
-    { "name": "Onion", "source": "USDA", "source_id": "170000", "serving_g": 110, "serving_unit": "medium onion" },
-    { "name": "Cabbage", "source": "USDA", "source_id": "169975", "serving_g": 89, "serving_unit": "cup" },
-    { "name": "Beans", "source": "USDA", "source_id": "169141", "serving_g": 125, "serving_unit": "cup" },
-    { "name": "Green beans", "source": "USDA", "source_id": "169141", "serving_g": 125, "serving_unit": "cup" },
-    { "name": "French beans", "source": "USDA", "source_id": "169141", "serving_g": 125, "serving_unit": "cup" },
-    { "name": "Capsicum", "source": "USDA", "source_id": "170427", "serving_g": 149, "serving_unit": "cup" },
-    { "name": "Pineapple", "source": "USDA", "source_id": "169124", "serving_g": 165, "serving_unit": "cup" },
-    { "name": "Muskmelon", "source": "USDA", "source_id": "169092", "serving_g": 177, "serving_unit": "cup" },
-    { "name": "Strawberries", "source": "USDA", "source_id": "167762", "serving_g": 152, "serving_unit": "cup" },
-    { "name": "Peas", "source": "USDA", "source_id": "170017", "serving_g": 80, "serving_unit": "cup" },
-    { "name": "Broccoli", "source": "USDA", "source_id": "169967", "serving_g": 78, "serving_unit": "cup" },
-    { "name": "Cauliflower", "source": "USDA", "source_id": "170397", "serving_g": 62, "serving_unit": "cup" },
-    { "name": "Beetroot", "source": "USDA", "source_id": "168506", "serving_g": 85, "serving_unit": "cup" },
-    { "name": "Radish", "source": "USDA", "source_id": "169276", "serving_g": 116, "serving_unit": "cup" },
-    { "name": "Daliya", "source": "USDA", "source_id": "170287", "serving_g": 200, "serving_unit": "bowl" },
-    { "name": "Vegetable daliya", "source": "USDA", "source_id": "170287", "serving_g": 200, "serving_unit": "bowl" },
-    { "name": "Chana", "source": "USDA", "source_id": "173757", "serving_g": 164, "serving_unit": "cup" },
-    { "name": "Chickpeas", "source": "USDA", "source_id": "173757", "serving_g": 164, "serving_unit": "cup" },
-
-    { "name": "Raita", "source": "INDB", "source_id": "ASC273" },
-    { "name": "Cucumber raita", "source": "INDB", "source_id": "ASC273" },
-    { "name": "Salad", "source": "USDA", "source_id": "169247", "serving_g": 100, "serving_unit": "bowl" },
-    { "name": "Green salad", "source": "USDA", "source_id": "169247", "serving_g": 100, "serving_unit": "bowl" },
-    { "name": "Mixed salad", "source": "USDA", "source_id": "169247", "serving_g": 100, "serving_unit": "bowl" },
-    { "name": "Cucumber salad", "source": "USDA", "source_id": "168409", "serving_g": 100, "serving_unit": "bowl" },
-    { "name": "Lemon water", "source": "USDA", "source_id": "167746", "serving_g": 30, "serving_unit": "glass" },
-    { "name": "Nimbu pani", "source": "USDA", "source_id": "167746", "serving_g": 30, "serving_unit": "glass" },
-    { "name": "Black tea", "source": "USDA", "source_id": "173227", "serving_g": 240, "serving_unit": "cup" },
-    { "name": "Herbal tea", "source": "USDA", "source_id": "171917", "serving_g": 245, "serving_unit": "cup" },
-    { "name": "Tea", "source": "INDB", "source_id": "ASC001" },
-    { "name": "Milk tea", "source": "INDB", "source_id": "ASC001" },
-    { "name": "Chai", "source": "INDB", "source_id": "ASC001" },
-    { "name": "Warm milk", "source": "USDA", "source_id": "170871", "serving_g": 250, "serving_unit": "glass" },
-    { "name": "Turmeric milk", "source": "USDA", "source_id": "170871", "serving_g": 250, "serving_unit": "glass" },
-    { "name": "Mint chutney", "source": "INDB", "source_id": "ASC387" },
-    { "name": "Coriander chutney", "source": "INDB", "source_id": "ASC387" },
-    { "name": "Green chutney", "source": "INDB", "source_id": "ASC387" },
-    { "name": "Coconut chutney", "source": "INDB", "source_id": "ASC386" },
-    { "name": "Peanut butter", "source": "USDA", "source_id": "169869" },
-    { "name": "Whole wheat bread", "source": "USDA", "source_id": "172688" },
-    { "name": "Whole wheat toast", "source": "USDA", "source_id": "172688" },
-    { "name": "Brown bread", "source": "USDA", "source_id": "172688" },
-    { "name": "Toast", "source": "USDA", "source_id": "172688" },
-    { "name": "Bread", "source": "USDA", "source_id": "172688" },
-    { "name": "Dal fry", "source": "INDB", "source_id": "ASC155" },
-    { "name": "Dal tadka", "source": "INDB", "source_id": "ASC155" },
-    { "name": "Jeera rice", "source": "INDB", "source_id": "ASC114" },
-    { "name": "Paneer bhurji", "source": "USDA", "source_id": "172223", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Paneer toast", "source": "INDB", "source_id": "ASC042" },
-    { "name": "Paneer sandwich", "source": "INDB", "source_id": "ASC042" },
-    { "name": "Biryani", "source": "INDB", "source_id": "ASC122" },
-    { "name": "Chicken biryani", "source": "INDB", "source_id": "ASC122" },
-    { "name": "Mutton biryani", "source": "INDB", "source_id": "ASC122" },
-    { "name": "Vegetable biryani", "source": "INDB", "source_id": "ASC123" },
-    { "name": "Veg biryani", "source": "INDB", "source_id": "ASC123" },
-    { "name": "Egg bhurji", "source": "INDB", "source_id": "ASC059" },
-    { "name": "Anda bhurji", "source": "INDB", "source_id": "ASC059" },
-    { "name": "Tofu", "source": "USDA", "source_id": "172448" },
-    { "name": "Grilled tofu", "source": "USDA", "source_id": "172448" },
-    { "name": "Tofu curry", "source": "INDB", "source_id": "ASC164" },
-    { "name": "Soya bhurji", "source": "INDB", "source_id": "ASC164" },
-    { "name": "Soya chunks bhurji", "source": "INDB", "source_id": "ASC164" },
-    { "name": "Soya chunks curry", "source": "INDB", "source_id": "ASC164" },
-    { "name": "Lauki sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Ghiya sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Bottle gourd sabzi", "source": "INDB", "source_id": "BFP241" },
-    { "name": "Boondi raita", "source": "INDB", "source_id": "ASC273" },
-    { "name": "Mutton curry", "source": "INDB", "source_id": "BFP194" },
-    { "name": "Mutton masala", "source": "INDB", "source_id": "BFP194" },
-    { "name": "Mutton rogan josh", "source": "INDB", "source_id": "BFP194" },
-    { "name": "Mutton keema", "source": "INDB", "source_id": "BFP194" },
-    { "name": "Rajma masala", "source": "INDB", "source_id": "ASC165" },
-    { "name": "Fruit chaat", "source": "INDB", "source_id": "ASC265" },
-    { "name": "Fruit salad", "source": "INDB", "source_id": "ASC265" },
-    { "name": "Makhana", "source": "USDA", "source_id": "170149", "serving_g": 20, "serving_unit": "handful" },
-    { "name": "Roasted makhana", "source": "USDA", "source_id": "170149", "serving_g": 20, "serving_unit": "handful" },
-    { "name": "Fox nuts", "source": "USDA", "source_id": "170149", "serving_g": 20, "serving_unit": "handful" },
-    { "name": "Chana masala", "source": "INDB", "source_id": "ASC162" },
-    { "name": "Chole", "source": "INDB", "source_id": "ASC162" },
-    { "name": "Chole masala", "source": "INDB", "source_id": "ASC162" },
-    { "name": "Cashews", "source": "USDA", "source_id": "169421", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Roasted peanuts", "source": "USDA", "source_id": "173806", "serving_g": 28, "serving_unit": "handful" },
-    { "name": "Chicken tikka", "source": "INDB", "source_id": "ASC241", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Fried rice", "source": "INDB", "source_id": "ASC129" },
-    { "name": "Egg fried rice", "source": "INDB", "source_id": "ASC129" },
-    { "name": "Veg fried rice", "source": "INDB", "source_id": "ASC129" },
-    { "name": "Grilled fish", "source": "USDA", "source_id": "175177", "serving_g": 100, "serving_unit": "serving" },
-    { "name": "Bajra roti", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Jowar roti", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Millet roti", "source": "INDB", "source_id": "ASC096" },
-    { "name": "Tinda", "source": "INDB", "source_id": "ASC185" },
-    { "name": "Tinda sabzi", "source": "INDB", "source_id": "ASC185" },
-    { "name": "Palak dal", "source": "INDB", "source_id": "BFP172" },
-    { "name": "Dal palak", "source": "INDB", "source_id": "BFP172" },
-    { "name": "Spinach dal", "source": "INDB", "source_id": "BFP172" },
-    { "name": "Oats upma", "source": "USDA", "source_id": "173905", "serving_g": 234, "serving_unit": "bowl" },
-    { "name": "Steamed beans", "source": "USDA", "source_id": "169141", "serving_g": 125, "serving_unit": "cup" },
-    { "name": "Cucumber slices", "source": "USDA", "source_id": "168409", "serving_g": 100, "serving_unit": "bowl" },
-    { "name": "Chicken stir-fry", "source": "INDB", "source_id": "ASC240" },
-    { "name": "Warm turmeric milk", "source": "USDA", "source_id": "170871", "serving_g": 250, "serving_unit": "glass" },
-    { "name": "Karela sabzi", "source": "INDB", "source_id": "BFP604" },
-    { "name": "Bitter gourd sabzi", "source": "INDB", "source_id": "BFP604" },
-    { "name": "Boiled peanuts", "source": "USDA", "source_id": "174260", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Paneer tikka", "source": "USDA", "source_id": "172223", "serving_g": 100, "serving_unit": "serving" },
-
-    { "name": "Puffed rice", "source": "USDA", "source_id": "173912", "serving_g": 15, "serving_unit": "cup" },
-    { "name": "Murmura", "source": "USDA", "source_id": "173912", "serving_g": 15, "serving_unit": "cup" },
-    { "name": "Murmure", "source": "USDA", "source_id": "173912", "serving_g": 15, "serving_unit": "cup" },
-    { "name": "Kurmura", "source": "USDA", "source_id": "173912", "serving_g": 15, "serving_unit": "cup" },
-    { "name": "Roasted chana", "source": "USDA", "source_id": "173756", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Chana roasted", "source": "USDA", "source_id": "173756", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Bhuna chana", "source": "USDA", "source_id": "173756", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Roasted bengal gram", "source": "USDA", "source_id": "173756", "serving_g": 30, "serving_unit": "handful" },
-    { "name": "Whey shake", "source": "USDA", "source_id": "173180", "serving_g": 30, "serving_unit": "scoop" },
-    { "name": "Whey protein", "source": "USDA", "source_id": "173180", "serving_g": 30, "serving_unit": "scoop" },
-    { "name": "Whey protein shake", "source": "USDA", "source_id": "173180", "serving_g": 30, "serving_unit": "scoop" },
-    { "name": "Whey protein powder", "source": "USDA", "source_id": "173180", "serving_g": 30, "serving_unit": "scoop" },
-    { "name": "Protein shake", "source": "USDA", "source_id": "173180", "serving_g": 30, "serving_unit": "scoop" },
-    { "name": "Greek yogurt", "source": "USDA", "source_id": "170894", "serving_g": 170, "serving_unit": "cup" },
-    { "name": "High protein yogurt", "source": "USDA", "source_id": "170894", "serving_g": 170, "serving_unit": "cup" },
-    { "name": "Prawns", "source": "INDB", "source_id": "BFP230", "serving_g": 150, "serving_unit": "bowl" },
-    { "name": "Seafood", "source": "INDB", "source_id": "BFP230", "serving_g": 150, "serving_unit": "bowl" },
-    { "name": "Fish curry", "source": "INDB", "source_id": "ASC246", "serving_g": 150, "serving_unit": "bowl" }
+    {
+      "name": "Roti",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Chapati",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Phulka",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Whole wheat roti",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Rice",
+      "source": "INDB",
+      "source_id": "ASC113",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Steamed rice",
+      "source": "INDB",
+      "source_id": "ASC113",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Plain rice",
+      "source": "INDB",
+      "source_id": "ASC113",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Boiled rice",
+      "source": "INDB",
+      "source_id": "ASC113",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Cooked rice",
+      "source": "INDB",
+      "source_id": "ASC113",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "White rice",
+      "source": "USDA",
+      "source_id": "168935"
+    },
+    {
+      "name": "Dal",
+      "source": "INDB",
+      "source_id": "ASC155"
+    },
+    {
+      "name": "Yellow dal",
+      "source": "INDB",
+      "source_id": "ASC151"
+    },
+    {
+      "name": "Moong dal",
+      "source": "INDB",
+      "source_id": "ASC151"
+    },
+    {
+      "name": "Urad dal",
+      "source": "INDB",
+      "source_id": "ASC152"
+    },
+    {
+      "name": "Khichdi",
+      "source": "INDB",
+      "source_id": "BFP144",
+      "serving_g": 250,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Dosa",
+      "source": "INDB",
+      "source_id": "BFP148"
+    },
+    {
+      "name": "Buttermilk",
+      "source": "INDB",
+      "source_id": "ASC022"
+    },
+    {
+      "name": "Chaas",
+      "source": "INDB",
+      "source_id": "ASC022"
+    },
+    {
+      "name": "Chhach",
+      "source": "INDB",
+      "source_id": "ASC022"
+    },
+    {
+      "name": "Sprouts salad",
+      "source": "INDB",
+      "source_id": "ASC259"
+    },
+    {
+      "name": "Moong sprouts salad",
+      "source": "INDB",
+      "source_id": "ASC259"
+    },
+    {
+      "name": "Banana",
+      "source": "USDA",
+      "source_id": "173944",
+      "serving_g": 118,
+      "serving_unit": "medium banana"
+    },
+    {
+      "name": "Apple",
+      "source": "USDA",
+      "source_id": "167793",
+      "serving_g": 180,
+      "serving_unit": "medium apple"
+    },
+    {
+      "name": "Orange",
+      "source": "USDA",
+      "source_id": "169097",
+      "serving_g": 130,
+      "serving_unit": "medium orange"
+    },
+    {
+      "name": "Papaya",
+      "source": "USDA",
+      "source_id": "169926",
+      "serving_g": 145,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Mango",
+      "source": "USDA",
+      "source_id": "169910",
+      "serving_g": 165,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Watermelon",
+      "source": "USDA",
+      "source_id": "167765",
+      "serving_g": 154,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Grapes",
+      "source": "USDA",
+      "source_id": "174683",
+      "serving_g": 151,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Guava",
+      "source": "USDA",
+      "source_id": "173044",
+      "serving_g": 55,
+      "serving_unit": "guava"
+    },
+    {
+      "name": "Pomegranate",
+      "source": "USDA",
+      "source_id": "169134",
+      "serving_g": 87,
+      "serving_unit": "cup arils"
+    },
+    {
+      "name": "Brown rice",
+      "source": "USDA",
+      "source_id": "169704"
+    },
+    {
+      "name": "Quinoa",
+      "source": "USDA",
+      "source_id": "168917"
+    },
+    {
+      "name": "Oats",
+      "source": "USDA",
+      "source_id": "173904",
+      "serving_g": 40,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Rolled oats",
+      "source": "USDA",
+      "source_id": "173904",
+      "serving_g": 40,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Dry oats",
+      "source": "USDA",
+      "source_id": "173904",
+      "serving_g": 40,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Oatmeal",
+      "source": "USDA",
+      "source_id": "173905"
+    },
+    {
+      "name": "Oats porridge",
+      "source": "USDA",
+      "source_id": "173905"
+    },
+    {
+      "name": "Masala oats",
+      "source": "USDA",
+      "source_id": "173905",
+      "serving_g": 234,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Vegetable sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mixed vegetable sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mixed vegetable curry",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Curd",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Dahi",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Plain curd",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Yogurt",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 170,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Milk",
+      "source": "USDA",
+      "source_id": "171265",
+      "serving_g": 244,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Toned milk",
+      "source": "USDA",
+      "source_id": "170871",
+      "serving_g": 246,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Low fat milk",
+      "source": "USDA",
+      "source_id": "170871",
+      "serving_g": 246,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Paneer",
+      "source": "USDA",
+      "source_id": "172223",
+      "serving_g": 30,
+      "serving_unit": "piece"
+    },
+    {
+      "name": "Grilled chicken breast",
+      "source": "USDA",
+      "source_id": "171477",
+      "serving_g": 100,
+      "serving_unit": "serving"
+    },
+    {
+      "name": "Grilled chicken",
+      "source": "USDA",
+      "source_id": "171477",
+      "serving_g": 100,
+      "serving_unit": "serving"
+    },
+    {
+      "name": "Chicken breast",
+      "source": "USDA",
+      "source_id": "171477",
+      "serving_g": 100,
+      "serving_unit": "serving"
+    },
+    {
+      "name": "Boiled egg",
+      "source": "USDA",
+      "source_id": "173424",
+      "serving_g": 50,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Egg",
+      "source": "USDA",
+      "source_id": "173424",
+      "serving_g": 50,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Almonds",
+      "source": "USDA",
+      "source_id": "170567",
+      "serving_g": 1.2,
+      "serving_unit": "almond"
+    },
+    {
+      "name": "Walnuts",
+      "source": "USDA",
+      "source_id": "170187",
+      "serving_g": 4,
+      "serving_unit": "walnut"
+    },
+    {
+      "name": "Peanuts",
+      "source": "USDA",
+      "source_id": "172430",
+      "serving_g": 28,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Chia seeds",
+      "source": "USDA",
+      "source_id": "170554",
+      "serving_g": 12,
+      "serving_unit": "tbsp"
+    },
+    {
+      "name": "Flax seeds",
+      "source": "USDA",
+      "source_id": "169414",
+      "serving_g": 10,
+      "serving_unit": "tbsp"
+    },
+    {
+      "name": "Green tea",
+      "source": "USDA",
+      "source_id": "171917",
+      "serving_g": 245,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Black coffee",
+      "source": "USDA",
+      "source_id": "171890",
+      "serving_g": 240,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Coconut water",
+      "source": "USDA",
+      "source_id": "170174",
+      "serving_g": 240,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Sweet potato",
+      "source": "USDA",
+      "source_id": "168483",
+      "serving_g": 130,
+      "serving_unit": "medium"
+    },
+    {
+      "name": "Cucumber",
+      "source": "USDA",
+      "source_id": "168409",
+      "serving_g": 200,
+      "serving_unit": "cucumber"
+    },
+    {
+      "name": "Carrot",
+      "source": "USDA",
+      "source_id": "170393",
+      "serving_g": 61,
+      "serving_unit": "medium carrot"
+    },
+    {
+      "name": "Tomato",
+      "source": "USDA",
+      "source_id": "170457",
+      "serving_g": 123,
+      "serving_unit": "medium tomato"
+    },
+    {
+      "name": "Spinach",
+      "source": "USDA",
+      "source_id": "168462",
+      "serving_g": 30,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Sprouts",
+      "source": "USDA",
+      "source_id": "169957",
+      "serving_g": 104,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Moong sprouts",
+      "source": "USDA",
+      "source_id": "169957",
+      "serving_g": 104,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Honey",
+      "source": "USDA",
+      "source_id": "169640",
+      "serving_g": 21,
+      "serving_unit": "tbsp"
+    },
+    {
+      "name": "Ghee",
+      "source": "USDA",
+      "source_id": "173412",
+      "serving_g": 13,
+      "serving_unit": "tbsp"
+    },
+    {
+      "name": "Olive oil",
+      "source": "USDA",
+      "source_id": "171413",
+      "serving_g": 14,
+      "serving_unit": "tbsp"
+    },
+    {
+      "name": "Pear",
+      "source": "USDA",
+      "source_id": "167776",
+      "serving_g": 178,
+      "serving_unit": "medium pear"
+    },
+    {
+      "name": "Lemon",
+      "source": "USDA",
+      "source_id": "167746",
+      "serving_g": 58,
+      "serving_unit": "lemon"
+    },
+    {
+      "name": "Lemon wedge",
+      "source": "USDA",
+      "source_id": "167746",
+      "serving_g": 7,
+      "serving_unit": "wedge"
+    },
+    {
+      "name": "Onion",
+      "source": "USDA",
+      "source_id": "170000",
+      "serving_g": 110,
+      "serving_unit": "medium onion"
+    },
+    {
+      "name": "Cabbage",
+      "source": "USDA",
+      "source_id": "169975",
+      "serving_g": 89,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Beans",
+      "source": "USDA",
+      "source_id": "169141",
+      "serving_g": 125,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Green beans",
+      "source": "USDA",
+      "source_id": "169141",
+      "serving_g": 125,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "French beans",
+      "source": "USDA",
+      "source_id": "169141",
+      "serving_g": 125,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Capsicum",
+      "source": "USDA",
+      "source_id": "170427",
+      "serving_g": 149,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Pineapple",
+      "source": "USDA",
+      "source_id": "169124",
+      "serving_g": 165,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Muskmelon",
+      "source": "USDA",
+      "source_id": "169092",
+      "serving_g": 177,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Strawberries",
+      "source": "USDA",
+      "source_id": "167762",
+      "serving_g": 152,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Peas",
+      "source": "USDA",
+      "source_id": "170017",
+      "serving_g": 80,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Broccoli",
+      "source": "USDA",
+      "source_id": "169967",
+      "serving_g": 78,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Cauliflower",
+      "source": "USDA",
+      "source_id": "170397",
+      "serving_g": 62,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Beetroot",
+      "source": "USDA",
+      "source_id": "168506",
+      "serving_g": 85,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Radish",
+      "source": "USDA",
+      "source_id": "169276",
+      "serving_g": 116,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Daliya",
+      "source": "USDA",
+      "source_id": "170287",
+      "serving_g": 200,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Vegetable daliya",
+      "source": "USDA",
+      "source_id": "170287",
+      "serving_g": 200,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Chana",
+      "source": "USDA",
+      "source_id": "173757",
+      "serving_g": 164,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Chickpeas",
+      "source": "USDA",
+      "source_id": "173757",
+      "serving_g": 164,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Raita",
+      "source": "INDB",
+      "source_id": "ASC273"
+    },
+    {
+      "name": "Cucumber raita",
+      "source": "INDB",
+      "source_id": "ASC273"
+    },
+    {
+      "name": "Salad",
+      "source": "USDA",
+      "source_id": "169247",
+      "serving_g": 100,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Green salad",
+      "source": "USDA",
+      "source_id": "169247",
+      "serving_g": 100,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Mixed salad",
+      "source": "USDA",
+      "source_id": "169247",
+      "serving_g": 100,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Cucumber salad",
+      "source": "USDA",
+      "source_id": "168409",
+      "serving_g": 100,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Lemon water",
+      "source": "USDA",
+      "source_id": "167746",
+      "serving_g": 30,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Nimbu pani",
+      "source": "USDA",
+      "source_id": "167746",
+      "serving_g": 30,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Black tea",
+      "source": "USDA",
+      "source_id": "173227",
+      "serving_g": 240,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Herbal tea",
+      "source": "USDA",
+      "source_id": "171917",
+      "serving_g": 245,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Tea",
+      "source": "INDB",
+      "source_id": "ASC001"
+    },
+    {
+      "name": "Milk tea",
+      "source": "INDB",
+      "source_id": "ASC001"
+    },
+    {
+      "name": "Chai",
+      "source": "INDB",
+      "source_id": "ASC001"
+    },
+    {
+      "name": "Warm milk",
+      "source": "USDA",
+      "source_id": "170871",
+      "serving_g": 250,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Turmeric milk",
+      "source": "USDA",
+      "source_id": "170871",
+      "serving_g": 250,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Mint chutney",
+      "source": "INDB",
+      "source_id": "ASC387"
+    },
+    {
+      "name": "Coriander chutney",
+      "source": "INDB",
+      "source_id": "ASC387"
+    },
+    {
+      "name": "Green chutney",
+      "source": "INDB",
+      "source_id": "ASC387"
+    },
+    {
+      "name": "Coconut chutney",
+      "source": "INDB",
+      "source_id": "ASC386"
+    },
+    {
+      "name": "Peanut butter",
+      "source": "USDA",
+      "source_id": "169869"
+    },
+    {
+      "name": "Whole wheat bread",
+      "source": "USDA",
+      "source_id": "172688"
+    },
+    {
+      "name": "Whole wheat toast",
+      "source": "USDA",
+      "source_id": "172688"
+    },
+    {
+      "name": "Brown bread",
+      "source": "USDA",
+      "source_id": "172688"
+    },
+    {
+      "name": "Toast",
+      "source": "USDA",
+      "source_id": "172688"
+    },
+    {
+      "name": "Bread",
+      "source": "USDA",
+      "source_id": "172688"
+    },
+    {
+      "name": "Dal fry",
+      "source": "INDB",
+      "source_id": "ASC155"
+    },
+    {
+      "name": "Dal tadka",
+      "source": "INDB",
+      "source_id": "ASC155"
+    },
+    {
+      "name": "Jeera rice",
+      "source": "INDB",
+      "source_id": "ASC114",
+      "serving_g": 150,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Paneer bhurji",
+      "source": "USDA",
+      "source_id": "172223",
+      "serving_g": 30,
+      "serving_unit": "piece"
+    },
+    {
+      "name": "Paneer toast",
+      "source": "INDB",
+      "source_id": "ASC042"
+    },
+    {
+      "name": "Paneer sandwich",
+      "source": "INDB",
+      "source_id": "ASC042"
+    },
+    {
+      "name": "Biryani",
+      "source": "INDB",
+      "source_id": "ASC122",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Chicken biryani",
+      "source": "INDB",
+      "source_id": "ASC122",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mutton biryani",
+      "source": "INDB",
+      "source_id": "ASC122",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Vegetable biryani",
+      "source": "INDB",
+      "source_id": "ASC123",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Veg biryani",
+      "source": "INDB",
+      "source_id": "ASC123",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Egg bhurji",
+      "source": "INDB",
+      "source_id": "ASC059"
+    },
+    {
+      "name": "Anda bhurji",
+      "source": "INDB",
+      "source_id": "ASC059"
+    },
+    {
+      "name": "Tofu",
+      "source": "USDA",
+      "source_id": "172448"
+    },
+    {
+      "name": "Grilled tofu",
+      "source": "USDA",
+      "source_id": "172448"
+    },
+    {
+      "name": "Tofu curry",
+      "source": "INDB",
+      "source_id": "ASC164"
+    },
+    {
+      "name": "Soya bhurji",
+      "source": "INDB",
+      "source_id": "ASC164"
+    },
+    {
+      "name": "Soya chunks bhurji",
+      "source": "INDB",
+      "source_id": "ASC164"
+    },
+    {
+      "name": "Soya chunks curry",
+      "source": "INDB",
+      "source_id": "ASC164"
+    },
+    {
+      "name": "Lauki sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Ghiya sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Bottle gourd sabzi",
+      "source": "INDB",
+      "source_id": "BFP241",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Boondi raita",
+      "source": "INDB",
+      "source_id": "ASC273"
+    },
+    {
+      "name": "Mutton curry",
+      "source": "INDB",
+      "source_id": "BFP194",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mutton masala",
+      "source": "INDB",
+      "source_id": "BFP194",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mutton rogan josh",
+      "source": "INDB",
+      "source_id": "BFP194",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Mutton keema",
+      "source": "INDB",
+      "source_id": "BFP194",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Rajma masala",
+      "source": "INDB",
+      "source_id": "ASC165"
+    },
+    {
+      "name": "Fruit chaat",
+      "source": "INDB",
+      "source_id": "ASC265"
+    },
+    {
+      "name": "Fruit salad",
+      "source": "INDB",
+      "source_id": "ASC265"
+    },
+    {
+      "name": "Makhana",
+      "source": "USDA",
+      "source_id": "170149",
+      "serving_g": 20,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Roasted makhana",
+      "source": "USDA",
+      "source_id": "170149",
+      "serving_g": 20,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Fox nuts",
+      "source": "USDA",
+      "source_id": "170149",
+      "serving_g": 20,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Chana masala",
+      "source": "INDB",
+      "source_id": "ASC162"
+    },
+    {
+      "name": "Chole",
+      "source": "INDB",
+      "source_id": "ASC162"
+    },
+    {
+      "name": "Chole masala",
+      "source": "INDB",
+      "source_id": "ASC162"
+    },
+    {
+      "name": "Cashews",
+      "source": "USDA",
+      "source_id": "169421",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Roasted peanuts",
+      "source": "USDA",
+      "source_id": "173806",
+      "serving_g": 28,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Chicken tikka",
+      "source": "INDB",
+      "source_id": "ASC241",
+      "serving_g": 100,
+      "serving_unit": "serving"
+    },
+    {
+      "name": "Fried rice",
+      "source": "INDB",
+      "source_id": "ASC129",
+      "serving_g": 200,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Egg fried rice",
+      "source": "INDB",
+      "source_id": "ASC129",
+      "serving_g": 200,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Veg fried rice",
+      "source": "INDB",
+      "source_id": "ASC129",
+      "serving_g": 200,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Grilled fish",
+      "source": "USDA",
+      "source_id": "175177",
+      "serving_g": 100,
+      "serving_unit": "serving"
+    },
+    {
+      "name": "Bajra roti",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Jowar roti",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Millet roti",
+      "source": "INDB",
+      "source_id": "ASC096"
+    },
+    {
+      "name": "Tinda",
+      "source": "INDB",
+      "source_id": "ASC185"
+    },
+    {
+      "name": "Tinda sabzi",
+      "source": "INDB",
+      "source_id": "ASC185"
+    },
+    {
+      "name": "Palak dal",
+      "source": "INDB",
+      "source_id": "BFP172"
+    },
+    {
+      "name": "Dal palak",
+      "source": "INDB",
+      "source_id": "BFP172"
+    },
+    {
+      "name": "Spinach dal",
+      "source": "INDB",
+      "source_id": "BFP172"
+    },
+    {
+      "name": "Oats upma",
+      "source": "USDA",
+      "source_id": "173905",
+      "serving_g": 234,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Steamed beans",
+      "source": "USDA",
+      "source_id": "169141",
+      "serving_g": 125,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Cucumber slices",
+      "source": "USDA",
+      "source_id": "168409",
+      "serving_g": 100,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Chicken stir-fry",
+      "source": "INDB",
+      "source_id": "ASC240",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Warm turmeric milk",
+      "source": "USDA",
+      "source_id": "170871",
+      "serving_g": 250,
+      "serving_unit": "glass"
+    },
+    {
+      "name": "Karela sabzi",
+      "source": "INDB",
+      "source_id": "BFP604"
+    },
+    {
+      "name": "Bitter gourd sabzi",
+      "source": "INDB",
+      "source_id": "BFP604"
+    },
+    {
+      "name": "Boiled peanuts",
+      "source": "USDA",
+      "source_id": "174260",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Paneer tikka",
+      "source": "USDA",
+      "source_id": "172223",
+      "serving_g": 30,
+      "serving_unit": "piece"
+    },
+    {
+      "name": "Puffed rice",
+      "source": "USDA",
+      "source_id": "173912",
+      "serving_g": 15,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Murmura",
+      "source": "USDA",
+      "source_id": "173912",
+      "serving_g": 15,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Murmure",
+      "source": "USDA",
+      "source_id": "173912",
+      "serving_g": 15,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Kurmura",
+      "source": "USDA",
+      "source_id": "173912",
+      "serving_g": 15,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Roasted chana",
+      "source": "USDA",
+      "source_id": "173756",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Chana roasted",
+      "source": "USDA",
+      "source_id": "173756",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Bhuna chana",
+      "source": "USDA",
+      "source_id": "173756",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Roasted bengal gram",
+      "source": "USDA",
+      "source_id": "173756",
+      "serving_g": 30,
+      "serving_unit": "handful"
+    },
+    {
+      "name": "Whey shake",
+      "source": "USDA",
+      "source_id": "173180",
+      "serving_g": 30,
+      "serving_unit": "scoop"
+    },
+    {
+      "name": "Whey protein",
+      "source": "USDA",
+      "source_id": "173180",
+      "serving_g": 30,
+      "serving_unit": "scoop"
+    },
+    {
+      "name": "Whey protein shake",
+      "source": "USDA",
+      "source_id": "173180",
+      "serving_g": 30,
+      "serving_unit": "scoop"
+    },
+    {
+      "name": "Whey protein powder",
+      "source": "USDA",
+      "source_id": "173180",
+      "serving_g": 30,
+      "serving_unit": "scoop"
+    },
+    {
+      "name": "Protein shake",
+      "source": "USDA",
+      "source_id": "173180",
+      "serving_g": 30,
+      "serving_unit": "scoop"
+    },
+    {
+      "name": "Greek yogurt",
+      "source": "USDA",
+      "source_id": "170894",
+      "serving_g": 170,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "High protein yogurt",
+      "source": "USDA",
+      "source_id": "170894",
+      "serving_g": 170,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Prawns",
+      "source": "INDB",
+      "source_id": "BFP230",
+      "serving_g": 150,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Seafood",
+      "source": "INDB",
+      "source_id": "BFP230",
+      "serving_g": 150,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Fish curry",
+      "source": "INDB",
+      "source_id": "ASC246",
+      "serving_g": 150,
+      "serving_unit": "bowl"
+    },
+    {
+      "name": "Moong dal chilla",
+      "source": "INDB",
+      "source_id": "BFP046",
+      "serving_g": 70,
+      "serving_unit": "cheela"
+    },
+    {
+      "name": "Moong dal cheela",
+      "source": "INDB",
+      "source_id": "BFP046",
+      "serving_g": 70,
+      "serving_unit": "cheela"
+    },
+    {
+      "name": "Moong chilla",
+      "source": "INDB",
+      "source_id": "BFP046",
+      "serving_g": 70,
+      "serving_unit": "cheela"
+    },
+    {
+      "name": "Moong dal pancake",
+      "source": "INDB",
+      "source_id": "BFP046",
+      "serving_g": 70,
+      "serving_unit": "cheela"
+    },
+    {
+      "name": "Omelette",
+      "source": "INDB",
+      "source_id": "BFP054",
+      "serving_g": 68,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Plain omelette",
+      "source": "INDB",
+      "source_id": "BFP054",
+      "serving_g": 68,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Egg omelette",
+      "source": "INDB",
+      "source_id": "BFP054",
+      "serving_g": 68,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Tofu tikka",
+      "source": "USDA",
+      "source_id": "174290",
+      "serving_g": 40,
+      "serving_unit": "piece"
+    },
+    {
+      "name": "Tofu sabzi",
+      "source": "USDA",
+      "source_id": "174290",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Tofu bhurji",
+      "source": "USDA",
+      "source_id": "174290",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Soya chunks",
+      "source": "INDB",
+      "source_id": "BFP206",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Soy chunks",
+      "source": "INDB",
+      "source_id": "BFP206",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Soy milk",
+      "source": "USDA",
+      "source_id": "175218",
+      "serving_g": 243,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Soya milk",
+      "source": "USDA",
+      "source_id": "175218",
+      "serving_g": 243,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Lactose-free milk",
+      "source": "USDA",
+      "source_id": "171265",
+      "serving_g": 244,
+      "serving_unit": "cup"
+    },
+    {
+      "name": "Lactose-free yogurt",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Lactose free curd",
+      "source": "USDA",
+      "source_id": "171284",
+      "serving_g": 150,
+      "serving_unit": "katori"
+    },
+    {
+      "name": "Eggs",
+      "source": "USDA",
+      "source_id": "173424",
+      "serving_g": 50,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Boiled eggs",
+      "source": "USDA",
+      "source_id": "173424",
+      "serving_g": 50,
+      "serving_unit": "egg"
+    },
+    {
+      "name": "Egg whites",
+      "source": "USDA",
+      "source_id": "172183",
+      "serving_g": 33,
+      "serving_unit": "egg white"
+    }
   ]
 }
