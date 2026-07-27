@@ -1040,25 +1040,12 @@ function mealTimelineQuestions(): Question[] {
           ]
         : []),
       {
-        // Tap-to-count staples. Offered BEFORE the free text because this is
-        // the one that carries the client's carbohydrate: everything the
-        // estimate needs can be recorded here without typing a word.
-        id: stapleQuestionId(key), n: 24, group: `q28_${key}`, tag: "conditional", type: "portions",
-        label: `${label} — staples and how many`,
-        options: STAPLE_LABELS,
-        note:
-          "Tap a staple, then set how many. This is what the carb and calorie " +
-          "estimate counts — anything recorded here does not need writing below.",
-        showIf: show,
-      },
-      {
         // Required only until the staples are picked, so a dietitian who
         // prefers tapping is never blocked on typing. Still the place for
         // everything the picker cannot hold — tea with sugar, a named sabzi,
         // outside food — and it is what the model reads as the food day.
         id: `q28_${key}_food`, n: 24, group: `q28_${key}`, tag: "conditional", type: "textarea",
-        required: (a: Answers) => list(a, stapleQuestionId(key)).length === 0,
-        label: `${label} — anything else, with quantity`,
+        label: `${label} — anything else worth noting`,
         placeholder: "e.g. tea with 1 tsp sugar · bhindi sabzi 1 katori · 2 samosas",
         probe: "Hunger before the meal, if useful.",
         showIf: show,

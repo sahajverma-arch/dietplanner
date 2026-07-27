@@ -6,10 +6,18 @@ import {
   encodeVariants,
   macrosOf,
   isOverridden,
+  tappedQuantity,
   type MealVariant,
   type VariantMacros,
 } from "@/lib/counselling/meal-variants";
-import { STAPLE_LABELS } from "@/lib/protein-intake";
+
+/** Taps implied by a quantity string — "4" is four, "2 katoris" is two. */
+const unitsOf = (food: string, qty: string): number => {
+  const n = parseInt(qty, 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  // Weighed foods count in 50 g steps, so 150 g is three taps.
+  return qty.trim().endsWith("g") ? Math.max(1, Math.round(n / 50)) : n;
+};
 
 /**
  * Records what a client really eats at one meal.
@@ -24,10 +32,13 @@ import { STAPLE_LABELS } from "@/lib/protein-intake";
  */
 export default function MealVariantsInput({
   mealLabel,
+  foods,
   value,
   onChange,
 }: {
   mealLabel: string;
+  /** The tappable vocabulary, narrowed to this client's food pattern. */
+  foods: string[];
   value: string | string[] | undefined;
   onChange: (encoded: string) => void;
 }) {
@@ -46,7 +57,7 @@ export default function MealVariantsInput({
         // millisecond; the index keeps them distinct without a uuid library.
         id: `v${Date.now()}-${variants.length}`,
         label: "",
-        items: [{ food: "", qty: "" }],
+        items: [],
         // Whatever is left of the week, so the common "one thing every day"
         // case needs no adjustment at all.
         daysPerWeek: Math.max(1, 7 - daysCovered),
@@ -59,6 +70,7 @@ export default function MealVariantsInput({
         <VariantCard
           key={v.id}
           variant={v}
+          foods={foods}
           index={i}
           onChange={(patch) => update(v.id, patch)}
           onRemove={() => write(variants.filter((x) => x.id !== v.id))}
@@ -101,11 +113,13 @@ function DaysCoverage({ covered }: { covered: number }) {
 
 function VariantCard({
   variant,
+  foods,
   index,
   onChange,
   onRemove,
 }: {
   variant: MealVariant;
+  foods: string[];
   index: number;
   onChange: (patch: Partial<MealVariant>) => void;
   onRemove: () => void;
@@ -115,6 +129,9 @@ function VariantCard({
   const [editing, setEditing] = useState(false);
   const macros = macrosOf(variant);
   const filled = variant.items.filter((i) => i.food.trim());
+  const typedItems = variant.items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !foods.includes(item.food));
 
   // Price against the foods table whenever the items settle. Debounced, because
   // this fires while the dietitian is still typing a food name.
@@ -177,42 +194,101 @@ function VariantCard({
         </button>
       </div>
 
-      {/* Items: one food per row, with its own quantity, so each is priced
-          separately — a combined "bread and eggs" cannot be costed at all. */}
-      <div className="mt-2 space-y-1.5">
-        {variant.items.map((item, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <input
-              className="input flex-1 py-1 text-sm"
-              value={item.food}
-              onChange={(e) => setItem(i, { food: e.target.value })}
-              list="staple-foods"
-              placeholder="Food, e.g. Bread"
-            />
-            <input
-              className="input w-28 py-1 text-sm"
-              value={item.qty}
-              onChange={(e) => setItem(i, { qty: e.target.value })}
-              placeholder="4 slices"
-            />
-            <button
-              type="button"
-              onClick={() => onChange({ items: variant.items.filter((_, j) => j !== i) })}
-              aria-label="Remove this food"
-              className="shrink-0 rounded px-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+      {/* Tap a food to add one, tap +/− to change the count. Typing a food name
+          is the thing that makes a form feel slow mid-consultation, so the
+          everyday vocabulary is tappable and only the unusual is typed.
+          Each food stays a separate item: a combined "bread and eggs" cannot
+          be priced at all. */}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {foods.map((food) => {
+          const picked = variant.items.find((it) => it.food === food);
+          const units = picked ? unitsOf(food, picked.qty) : 0;
+          const without = variant.items.filter((it) => it.food !== food);
+          const setUnits = (n: number) =>
+            onChange({
+              items:
+                n <= 0
+                  ? without
+                  : [...without, { food, qty: tappedQuantity(food, Math.min(20, n)) }],
+            });
+
+          if (units === 0) {
+            return (
+              <button
+                key={food}
+                type="button"
+                onClick={() => setUnits(1)}
+                className="rounded-lg bg-zinc-900 px-2.5 py-1 text-xs text-zinc-400 ring-1 ring-zinc-700 transition hover:bg-zinc-800 hover:text-zinc-200"
+              >
+                {food}
+              </button>
+            );
+          }
+          return (
+            <span
+              key={food}
+              className="flex items-center gap-1 rounded-lg bg-brand px-1 py-0.5 text-xs font-medium text-black"
             >
-              ×
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          onClick={() => onChange({ items: [...variant.items, { food: "", qty: "" }] })}
-          className="text-xs font-medium text-brand hover:underline"
-        >
-          + add food
-        </button>
+              <button
+                type="button"
+                aria-label={`One less ${food}`}
+                onClick={() => setUnits(units - 1)}
+                className="h-5 w-5 rounded text-sm leading-none hover:bg-black/15"
+              >
+                −
+              </button>
+              <span className="tabular-nums">
+                {food} {picked?.qty}
+              </span>
+              <button
+                type="button"
+                aria-label={`One more ${food}`}
+                onClick={() => setUnits(units + 1)}
+                className="h-5 w-5 rounded text-sm leading-none hover:bg-black/15"
+              >
+                +
+              </button>
+            </span>
+          );
+        })}
       </div>
+
+      {/* Anything the list does not cover, typed. */}
+      {typedItems.length > 0 && (
+        <div className="mt-1.5 space-y-1.5">
+          {typedItems.map(({ item, index }) => (
+            <div key={index} className="flex items-center gap-1.5">
+              <input
+                className="input flex-1 py-1 text-sm"
+                value={item.food}
+                onChange={(e) => setItem(index, { food: e.target.value })}
+                placeholder="Anything else, e.g. Aloo tikki"
+              />
+              <input
+                className="input w-24 py-1 text-sm"
+                value={item.qty}
+                onChange={(e) => setItem(index, { qty: e.target.value })}
+                placeholder="1 katori"
+              />
+              <button
+                type="button"
+                onClick={() => onChange({ items: variant.items.filter((_, j) => j !== index) })}
+                aria-label="Remove this food"
+                className="shrink-0 rounded px-1.5 text-zinc-600 hover:bg-red-500/10 hover:text-red-400"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={() => onChange({ items: [...variant.items, { food: "", qty: "" }] })}
+        className="mt-1.5 text-xs font-medium text-brand hover:underline"
+      >
+        + something else
+      </button>
 
       {/* Frequency: the number that turns one meal into a week. */}
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -312,16 +388,5 @@ function VariantCard({
         {error && <p className="mt-1 text-[11px] text-red-400">{error}</p>}
       </div>
     </div>
-  );
-}
-
-/** Shared suggestion list so common staples can be picked rather than typed. */
-export function StapleFoodOptions() {
-  return (
-    <datalist id="staple-foods">
-      {STAPLE_LABELS.map((s) => (
-        <option key={s} value={s} />
-      ))}
-    </datalist>
   );
 }

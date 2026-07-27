@@ -69,6 +69,72 @@ export const VARIANT_MEALS = VARIANT_MEAL_KEYS.map((key) => ({
 /** Answer key holding one meal's variants, as JSON. */
 export const variantsQuestionId = (mealKey: string) => `q112_${mealKey}_variants`;
 
+/**
+ * The foods a dietitian can TAP rather than type, per meal.
+ *
+ * Typing a food name mid-consultation is the thing that makes a form feel
+ * slow, so the everyday vocabulary is tappable: the carbohydrate staples that
+ * carry most of a plate, plus the protein foods this client's pattern allows —
+ * a vegetarian consultation should not offer chicken, and the old staples list
+ * offered no eggs, paneer or dal at all, so protein could never be tapped.
+ *
+ * Anything outside this list is still typed; the list only has to cover the
+ * common case to save the typing that matters.
+ */
+export function variantFoodOptions(staples: string[], proteinFoods: string[]): string[] {
+  const seen = new Set<string>();
+  return [...staples, ...proteinFoods].filter((f) => {
+    const key = f.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * How many of a food a tap adds, and what one of them is called.
+ *
+ * Counted foods ("2 eggs", "4 bread") are a bare number, which is what the
+ * grounding reads as a count of servings. Foods measured by vessel get their
+ * household measure, because "1 dal" is not a quantity anyone can price.
+ */
+const VESSEL_FOODS: Record<string, string> = {
+  Rice: "katori",
+  Poha: "bowl",
+  Upma: "bowl",
+  Khichdi: "bowl",
+  Sabzi: "katori",
+  Salad: "bowl",
+  Dal: "katori",
+  Milk: "glass",
+  Curd: "katori",
+  "Buttermilk or chaas": "glass",
+  "Greek or high-protein yogurt": "katori",
+  "Chickpeas or chole": "katori",
+  "Rajma or beans": "katori",
+  Sprouts: "katori",
+  "Soy chunks": "katori",
+  Chicken: "katori",
+  Fish: "katori",
+  Seafood: "katori",
+  Meat: "katori",
+  "Nuts or seeds": "handful",
+  "Roasted chana": "handful",
+  "Protein powder": "scoop",
+  Paneer: "g",
+  Tofu: "g",
+  Tempeh: "g",
+};
+
+/** The quantity string a tapped food carries at `units` taps. */
+export function tappedQuantity(food: string, units: number): string {
+  const unit = VESSEL_FOODS[food];
+  if (!unit) return String(units);
+  // Paneer and tofu are weighed, and 50 g steps are how dietitians think.
+  if (unit === "g") return `${units * 50} g`;
+  return `${units} ${unit}${units > 1 && unit !== "g" ? "s" : ""}`;
+}
+
 /** Answer key holding the dietitian's override of the whole daily intake. */
 export const INTAKE_OVERRIDE_ID = "q112_intake_override";
 

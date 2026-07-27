@@ -19,14 +19,16 @@ import {
 import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import PlanProgressBar from "./PlanProgressBar";
-import MealVariantsInput, { StapleFoodOptions } from "./MealVariantsInput";
+import MealVariantsInput from "./MealVariantsInput";
 import IntakeOverride from "./IntakeOverride";
-import { INTAKE_OVERRIDE_ID } from "@/lib/counselling/meal-variants";
+import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
 import {
   decodeStaplePick,
   encodeStaplePick,
   estimateProteinIntake,
+  foodsForPattern,
   proteinTarget,
+  STAPLE_LABELS,
 } from "@/lib/protein-intake";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -180,7 +182,6 @@ export default function ClinicalCounsellingForm({
 
   return (
     <div>
-      <StapleFoodOptions />
       {/* Header */}
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -918,6 +919,18 @@ function Field({
 }) {
   const value = answers[q.id];
   const text = typeof value === "string" ? value : "";
+  // Tappable food vocabulary for the variant boxes, narrowed to the recorded
+  // food pattern so a vegetarian consultation is never offered chicken.
+  const tappableFoods = useMemo(
+    () =>
+      q.type === "mealVariants"
+        ? variantFoodOptions(
+            STAPLE_LABELS,
+            foodsForPattern(answers).map((f) => f.label)
+          )
+        : [],
+    [q.type, answers]
+  );
   const chosen = Array.isArray(value) ? value : [];
   const isRedFlagNote = q.note?.startsWith("RED FLAG");
   // A question may narrow its options from earlier answers (Q50's protein-food
@@ -1133,6 +1146,7 @@ function Field({
       {!blocked && q.type === "mealVariants" && (
         <MealVariantsInput
           mealLabel={q.label.split("—")[0].trim()}
+          foods={tappableFoods}
           value={answers[q.id]}
           onChange={(encoded) => set(q.id, encoded)}
         />

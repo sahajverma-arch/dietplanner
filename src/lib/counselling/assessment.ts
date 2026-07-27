@@ -21,7 +21,12 @@ import {
   type Answers,
 } from "./questions";
 import { estimateProteinIntake, proteinTarget, stapleQuestionId } from "../protein-intake";
-import { variantIntake, variantLabel } from "./meal-variants";
+import {
+  decodeVariants,
+  variantIntake,
+  variantLabel,
+  variantsQuestionId,
+} from "./meal-variants";
 
 /**
  * The protein-bearing foods the client actually eats, read off the recorded
@@ -678,7 +683,18 @@ function mealTimeline(a: Answers): Block[] {
         // must see both: a dietitian who only tapped "Roti × 2" would
         // otherwise send an empty meal, and one who only typed would lose
         // nothing. Joined rather than either/or for the same reason.
-        food_and_quantity: [list(a, stapleQuestionId(key)).join(", "), val(a, `q28_${key}_food`)]
+        // The meal's recorded variants ARE the food, so they are what the
+        // model reads. The free-text row only carries what the taps could not.
+        food_and_quantity: [
+          decodeVariants(a[variantsQuestionId(key)])
+            .map(
+              (v) =>
+                `${variantLabel(v)} (${v.items.map((i) => `${i.food} ${i.qty}`.trim()).join(", ")}` +
+                `, ${v.daysPerWeek}/7 days)`
+            )
+            .join(" · "),
+          val(a, `q28_${key}_food`),
+        ]
           .filter((s) => s.trim())
           .join(" · "),
         added_components: list(a, `q28_${key}_extras`).filter((v) => v !== "None"),
