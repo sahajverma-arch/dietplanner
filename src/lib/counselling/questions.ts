@@ -1013,6 +1013,9 @@ function mealTimelineQuestions(): Question[] {
   const out: Question[] = [];
   for (const { key, label } of MEAL_OCCASIONS) {
     const show = (a: Answers) => has(a, "q28", label);
+    const isVariantMeal = VARIANT_MEAL_KEYS.includes(
+      key as (typeof VARIANT_MEAL_KEYS)[number]
+    );
     out.push(
       {
         id: `q28_${key}_time`, n: 24, group: `q28_${key}`, tag: "conditional", type: "time",
@@ -1022,7 +1025,7 @@ function mealTimelineQuestions(): Question[] {
       // the client's measured protein comes from here. It sits inside the meal
       // group on purpose: one conversation per meal, in the order the
       // dietitian is already having it.
-      ...(VARIANT_MEAL_KEYS.includes(key as (typeof VARIANT_MEAL_KEYS)[number])
+      ...(isVariantMeal
         ? [
             {
               id: variantsQuestionId(key), n: 25, group: `q28_${key}`,
@@ -1036,17 +1039,21 @@ function mealTimelineQuestions(): Question[] {
             },
           ]
         : []),
-      {
-        // Required only until the staples are picked, so a dietitian who
-        // prefers tapping is never blocked on typing. Still the place for
-        // everything the picker cannot hold — tea with sugar, a named sabzi,
-        // outside food — and it is what the model reads as the food day.
-        id: `q28_${key}_food`, n: 24, group: `q28_${key}`, tag: "conditional", type: "textarea",
-        label: `${label} — anything else worth noting`,
-        placeholder: "e.g. tea with 1 tsp sugar · bhindi sabzi 1 katori · 2 samosas",
-        probe: "Hunger before the meal, if useful.",
-        showIf: show,
-      },
+      // Only where there is no variant box. For a main meal the variants ARE
+      // the food and this row just asked for the same thing again — but an
+      // occasion without one (late-night food, small bites, alcohol) has
+      // nothing else to record what was eaten.
+      ...(isVariantMeal
+        ? []
+        : [
+            {
+              id: `q28_${key}_food`, n: 24, group: `q28_${key}`,
+              tag: "conditional" as const, type: "textarea" as const,
+              label: `${label} — what, with quantity`,
+              placeholder: "e.g. tea with 1 tsp sugar · 2 biscuits · 1 peg whisky",
+              showIf: show,
+            },
+          ]),
       {
         id: `q28_${key}_beverage`, n: 24, group: `q28_${key}`, tag: "conditional", type: "text",
         label: `${label} — beverage`,

@@ -360,7 +360,12 @@ export const mealDetailComplete = (a: Answers) => {
   return (
     chosen.length > 0 &&
     chosen.every(
-      (o) => answered(a, `q28_${o.key}_food`) || answered(a, stapleQuestionId(o.key))
+      // A main meal is recorded by its variants; every other occasion still
+      // has the free-text row, and pre-variant counsellings have the staples.
+      (o) =>
+        decodeVariants(a[variantsQuestionId(o.key)]).some((v) => v.items.length > 0) ||
+        answered(a, `q28_${o.key}_food`) ||
+        answered(a, stapleQuestionId(o.key))
     )
   );
 };
