@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { FollowUpInput, IntakeForm } from "./types";
 import { aiProfile } from "./counselling/assessment";
+import { estimateProteinIntake, proteinTarget } from "./protein-intake";
 import type { Answers } from "./counselling/questions";
 // Value import; nutrition.ts only imports types from here, so there is no
 // runtime cycle. The model must size portions with the same household weights
@@ -1225,6 +1226,25 @@ function planPromptParts(ctx: PlanContext) {
 }
 
 /**
+ * The week-1 protein target measured from this client's own recorded intake,
+ * or null when nothing was measured.
+ *
+ * This is not the model's to choose. It is the client's measured intake raised
+ * 10-15%, and the whole progression depends on it being that and nothing else.
+ * The prompt says so in rule 8, and the model still overrode it: a client
+ * measured at 76 g with an 86 g target had a plan written to 92 g, because the
+ * clinical review mentioned 92 as where they should be by week 2 and the model
+ * pulled it forward — the exact restrictive jump the progression exists to
+ * avoid.
+ */
+function measuredProteinTarget(intake: IntakeForm): number | null {
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  if (!answers || typeof answers !== "object") return null;
+  const target = proteinTarget(answers, estimateProteinIntake(answers));
+  return target.targetG > 0 ? target.targetG : null;
+}
+
+/**
  * The plan's strategy and daily targets, with no days. Small and quick — the
  * days are then generated against these numbers, a batch per step.
  */
@@ -1259,6 +1279,20 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
     OverviewSchema,
     "the strategy and daily targets, with no days"
   );
+
+  // Rule 8 tells the model this number is fixed; it does not always listen, so
+  // the measured target is applied here rather than requested. A plan built to
+  // a protein figure the model picked is not a progression from what the
+  // client actually eats, which is the entire point of measuring it.
+  const measured = measuredProteinTarget(intake);
+  if (measured !== null && Math.round(overview.macros.protein_g) !== measured) {
+    console.warn(
+      `protein target: model wrote ${Math.round(overview.macros.protein_g)} g, ` +
+        `using the measured ${measured} g`
+    );
+    overview.macros = { ...overview.macros, protein_g: measured };
+  }
+
   return { ...overview, foods_to_avoid: cleanFoodsToAvoid(overview.foods_to_avoid, intake) };
 }
 
