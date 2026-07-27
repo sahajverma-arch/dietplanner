@@ -767,7 +767,7 @@ async function validatedAttempts<T>(
         ? `These foods are FORBIDDEN — replace each with a different food the client accepts, keeping the same meal structure and calories.`
         : "",
       soft.length
-        ? `Every meal that lists food must have non-zero "calories", "protein_g", "carbs_g" and "fat_g". Adjust portions so each day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories". Name every item as a specific dish, never a bare category: "Bhindi sabzi" not "Sabzi", "Cucumber tomato salad" not "Salad".`
+        ? `Every meal that lists food must have non-zero "calories", "protein_g", "carbs_g" and "fat_g". Adjust portions so each day's meal calories sum to its "total_calories" and land within ~10% of "daily_calories". Name every item as a specific dish, never a bare category: "Bhindi sabzi" not "Sabzi", "Cucumber tomato salad" not "Salad". Any day reported as repeating another must be REWRITTEN with different main dishes and a different protein source — reordering the same foods is still the same day.`
         : "",
     ]
       .filter(Boolean)
@@ -1297,6 +1297,39 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
 }
 
 /**
+ * Days that repeat a menu already used this week, or each other.
+ *
+ * Telling the model in the prompt was not enough — batches came back with two
+ * identical days, and with the same foods merely reordered, which is the
+ * repetition the whole draft review exists to catch. Compared as a SET of
+ * foods so a reordered menu counts as the duplicate it is.
+ */
+function duplicateDayIssues(
+  fresh: DietPlan["days"],
+  alreadyPlanned: DietPlan["days"]
+): string[] {
+  const key = (day: DietPlan["days"][number]) =>
+    Array.from(new Set(day.meals.flatMap((m) => m.items.map((i) => i.food.trim().toLowerCase()))))
+      .sort()
+      .join("|");
+  const seen = new Map<string, string>();
+  for (const day of alreadyPlanned) seen.set(key(day), day.day);
+  const issues: string[] = [];
+  for (const day of fresh) {
+    const k = key(day);
+    const clash = seen.get(k);
+    if (clash) {
+      issues.push(
+        `${day.day} repeats ${clash}'s menu exactly — give it different main dishes and a different protein source`
+      );
+    } else {
+      seen.set(k, day.day);
+    }
+  }
+  return issues;
+}
+
+/**
  * One batch of days, built to the overview's targets and aware of the days
  * already planned so the week does not repeat itself. `alreadyPlanned` is
  * every day generated so far, in order.
@@ -1346,7 +1379,13 @@ export async function generatePlanDays(
     daysSchema(names.length),
     `exactly ${names.length} day(s): ${names.join(", ")}`,
     (p) => checkDays(p.days),
-    (p) => qualityIssues(p.days, overview.daily_calories)
+    // Soft: a repeated menu buys a corrective retry but never throws the plan
+    // away — the dietitian reviews every draft, and no plan is better than a
+    // repetitive one only in theory.
+    (p) => [
+      ...qualityIssues(p.days, overview.daily_calories),
+      ...duplicateDayIssues(pickDays(p.days, names), alreadyPlanned),
+    ]
   );
   return pickDays(result.days, names);
 }
