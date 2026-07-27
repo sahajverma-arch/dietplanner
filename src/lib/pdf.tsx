@@ -154,6 +154,10 @@ const styles = StyleSheet.create({
   tdMeal: { width: W_MEAL, fontFamily: "Helvetica-Bold" },
   tdFoods: { flex: 1, color: "#3f3f46", lineHeight: 1.35 },
   tdNotes: { color: FAINT, fontSize: 7, marginTop: 1.5 },
+  // "OR" choices the dietitian offered for this meal — the client eats the
+  // meal above or one of these, never both, so they read as subordinate to it.
+  tdAlternate: { color: MUTED, fontSize: 7.4, marginTop: 2, lineHeight: 1.3 },
+  tdAlternateTag: { fontFamily: "Helvetica-Bold", color: "#a16207" },
   num: { textAlign: "right" },
   totalRow: { flexDirection: "row", backgroundColor: YELLOW_PALE },
   totalLabel: { fontFamily: "Helvetica-Bold" },
@@ -302,6 +306,16 @@ function DayTable({
                   .join(", ")}
               </Text>
               {meal.notes ? <Text style={styles.tdNotes}>{meal.notes}</Text> : null}
+              {/* Interchangeable choices for this meal, each planned to the
+                  same calories and protein as the row's macros. */}
+              {meal.alternates.map((alt, ai) => (
+                <Text key={ai} style={styles.tdAlternate}>
+                  <Text style={styles.tdAlternateTag}>OR  </Text>
+                  {alt.items
+                    .map((i) => (i.quantity ? `${i.food} (${i.quantity})` : i.food))
+                    .join(", ")}
+                </Text>
+              ))}
             </View>
             <Text style={[styles.td, styles.num, { width: W_CAL }]}>{r(meal.calories || 0)}</Text>
             <Text style={[styles.td, styles.num, { width: W_MACRO, color: PROTEIN, fontFamily: "Helvetica-Bold" }]}>
@@ -492,6 +506,14 @@ function PlanDocument({
             measured serving weight use that instead. “Small” and “large” portions scale by
             ×0.8 and ×1.3.
           </Text>
+          {plan.days.some((d) => d.meals.some((m) => m.alternates.length > 0)) && (
+            <Text style={styles.portionNote}>
+              <Text style={{ fontFamily: "Helvetica-Bold" }}>“OR” choices:  </Text>
+              where a meal lists OR options, have the meal or ONE of its options — never both.
+              Each option is planned to the same calories and protein as that meal, so the day&apos;s
+              totals hold whichever you pick.
+            </Text>
+          )}
         </View>
 
         {/* Day tables */}

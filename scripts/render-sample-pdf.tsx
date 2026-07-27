@@ -6,6 +6,18 @@ import fs from "fs";
 import { renderPlanPdf } from "../src/lib/pdf";
 import type { DietPlan } from "../src/lib/nim";
 
+const items = (foods: [string, string][]) =>
+  foods.map(([food, quantity]) => ({ food, quantity }));
+
+/** An "OR" choice for a meal, matched to its calories and protein. */
+const option = (
+  foods: [string, string][],
+  calories: number,
+  p: number,
+  c: number,
+  f: number
+) => ({ items: items(foods), notes: "", calories, protein_g: p, carbs_g: c, fat_g: f });
+
 const meal = (
   name: string,
   time: string,
@@ -14,16 +26,18 @@ const meal = (
   p: number,
   c: number,
   f: number,
-  notes = ""
+  notes = "",
+  alternates: ReturnType<typeof option>[] = []
 ) => ({
   name,
   time,
-  items: foods.map(([food, quantity]) => ({ food, quantity })),
+  items: items(foods),
   notes,
   calories,
   protein_g: p,
   carbs_g: c,
   fat_g: f,
+  alternates,
 });
 
 const dayA = {
@@ -46,7 +60,20 @@ const dayB = {
     meal("Meal 1", "06:00", [["Warm water + chia seeds", "1 tsp"], ["Almonds", "5"]], 110, 3, 5, 9),
     meal("Breakfast", "09:30", [["Moong chilla", "2"], ["Mint chutney", "2 tbsp"]], 310, 16, 40, 8),
     meal("Mid-morning", "12:30", [["Papaya", "200 g"]], 86, 1, 22, 0),
-    meal("Lunch", "14:00", [["Rajma", "1 bowl"], ["Brown rice", "1 cup"], ["Salad", "1 bowl"]], 460, 20, 74, 8),
+    meal(
+      "Lunch",
+      "14:00",
+      [["Rajma", "1 bowl"], ["Brown rice", "1 cup"], ["Salad", "1 bowl"]],
+      460,
+      20,
+      74,
+      8,
+      "",
+      [
+        option([["Chana masala", "1 bowl"], ["Roti", "2"], ["Cucumber salad", "1 bowl"]], 455, 21, 70, 9),
+        option([["Paneer bhurji", "1 katori"], ["Jowar roti", "2"], ["Curd", "1 katori"]], 470, 24, 55, 16),
+      ]
+    ),
     meal("Evening", "17:00", [["Buttermilk", "1 glass"]], 60, 3, 5, 3),
     meal("Dinner", "20:00", [["Palak paneer", "1 bowl"], ["Roti", "1"]], 374, 18, 28, 20),
   ],
