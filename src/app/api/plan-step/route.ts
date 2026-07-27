@@ -84,6 +84,8 @@ const GenerationSchema = z.object({
   instructions: z.string().optional(),
   /** True once a correction round is rebuilding the days. */
   fixing: z.boolean().default(false),
+  /** The days a correction round rebuilds — only those that miss their band. */
+  fixDays: z.array(z.string()).default([]),
 });
 type Generation = z.infer<typeof GenerationSchema>;
 
@@ -94,10 +96,18 @@ const STEP_LABELS: Record<string, string> = {
   settle: "Checking the correction actually helped",
   done: "Finishing up",
 };
+/** The day batches the current pass walks: the week, or just the bad days. */
+const batchesFor = (gen: Generation): string[][] =>
+  gen.fixing
+    ? Array.from({ length: Math.ceil(gen.fixDays.length / 2) }, (_, i) =>
+        gen.fixDays.slice(i * 2, i * 2 + 2)
+      )
+    : DAY_BATCHES;
+
 const stepLabel = (stage: string, gen: Generation): string => {
   const batch = /^days:(\d+)$/.exec(stage);
   if (batch) {
-    const names = DAY_BATCHES[Number(batch[1])] ?? [];
+    const names = batchesFor(gen)[Number(batch[1])] ?? [];
     return `${gen.fixing ? "Correcting" : "Planning"} ${names.join(" and ")}`;
   }
   return STEP_LABELS[stage] ?? "Working";
@@ -105,7 +115,10 @@ const stepLabel = (stage: string, gen: Generation): string => {
 /** Rough completion for a progress bar: 6 steps normally, 11 with a correction. */
 const progressOf = (stage: string, gen: Generation): { step: number; total: number } => {
   const order = ["overview", "days:0", "days:1", "days:2", "days:3", "ground"];
-  const total = gen.fixing || gen.instructions ? order.length + DAY_BATCHES.length + 1 : order.length;
+  const total =
+    gen.fixing || gen.instructions
+      ? order.length + Math.ceil(Math.max(1, gen.fixDays.length) / 2) + 1
+      : order.length;
   const idx = order.indexOf(stage);
   if (idx >= 0) return { step: gen.fixing ? order.length + idx : idx, total };
   if (stage === "settle") return { step: total - 1, total };
@@ -178,6 +191,7 @@ async function start(
       base: draft.data,
       instructions: body.instructions,
       fixing: false,
+      fixDays: [],
     };
     await supabase
       .from("diet_plans")
@@ -318,7 +332,7 @@ async function start(
   planStart.setDate(planStart.getDate() + 1);
   const startsOn = planStart.toISOString().slice(0, 10);
 
-  const generation: Generation = { pass: "generate", days: [], fixing: false };
+  const generation: Generation = { pass: "generate", days: [], fixing: false, fixDays: [] };
   const { data: planRow, error: planError } = await supabase
     .from("diet_plans")
     .insert({
@@ -492,7 +506,8 @@ async function step(supabase: Supa, planId: string) {
   const batchMatch = /^days:(\d+)$/.exec(stage);
   if (batchMatch) {
     const index = Number(batchMatch[1]);
-    const names = DAY_BATCHES[index];
+    const batches = batchesFor(gen);
+    const names = batches[index];
     if (!names || !gen.overview) {
       return NextResponse.json({ error: "This generation lost its place — start it again" }, { status: 422 });
     }
@@ -501,7 +516,7 @@ async function step(supabase: Supa, planId: string) {
     const nextIndex = index + 1;
     const next: Generation = { ...gen, days };
     const nextStage =
-      nextIndex < DAY_BATCHES.length ? `days:${nextIndex}` : gen.fixing ? "settle" : "ground";
+      nextIndex < batches.length ? `days:${nextIndex}` : gen.fixing ? "settle" : "ground";
     await advance(nextStage, { generation: next });
     return reply(nextStage, next);
   }
@@ -518,18 +533,24 @@ async function step(supabase: Supa, planId: string) {
 
     // A dietitian's own revision is not second-guessed by the automatic
     // correction — their instructions ARE the correction.
-    const need = gen.pass === "revise" ? { needed: false, instructions: "", reason: "" } : reconcileNeed(plan);
+    const need =
+      gen.pass === "revise"
+        ? { needed: false, instructions: "", reason: "", offTargetDays: [] }
+        : reconcileNeed(plan);
     if (!need.needed) {
       const next: Generation = { ...gen, days: [] };
       await advance(null, { plan, status: "draft", generation: {} });
       return reply(null, next, true);
     }
     console.log(`nutrition reconcile needed: ${need.reason}`);
+    // Only the days that miss their band — rebuilding the whole week let a
+    // correction make good days worse while fixing bad ones.
     const next: Generation = {
       ...gen,
       base: plan,
       instructions: need.instructions,
       fixing: true,
+      fixDays: need.offTargetDays,
       days: [],
     };
     await advance("days:0", { plan, generation: next });
@@ -543,7 +564,11 @@ async function step(supabase: Supa, planId: string) {
     }
     let plan = gen.base;
     try {
-      const revised = assemblePlan(ctx, gen.overview, gen.days);
+      // The correction only rebuilt some days; the rest stand as they were.
+      const merged = gen.base.days.map(
+        (d) => gen.days.find((r) => r.day === d.day) ?? d
+      );
+      const revised = assemblePlan(ctx, gen.overview, merged);
       const grounded = await groundSafely(supabase, revised);
       const verdict = acceptRevision(gen.base, grounded);
       console.log(`nutrition reconcile ${verdict.accept ? "applied" : "skipped"}: ${verdict.reason}`);

@@ -1,5 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { generateDietPlan, type DietPlan, type PlanContext } from "./nim";
+import {
+  generatePlanDays,
+  type DietPlan,
+  type PlanContext,
+  type PlanOverview,
+} from "./nim";
+
+// Days rebuilt per model call. Same reasoning as generation: a small response
+// is faster and truncates less, and it has to fit one request on a 60s host.
+const REBUILD_BATCH = 2;
 import { groundPlan } from "./nutrition";
 import {
   bandsFor,
@@ -65,6 +74,8 @@ export interface ReconcileNeed {
   /** Revision instructions naming each off-target day; "" when not needed. */
   instructions: string;
   reason: string;
+  /** Day names that miss their band — the only days worth rebuilding. */
+  offTargetDays: string[];
 }
 
 /**
@@ -78,7 +89,7 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
   const hasProtein = Number.isFinite(proteinTarget) && proteinTarget > 0;
   const hasCalories = Number.isFinite(calorieTarget) && calorieTarget > 0;
   if (!hasProtein && !hasCalories) {
-    return { needed: false, instructions: "", reason: "no targets on plan" };
+    return { needed: false, instructions: "", reason: "no targets on plan", offTargetDays: [] };
   }
   const bands = bandsFor(plan);
 
@@ -92,6 +103,7 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
       needed: false,
       instructions: "",
       reason: "all days within protein band and calorie band",
+      offTargetDays: [],
     };
   }
 
@@ -140,7 +152,12 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
     `keep every meal's calories consistent with its macros, and use realistic portions — ` +
     `do not inflate or deflate numbers to hit a total.`;
 
-  return { needed: true, instructions, reason: `${offTarget.length} day(s) off target` };
+  return {
+    needed: true,
+    instructions,
+    reason: `${offTarget.length} day(s) off target`,
+    offTargetDays: offTarget.map((x) => x.day.day),
+  };
 }
 
 /**
@@ -189,13 +206,30 @@ export async function reconcileNutrition(
   const need = reconcileNeed(plan);
   if (!need.needed) return { plan, applied: false, reason: need.reason };
 
-  const revised = await generateDietPlan({
-    ...ctx,
-    revision: { draft: plan, instructions: need.instructions },
-  });
+  // Rebuild ONLY the days that miss their band, keeping the ones that already
+  // land. Regenerating the whole week meant a correction could — and did — make
+  // good days worse while fixing bad ones, so the verified deviation grew and
+  // the whole round was thrown away: 1303 -> 2102 on a week where three days
+  // needed help and four did not.
+  const overview = { ...plan, days: undefined } as unknown as PlanOverview;
+  const kept = plan.days.filter((d) => !need.offTargetDays.includes(d.day));
+  const rebuilt: DietPlan["days"] = [];
+  for (let i = 0; i < need.offTargetDays.length; i += REBUILD_BATCH) {
+    const names = need.offTargetDays.slice(i, i + REBUILD_BATCH);
+    rebuilt.push(
+      ...(await generatePlanDays(
+        { ...ctx, revision: { draft: plan, instructions: need.instructions } },
+        overview,
+        names,
+        [...kept, ...rebuilt]
+      ))
+    );
+  }
+  const merged = plan.days.map((d) => rebuilt.find((r) => r.day === d.day) ?? d);
+
   // If grounding throws, the revision is unverifiable — the caller's catch
   // keeps the original plan.
-  const { plan: grounded } = await groundPlan(supabase, revised);
+  const { plan: grounded } = await groundPlan(supabase, { ...plan, days: merged });
 
   const verdict = acceptRevision(plan, grounded);
   return verdict.accept
