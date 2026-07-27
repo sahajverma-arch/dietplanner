@@ -504,7 +504,6 @@ const RUBRIC: { name: string; items: Item[] }[] = [
       // dietitian's own read of the case, which is what the trimmed assessment
       // section actually asks for. q91 (nutrition priorities) went the same way
       // — the energy strategy is what that point was really scoring.
-      { points: 1, label: "Case understanding", done: all("ds1") },
       { points: 1, label: "Limiting factors", done: all("q76") },
       { points: 1, label: "Minimum changes", done: all("q77") },
       { points: 1, label: "Energy strategy", done: all("q89") },
@@ -1007,7 +1006,6 @@ export function aiProfile(a: Answers): Block {
   // independently test this, not blindly obey it. Hard constraints (ds2) are
   // the exception: they are non-negotiable rules, not part of the hypothesis.
   put("dietitian_hypothesis", clean({
-    case_understanding: val(a, "ds1"),
     ai_hard_constraints: val(a, "ds2"),
     foods_ai_must_not_force: val(a, "ds3"),
     special_instruction_to_ai: val(a, "ds4"),

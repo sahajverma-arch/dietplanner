@@ -2132,12 +2132,6 @@ const S13: Section = {
   // make, the energy direction, and the rules the plan may not break.
   questions: [
     {
-      id: "ds1", tag: "planning", type: "textarea",
-      label: "Your professional one-sentence understanding of this client",
-      placeholder:
-        "“This client primarily needs ___ while improving ___ without unnecessarily changing ___.”",
-    },
-    {
       id: "q76", n: 76, tag: "planning", type: "multi", max: 5,
       label: "Main factors currently limiting the client's progress",
       note: RANK_NOTE,
