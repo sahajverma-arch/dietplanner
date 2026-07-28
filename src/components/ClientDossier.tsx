@@ -41,9 +41,12 @@ const MACRO = { protein: "#38bdf8", carbs: "#f59e0b", fat: "#ef4444" };
 export default function ClientDossier({
   answers,
   appointmentId,
+  preview = false,
 }: {
   answers: Answers;
   appointmentId: string | null;
+  /** Dev preview: render everything, but never create a real client. */
+  preview?: boolean;
 }) {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -131,6 +134,7 @@ export default function ClientDossier({
         submitting={submitting}
         progress={progress}
         onGenerate={generate}
+        preview={preview}
       />
     </div>
   );
@@ -914,6 +918,7 @@ function GenerateBar({
   submitting,
   progress,
   onGenerate,
+  preview,
 }: {
   first: string;
   missing: number;
@@ -922,13 +927,19 @@ function GenerateBar({
   submitting: boolean;
   progress: PlanProgress | null;
   onGenerate: () => void;
+  preview: boolean;
 }) {
   return (
     <div className="sticky bottom-0 z-10 -mx-4 border-t border-zinc-800 bg-zinc-950/85 px-4 py-3 backdrop-blur-md sm:rounded-t-xl">
       {progress && <PlanProgressBar progress={progress} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0 text-xs text-zinc-400">
-          {missing > 0 ? (
+          {preview ? (
+            <span className="text-amber-400">
+              Preview of fabricated test data — generating is disabled here so no client record is
+              created.
+            </span>
+          ) : missing > 0 ? (
             <Link href="/counselling/new" className="text-red-400 underline underline-offset-4">
               {missing} mandatory question{missing > 1 ? "s" : ""} still unanswered — finish the
               counselling first
@@ -956,7 +967,7 @@ function GenerateBar({
         <button
           type="button"
           onClick={onGenerate}
-          disabled={submitting || missing > 0}
+          disabled={submitting || missing > 0 || preview}
           className="btn-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {submitting ? "Generating…" : `Generate ${first}'s Week 1 plan`}
