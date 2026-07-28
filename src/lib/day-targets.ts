@@ -10,8 +10,17 @@ import type { DietPlan } from "./nim";
 // ---------------------------------------------------------------------------
 
 // A day is protein-deficient when its grounded protein is below target minus
-// this. There is no upper protein band: extra protein is never the complaint.
+// this.
 export const PROTEIN_LOW_TOLERANCE_G = 5;
+// And over-supplied above target times this.
+//
+// There used to be no upper band, on the reasoning that extra protein is never
+// the complaint. It is, when the target was MEASURED: a client eating 70 g/day
+// has a week-1 target of 79 g precisely so the step is one they can keep, and
+// a plan delivering 101-125 g hands them the 45%-overnight jump the whole
+// progression exists to avoid. Generous enough that a naturally protein-rich
+// day passes; tight enough that a plan ignoring the target does not.
+export const PROTEIN_HIGH_FRACTION = 1.25;
 // Calorie band around the daily target. Outside it, the day is off target.
 export const CALORIE_LOW_FRACTION = 0.85;
 export const CALORIE_HIGH_FRACTION = 1.15;
@@ -24,6 +33,7 @@ export const dayCalories = (d: PlanDay) => d.meals.reduce((s, m) => s + (m.calor
 
 export interface DayBands {
   lowP: number;
+  highP: number;
   lowCal: number;
   highCal: number;
 }
@@ -35,6 +45,9 @@ export function bandsFor(plan: DietPlan): DayBands {
   const hasCalories = Number.isFinite(calorieTarget) && calorieTarget > 0;
   return {
     lowP: hasProtein ? proteinTarget - PROTEIN_LOW_TOLERANCE_G : 0,
+    // Infinity without a target, so the excess term stays at zero rather than
+    // measuring every day against 0 g — same reasoning as highCal.
+    highP: hasProtein ? proteinTarget * PROTEIN_HIGH_FRACTION : Infinity,
     lowCal: hasCalories ? calorieTarget * CALORIE_LOW_FRACTION : 0,
     // Without a calorie target nothing can be "over" — Infinity keeps the
     // excess term at zero instead of measuring every day against 0 kcal.
@@ -53,8 +66,10 @@ export function dayTargetVerdict(day: PlanDay, plan: DietPlan): string | null {
   if (kcal > 0 && kcal < b.lowCal) return `${Math.round(plan.daily_calories - kcal)} kcal under`;
   if (kcal > b.highCal) return `${Math.round(kcal - plan.daily_calories)} kcal over`;
   const protein = dayProtein(day);
+  const target = plan.macros?.protein_g ?? 0;
   if (protein > 0 && protein < b.lowP) {
-    return `${Math.round((plan.macros?.protein_g ?? 0) - protein)} g protein short`;
+    return `${Math.round(target - protein)} g protein short`;
   }
+  if (protein > b.highP) return `${Math.round(protein - target)} g protein over`;
   return null;
 }

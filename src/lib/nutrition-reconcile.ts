@@ -55,6 +55,7 @@ function deviationScore(plan: DietPlan, b: DayBands): number {
     return (
       s +
       4 * Math.max(0, b.lowP - dayProtein(d)) +
+      4 * Math.max(0, dayProtein(d) - b.highP) +
       Math.max(0, b.lowCal - kcal) +
       Math.max(0, kcal - b.highCal)
     );
@@ -96,7 +97,11 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
   const offTarget = plan.days
     .map((day) => ({ day, protein: dayProtein(day), calories: dayCalories(day) }))
     .filter(
-      (x) => x.protein < bands.lowP || x.calories < bands.lowCal || x.calories > bands.highCal
+      (x) =>
+        x.protein < bands.lowP ||
+        x.protein > bands.highP ||
+        x.calories < bands.lowCal ||
+        x.calories > bands.highCal
     );
   if (offTarget.length === 0) {
     return {
@@ -119,6 +124,18 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
         `${Math.round(protein)} g protein (${Math.round(
           proteinTarget - protein
         )} g short — strengthen ${weakest})`
+      );
+    }
+    if (protein > bands.highP) {
+      const richest = [...day.meals]
+        .sort((a, b) => (b.protein_g || 0) - (a.protein_g || 0))
+        .slice(0, 2)
+        .map((m) => `${m.name} (${Math.round(m.protein_g || 0)} g)`)
+        .join(" and ");
+      gaps.push(
+        `${Math.round(protein)} g protein (${Math.round(
+          protein - proteinTarget
+        )} g OVER the measured week-1 target — reduce the protein portions in ${richest} toward the target. The target is the client's own recorded intake raised slightly on purpose; overshooting it is the jump this progression exists to avoid, not a bonus)`
       );
     }
     if (calories < bands.lowCal) {

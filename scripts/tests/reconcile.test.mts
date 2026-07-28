@@ -35,11 +35,13 @@ const plan = (days: DietPlan["days"]): DietPlan => ({
   guidelines: [], hydration: "", days, foods_to_avoid: [],
 });
 
-// The real failing week: three days off, four landing.
+// The real failing week: three days off on CALORIES, four landing. Protein is
+// held inside its band here so this case isolates the calorie targeting —
+// over-target protein is a miss in its own right and is covered below.
 const week = plan([
-  day("Day 1", 2378, 114), day("Day 2", 2657, 126), day("Day 3", 2809, 104),
-  day("Day 4", 3089, 114), day("Day 5", 2600, 106), day("Day 6", 3724, 138),
-  day("Day 7", 3115, 126),
+  day("Day 1", 2378, 100), day("Day 2", 2657, 105), day("Day 3", 2809, 104),
+  day("Day 4", 3089, 108), day("Day 5", 2600, 106), day("Day 6", 3724, 110),
+  day("Day 7", 3115, 102),
 ]);
 const need = reconcileNeed(week);
 check("a week with off-target days needs correcting", need.needed);
@@ -68,9 +70,32 @@ check("under-target days are caught", reconcileNeed(light).offTargetDays.length 
 const lowProtein = plan(Array.from({ length: 7 }, (_, i) => day(`Day ${i + 1}`, 2500, 40)));
 check("low-protein days are caught", reconcileNeed(lowProtein).offTargetDays.length === 7);
 
+// Protein OVER the measured target is a miss too. A client measured at 70 g
+// has a 79 g week-1 target so the step is one they can keep; a plan handing
+// them 115 g is the jump the progression exists to avoid.
+const highProtein = plan(Array.from({ length: 7 }, (_, i) => day(`Day ${i + 1}`, 2500, 115)));
+const over = reconcileNeed(highProtein);
+check("over-target protein days are caught", over.offTargetDays.length === 7);
+check(
+  "and the instruction says to reduce, not add",
+  over.instructions.includes("OVER the measured week-1 target"),
+);
+// Comfortably above target but inside the band must still pass — the ceiling
+// is 1.25x, and a naturally protein-rich day is not a defect.
+const richButFine = plan(Array.from({ length: 7 }, (_, i) => day(`Day ${i + 1}`, 2500, 105)));
+check("a protein-rich day inside the band passes", !reconcileNeed(richButFine).needed);
+
+// A correction that brings protein DOWN toward target must score better.
+const trimmed = plan(Array.from({ length: 7 }, (_, i) => day(`Day ${i + 1}`, 2500, 92)));
+check(
+  "trimming an over-protein week is accepted",
+  acceptRevision(highProtein, trimmed).accept,
+  acceptRevision(highProtein, trimmed).reason
+);
+
 // A correction is kept only when it verifiably helped.
 const fixed = plan([
-  day("Day 1", 2378, 114), day("Day 2", 2657, 126), day("Day 3", 2809, 104),
+  day("Day 1", 2378, 100), day("Day 2", 2657, 105), day("Day 3", 2809, 104),
   day("Day 4", 2550, 95), day("Day 5", 2600, 106), day("Day 6", 2520, 95),
   day("Day 7", 2530, 95),
 ]);
@@ -78,7 +103,7 @@ check("an improved correction is accepted", acceptRevision(week, fixed).accept);
 const worse = plan(week.days.map((d, i) => (i === 0 ? day("Day 1", 3900, 60) : d)));
 check("a worsened correction is rejected", !acceptRevision(week, worse).accept);
 // The ceiling must not demand a correction fix a breach the draft already had.
-const stillHigh = plan(week.days.map((d, i) => (i === 5 ? day("Day 6", 3400, 120) : d)));
+const stillHigh = plan(week.days.map((d, i) => (i === 5 ? day("Day 6", 3400, 110) : d)));
 check(
   "a correction that improves but stays high is still accepted",
   acceptRevision(week, stillHigh).accept,
