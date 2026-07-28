@@ -21,6 +21,7 @@ import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import PlanProgressBar from "./PlanProgressBar";
 import MealVariantsInput from "./MealVariantsInput";
 import FitnessScore from "./FitnessScore";
+import ClientReview from "./ClientReview";
 import IntakeOverride from "./IntakeOverride";
 import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
 import {
@@ -400,6 +401,15 @@ export default function ClinicalCounsellingForm({
             )}
           </div>
 
+          {/* The client-facing review: what the counselling measured, talked
+              through with the client, with the generate action underneath. */}
+          <ClientReview
+            answers={answers}
+            onGenerate={handleSubmit}
+            generating={submitting}
+            disabled={missing.length > 0}
+          />
+
           {/* Submit */}
           <div className="card mt-4">
             <h3 className="text-sm font-semibold">Generate the Week 1 diet preview</h3>
@@ -456,7 +466,7 @@ export default function ClinicalCounsellingForm({
             <button
               onClick={handleSubmit}
               disabled={submitting || missing.length > 0}
-              className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-secondary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting
                 ? "Generating preview…"
