@@ -25,6 +25,7 @@ async function main() {
   const { groundPlan } = await import("../src/lib/nutrition");
   const { reconcileNutrition } = await import("../src/lib/nutrition-reconcile");
   const { renderPlanPdf } = await import("../src/lib/pdf");
+  const { dayCalories, dayProtein, dayTargetVerdict } = await import("../src/lib/day-targets");
   const { createClient } = await import("@supabase/supabase-js");
 
   const supabase = createClient(
@@ -126,12 +127,17 @@ async function main() {
       kcal: d.meals.reduce((s, m) => s + (m.calories || 0), 0),
       protein: d.meals.reduce((s, m) => s + (m.protein_g || 0), 0),
     }));
-    const offBand = dayTotals.filter(
-      (t) =>
-        t.kcal < plan.daily_calories * 0.85 ||
-        t.kcal > plan.daily_calories * 1.15 ||
-        t.protein < plan.macros.protein_g - 5
-    );
+    // The shared band definition, NOT a copy: a duplicated 0.85/1.15/-5 here
+    // silently under-reported once the protein ceiling was added, which is the
+    // exact drift day-targets.ts exists to prevent.
+    const offBand = plan.days
+      .map((d) => ({
+        day: d.day,
+        kcal: dayCalories(d),
+        protein: dayProtein(d),
+        verdict: dayTargetVerdict(d, plan),
+      }))
+      .filter((t) => t.verdict !== null);
     console.log(
       `day targets (${Math.round(plan.daily_calories)} kcal, ${Math.round(plan.macros.protein_g)} g protein): ` +
         dayTotals.map((t) => `${Math.round(t.kcal)}/${Math.round(t.protein)}g`).join(" ")
@@ -140,7 +146,7 @@ async function main() {
       offBand.length
         ? `!! ${offBand.length} day(s) off target: ` +
             offBand
-              .map((t) => `${t.day} ${Math.round(t.kcal)} kcal ${Math.round(t.protein)} g`)
+              .map((t) => `${t.day} ${Math.round(t.kcal)} kcal ${Math.round(t.protein)} g (${t.verdict})`)
               .join("; ")
         : "day-target check: all 7 days within calorie band and protein floor"
     );
