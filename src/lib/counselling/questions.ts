@@ -1007,6 +1007,12 @@ const S5: Section = {
 export { MEAL_OCCASIONS } from "./meal-occasions";
 import { MEAL_OCCASIONS } from "./meal-occasions";
 import { VARIANT_MEAL_KEYS, variantsQuestionId } from "./meal-variants";
+import { FITNESS_IDS, REACH_OPTIONS } from "./fitness-assessment";
+
+// The six physical tests are all scored the same way.
+const POINT_OPTIONS = ["1", "2", "3", "4"];
+const OVERRIDE_NOTE =
+  "Filled in from the measurement above — change it only if you disagree.";
 
 
 /** Practices that can carry a weekday rule, so the day questions open up. */
@@ -2180,8 +2186,93 @@ const S13: Section = {
 };
 
 
+// ---------------------------------------------------------------------------
+
+const S14: Section = {
+  id: "fitness-test",
+  code: "14",
+  title: "Physical assessment (coach)",
+  stage: "Fitness",
+  minutes: "10–15 min",
+  intro:
+    "Run by a coach with the client in front of them: six tests, each scored 1-4. ENTIRELY OPTIONAL and not part of the diet plan — a client counselled today may not be assessed until a coach sees them, so nothing here is required and none of it blocks plan generation. Enter what you measured and the points fill themselves in; change them if you disagree.",
+  questions: [
+    {
+      id: FITNESS_IDS.assessedOn, tag: "planning", type: "date",
+      label: "Date of the assessment",
+      note: "Only if it was not today — this is what a future re-test is compared against.",
+    },
+
+    // --- Core strength ------------------------------------------------------
+    {
+      id: FITNESS_IDS.plankSeconds, group: "fit_plank", tag: "fitness", type: "number",
+      label: "Core strength — plank hold (seconds)",
+      note: "Every 30 seconds is a point, to a maximum of 4.",
+    },
+    {
+      id: FITNESS_IDS.plankPoints, group: "fit_plank", tag: "fitness", type: "single",
+      label: "Plank points", options: POINT_OPTIONS,
+      note: OVERRIDE_NOTE,
+    },
+
+    // --- Overall body strength ---------------------------------------------
+    {
+      id: FITNESS_IDS.pushupsCount, group: "fit_pushups", tag: "fitness", type: "number",
+      label: "Overall body strength — push-ups completed",
+      note: "1–15 = 1 point · 16–25 = 2 · 26–35 = 3 · 36 and above = 4.",
+    },
+    {
+      id: FITNESS_IDS.pushupsPoints, group: "fit_pushups", tag: "fitness", type: "single",
+      label: "Push-up points", options: POINT_OPTIONS,
+      note: OVERRIDE_NOTE,
+    },
+
+    // --- Balance ------------------------------------------------------------
+    {
+      id: FITNESS_IDS.balanceSeconds, group: "fit_balance", tag: "fitness", type: "number",
+      label: "Balance — star pose or one leg (seconds)",
+      note: "Every 30 seconds is a point, to a maximum of 4.",
+    },
+    {
+      id: FITNESS_IDS.balancePoints, group: "fit_balance", tag: "fitness", type: "single",
+      label: "Balance points", options: POINT_OPTIONS,
+      note: OVERRIDE_NOTE,
+    },
+
+    // --- Flexibility: the option chosen IS the score, so there is no measurement.
+    {
+      id: FITNESS_IDS.reachPoints, tag: "fitness", type: "single",
+      label: "Flexibility — reach test",
+      options: REACH_OPTIONS,
+      note: "Knee touch = 1 point · ankle = 2 · toe = 3 · heel = 4.",
+    },
+
+    // --- Body composition ---------------------------------------------------
+    {
+      id: FITNESS_IDS.bcaPoints, tag: "fitness", type: "single",
+      label: "Body composition points", options: POINT_OPTIONS,
+      note:
+        "Scored from the body fat % already recorded in the body-composition section, against the thresholds for the client's sex — men 18% and below = 4, 19–25 = 3, 26–30 = 2, above 31 = 1; women 20% and below = 4, 21–27 = 3, 28–33 = 2, above 34 = 1. Set this by hand only if body fat was not measured or you disagree.",
+    },
+
+    // --- Cardio -------------------------------------------------------------
+    {
+      id: FITNESS_IDS.cardioKm, group: "fit_cardio", tag: "fitness", type: "number",
+      label: "Cardio — distance covered in 10 minutes (km)",
+      placeholder: "e.g. 0.9",
+      note: "Below 0.5 km = 1 point · 0.5–0.8 = 2 · 0.8–1.1 = 3 · 1.2 and above = 4.",
+    },
+    {
+      id: FITNESS_IDS.cardioPoints, group: "fit_cardio", tag: "fitness", type: "single",
+      label: "Cardio points", options: POINT_OPTIONS,
+      note: OVERRIDE_NOTE,
+    },
+  ],
+};
+
+
 export const SECTIONS: Section[] = [
-  CLIENT, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13,
+  CLIENT, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12, S13, S14,
 ];
 
 export const STAGES: Stage[] = [

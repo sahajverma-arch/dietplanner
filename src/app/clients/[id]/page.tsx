@@ -9,6 +9,7 @@ import PlanReviewControls from "@/components/PlanReviewControls";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import RegenerateButton from "@/components/RegenerateButton";
 import ResumePlanCard from "@/components/ResumePlanCard";
+import FitnessScore from "@/components/FitnessScore";
 import { AiReviewSchema, DietPlanSchema, isPauseDecision } from "@/lib/nim";
 import type { ClientRow, DietPlanRow } from "@/lib/types";
 
@@ -80,6 +81,17 @@ export default async function ClientPage({ params }: { params: { id: string } })
         </div>
 
         <ClientSummary client={client} />
+
+        {/* The coach's physical assessment, if one was recorded. */}
+        <div className="mt-4">
+          <FitnessScore
+            answers={
+              ((client.intake as { answers?: Record<string, string | string[]> })?.answers ??
+                {}) as Record<string, string | string[]>
+            }
+            compact
+          />
+        </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">

@@ -20,6 +20,7 @@ import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import PlanProgressBar from "./PlanProgressBar";
 import MealVariantsInput from "./MealVariantsInput";
+import FitnessScore from "./FitnessScore";
 import IntakeOverride from "./IntakeOverride";
 import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
 import {
@@ -361,6 +362,10 @@ export default function ClinicalCounsellingForm({
             answers={answers}
             onOverride={(v) => set(INTAKE_OVERRIDE_ID, v)}
           />
+
+          {/* Running total while the coach works through the six tests. Renders
+              nothing until one is recorded — most clients are never assessed. */}
+          <FitnessScore answers={answers} />
 
           {/* Footer nav */}
           <div className="mt-4 flex items-center justify-between gap-3">
