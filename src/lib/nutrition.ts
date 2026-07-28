@@ -122,6 +122,12 @@ const UNIT_GRAMS: Record<string, number> = {
   slice: 25,
   scoop: 30,
   handful: 30,
+  // Ounces are not an Indian household measure, but the model writes them for
+  // cheese and nuts. Unrecognised, "2 oz" fell through to the matched row's
+  // own serving — 2 x a 445 g bowl of soup — and an apple-and-cheese snack
+  // came out at 111 g of protein.
+  oz: 28,
+  ounce: 28,
 };
 
 const COUNT_UNITS = new Set(["piece", "pc", "no", "unit", "serving", "portion"]);

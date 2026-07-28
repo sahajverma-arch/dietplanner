@@ -1301,13 +1301,48 @@ const foodSet = (meal: DietPlan["days"][number]["meals"][number]): Set<string> =
   new Set(meal.items.map((i) => i.food.trim().toLowerCase()).filter(Boolean));
 
 /**
- * How alike two menus are, 0 to 1 (shared foods over total distinct foods).
+ * The foods that DISTINGUISH a meal from the others at the same occasion.
  *
- * Set overlap rather than equality because the model varies a dish name while
- * serving the same meal: "Roti, Dal fry, Mixed vegetables, Curd" and "Roti,
- * Dal makhani, Mixed vegetables, Curd" are one dinner written twice, and a
- * client eating them on consecutive days would say so.
+ * Comparing whole menus treated shared staples as sameness: three breakfasts
+ * of besan chilla, paneer sabzi and tofu sabzi — genuinely different meals —
+ * all read as identical because each also carried roti, curd and tea. What a
+ * dietitian actually judges is the main dish, so anything appearing in more
+ * than half the week's meals at that occasion is background and ignored.
+ *
+ * A meal whose foods are ALL background keeps them, otherwise every plain
+ * roti-and-curd breakfast would compare equal to every other by having
+ * nothing left to compare.
  */
+function distinguishingFoods(menu: Set<string>, background: Set<string>): Set<string> {
+  const distinct = new Set<string>();
+  menu.forEach((food) => {
+    if (!background.has(food)) distinct.add(food);
+  });
+  return distinct.size > 0 ? distinct : menu;
+}
+
+// A staple has to appear in most of the week, not merely more often than not:
+// at "more than half" and only three samples, a dal served twice counted as
+// background and the dish that distinguished the meal was discarded.
+const BACKGROUND_SHARE = 2 / 3;
+// And there must be enough meals to tell a staple from a main at all. Below
+// this the whole menu is compared, which is the safer default.
+const BACKGROUND_MIN_SAMPLES = 4;
+
+/** Foods common enough at one occasion to be that week's staples. */
+function backgroundFoods(menus: Set<string>[]): Set<string> {
+  const background = new Set<string>();
+  if (menus.length < BACKGROUND_MIN_SAMPLES) return background;
+  const counts = new Map<string, number>();
+  for (const menu of menus)
+    menu.forEach((food) => counts.set(food, (counts.get(food) ?? 0) + 1));
+  counts.forEach((n, food) => {
+    if (n >= menus.length * BACKGROUND_SHARE) background.add(food);
+  });
+  return background;
+}
+
+/** How alike two menus are, 0 to 1: shared foods over total distinct foods. */
 function menuOverlap(a: Set<string>, b: Set<string>): number {
   if (a.size === 0 || b.size === 0) return 0;
   let shared = 0;
@@ -1317,11 +1352,9 @@ function menuOverlap(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared);
 }
 
-// Two menus this alike are the same meal for variety purposes. Set where
-// "roti + dal fry + veg + curd" vs "roti + dal makhani + veg + curd" (0.6)
-// counts, but "roti + curd + paneer sabzi" vs "roti + curd + rajma" (0.5)
-// does not — sharing the staples a household actually eats is the point, and
-// rule 20 says keep 50-70% of the familiar pattern.
+// Two menus this alike, once their occasion's staples are set aside, are the
+// same meal: "rajma chawal" three mornings running is repetition, while besan
+// chilla and paneer sabzi over the same roti and curd are not.
 const SAME_MENU_OVERLAP = 0.6;
 
 // How many days a week one menu may appear at the same occasion. Twice is
@@ -1366,26 +1399,40 @@ export function varietyIssues(
   }
 
   // ---- the same meal, occasion by occasion, across the week
-  const byOccasion = new Map<string, { day: string; foods: Set<string> }[]>();
-  const record = (day: DietPlan["days"][number], report: boolean) => {
+  const occasions = new Map<
+    string,
+    { day: string; meal: string; foods: Set<string>; fresh: boolean }[]
+  >();
+  const collect = (day: DietPlan["days"][number], fresh: boolean) => {
     for (const meal of day.meals) {
-      const occasion = meal.name.trim().toLowerCase();
       const foods = foodSet(meal);
       if (foods.size === 0) continue;
-      const prior = byOccasion.get(occasion) ?? [];
-      const alike = prior.filter((p) => menuOverlap(p.foods, foods) >= SAME_MENU_OVERLAP);
-      if (report && alike.length >= MAX_MEAL_REPEATS) {
+      const occasion = meal.name.trim().toLowerCase();
+      occasions.set(occasion, [
+        ...(occasions.get(occasion) ?? []),
+        { day: day.day, meal: meal.name, foods, fresh },
+      ]);
+    }
+  };
+  for (const day of alreadyPlanned) collect(day, false);
+  for (const day of fresh) collect(day, true);
+
+  for (const [, meals] of Array.from(occasions)) {
+    const background = backgroundFoods(meals.map((m) => m.foods));
+    const seen: { day: string; foods: Set<string> }[] = [];
+    for (const meal of meals) {
+      const distinct = distinguishingFoods(meal.foods, background);
+      const alike = seen.filter((p) => menuOverlap(p.foods, distinct) >= SAME_MENU_OVERLAP);
+      if (meal.fresh && alike.length >= MAX_MEAL_REPEATS) {
         issues.push(
-          `${day.day} ${meal.name} is the same meal as ${alike
+          `${meal.day} ${meal.meal} repeats the same main dish as ${alike
             .map((p) => p.day)
             .join(" and ")} — this week already has it ${alike.length} times, so give this one a different main dish`
         );
       }
-      byOccasion.set(occasion, [...prior, { day: day.day, foods }]);
+      seen.push({ day: meal.day, foods: distinct });
     }
-  };
-  for (const day of alreadyPlanned) record(day, false);
-  for (const day of fresh) record(day, true);
+  }
 
   return issues;
 }

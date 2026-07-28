@@ -1491,6 +1491,20 @@
       "source_id": "167762",
       "serving_g": 100,
       "serving_unit": "g"
+    },
+    {
+      "name": "Cheese",
+      "source": "USDA",
+      "source_id": "168121",
+      "serving_g": 28,
+      "serving_unit": "oz"
+    },
+    {
+      "name": "Cheese slice",
+      "source": "USDA",
+      "source_id": "168121",
+      "serving_g": 20,
+      "serving_unit": "slice"
     }
   ]
 }
