@@ -6,6 +6,11 @@ import {
   type PlanOverview,
 } from "./nim";
 
+// How many corrective rounds may run. Bounded because each costs model calls
+// and a plan that has not converged in three is not going to: the draft
+// preview shows the remaining misses and the dietitian decides.
+const MAX_ROUNDS = 3;
+
 // Days rebuilt per model call. Same reasoning as generation: a small response
 // is faster and truncates less, and it has to fit one request on a 60s host.
 const REBUILD_BATCH = 2;
@@ -220,36 +225,64 @@ export async function reconcileNutrition(
   plan: DietPlan,
   ctx: Omit<PlanContext, "revision">
 ): Promise<ReconcileResult> {
-  const need = reconcileNeed(plan);
-  if (!need.needed) return { plan, applied: false, reason: need.reason };
+  let current = plan;
+  const rounds: string[] = [];
 
-  // Rebuild ONLY the days that miss their band, keeping the ones that already
-  // land. Regenerating the whole week meant a correction could — and did — make
-  // good days worse while fixing bad ones, so the verified deviation grew and
-  // the whole round was thrown away: 1303 -> 2102 on a week where three days
-  // needed help and four did not.
-  const overview = { ...plan, days: undefined } as unknown as PlanOverview;
-  const kept = plan.days.filter((d) => !need.offTargetDays.includes(d.day));
-  const rebuilt: DietPlan["days"] = [];
-  for (let i = 0; i < need.offTargetDays.length; i += REBUILD_BATCH) {
-    const names = need.offTargetDays.slice(i, i + REBUILD_BATCH);
-    rebuilt.push(
-      ...(await generatePlanDays(
-        { ...ctx, revision: { draft: plan, instructions: need.instructions } },
-        overview,
-        names,
-        [...kept, ...rebuilt]
-      ))
-    );
+  // Keep correcting while it keeps helping. One round used to be the rule
+  // because a correction regenerated the whole week at 90-150 s; now it
+  // rebuilds only the days that miss, so another round is a call or two. It
+  // was needed: a vegetarian plan for a client measured at 45 g/day improved
+  // from deviation 1432 to 584 in one round and still shipped 50% over target.
+  for (let round = 1; round <= MAX_ROUNDS; round++) {
+    const need = reconcileNeed(current);
+    if (!need.needed) {
+      return rounds.length
+        ? { plan: current, applied: true, reason: `${rounds.join("; ")}; now ${need.reason}` }
+        : { plan: current, applied: false, reason: need.reason };
+    }
+
+    // Rebuild ONLY the days that miss their band, keeping the ones that already
+    // land. Regenerating the whole week meant a correction could — and did —
+    // make good days worse while fixing bad ones, so the verified deviation
+    // grew and the whole round was thrown away: 1303 -> 2102 on a week where
+    // three days needed help and four did not.
+    const overview = { ...current, days: undefined } as unknown as PlanOverview;
+    const kept = current.days.filter((d) => !need.offTargetDays.includes(d.day));
+    const rebuilt: DietPlan["days"] = [];
+    for (let i = 0; i < need.offTargetDays.length; i += REBUILD_BATCH) {
+      const names = need.offTargetDays.slice(i, i + REBUILD_BATCH);
+      rebuilt.push(
+        ...(await generatePlanDays(
+          { ...ctx, revision: { draft: current, instructions: need.instructions } },
+          overview,
+          names,
+          [...kept, ...rebuilt]
+        ))
+      );
+    }
+    const merged = current.days.map((d) => rebuilt.find((r) => r.day === d.day) ?? d);
+
+    // If grounding throws, the revision is unverifiable — the caller's catch
+    // keeps whatever the last accepted round produced.
+    const { plan: grounded } = await groundPlan(supabase, { ...current, days: merged });
+
+    const verdict = acceptRevision(current, grounded);
+    if (!verdict.accept) {
+      // A round that does not help ends it: another attempt from the same
+      // starting point would be the same coin flip.
+      return rounds.length
+        ? { plan: current, applied: true, reason: `${rounds.join("; ")}; round ${round} ${verdict.reason}` }
+        : { plan: current, applied: false, reason: verdict.reason };
+    }
+    current = grounded;
+    rounds.push(`round ${round} ${verdict.reason}`);
   }
-  const merged = plan.days.map((d) => rebuilt.find((r) => r.day === d.day) ?? d);
 
-  // If grounding throws, the revision is unverifiable — the caller's catch
-  // keeps the original plan.
-  const { plan: grounded } = await groundPlan(supabase, { ...plan, days: merged });
-
-  const verdict = acceptRevision(plan, grounded);
-  return verdict.accept
-    ? { plan: grounded, applied: true, reason: `${verdict.reason} over ${need.reason}` }
-    : { plan, applied: false, reason: verdict.reason };
+  return {
+    plan: current,
+    applied: rounds.length > 0,
+    reason: rounds.length
+      ? `${rounds.join("; ")}; stopped at the ${MAX_ROUNDS}-round limit`
+      : "no round improved the plan",
+  };
 }

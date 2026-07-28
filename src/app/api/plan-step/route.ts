@@ -19,6 +19,10 @@ import {
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
 import { acceptRevision, reconcileNeed } from "@/lib/nutrition-reconcile";
+
+// Matches MAX_ROUNDS in nutrition-reconcile: both paths correct the same number
+// of times, so a plan does not depend on which one generated it.
+const MAX_CORRECTION_ROUNDS = 3;
 import { auditPlan } from "@/lib/match-audit";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
@@ -86,6 +90,8 @@ const GenerationSchema = z.object({
   fixing: z.boolean().default(false),
   /** The days a correction round rebuilds — only those that miss their band. */
   fixDays: z.array(z.string()).default([]),
+  /** Corrective rounds run so far. One was not enough on a real plan. */
+  round: z.number().default(0),
 });
 type Generation = z.infer<typeof GenerationSchema>;
 
@@ -192,6 +198,7 @@ async function start(
       instructions: body.instructions,
       fixing: false,
       fixDays: [],
+      round: 0,
     };
     await supabase
       .from("diet_plans")
@@ -332,7 +339,7 @@ async function start(
   planStart.setDate(planStart.getDate() + 1);
   const startsOn = planStart.toISOString().slice(0, 10);
 
-  const generation: Generation = { pass: "generate", days: [], fixing: false, fixDays: [] };
+  const generation: Generation = { pass: "generate", days: [], fixing: false, fixDays: [], round: 0 };
   const { data: planRow, error: planError } = await supabase
     .from("diet_plans")
     .insert({
@@ -551,6 +558,7 @@ async function step(supabase: Supa, planId: string) {
       instructions: need.instructions,
       fixing: true,
       fixDays: need.offTargetDays,
+      round: 0,
       days: [],
     };
     await advance("days:0", { plan, generation: next });
@@ -563,6 +571,7 @@ async function step(supabase: Supa, planId: string) {
       return NextResponse.json({ error: "This generation lost its place — start it again" }, { status: 422 });
     }
     let plan = gen.base;
+    let improved = false;
     try {
       // The correction only rebuilt some days; the rest stand as they were.
       const merged = gen.base.days.map(
@@ -572,11 +581,34 @@ async function step(supabase: Supa, planId: string) {
       const grounded = await groundSafely(supabase, revised);
       const verdict = acceptRevision(gen.base, grounded);
       console.log(`nutrition reconcile ${verdict.accept ? "applied" : "skipped"}: ${verdict.reason}`);
-      if (verdict.accept) plan = grounded;
+      if (verdict.accept) {
+        plan = grounded;
+        improved = true;
+      }
     } catch (e) {
       // A correction that cannot be built or verified is simply not applied.
       console.warn("nutrition reconcile skipped:", e instanceof Error ? e.message : e);
     }
+
+    // Another round, while it keeps helping. One was not enough: a plan
+    // improved from deviation 1432 to 584 and still shipped 50% over target.
+    const round = gen.round + 1;
+    const stillOff = improved && round < MAX_CORRECTION_ROUNDS ? reconcileNeed(plan) : null;
+    if (stillOff?.needed) {
+      console.log(`nutrition reconcile round ${round + 1}: ${stillOff.reason}`);
+      const next: Generation = {
+        ...gen,
+        base: plan,
+        instructions: stillOff.instructions,
+        fixDays: stillOff.offTargetDays,
+        fixing: true,
+        round,
+        days: [],
+      };
+      await advance("days:0", { plan, generation: next });
+      return reply("days:0", next);
+    }
+
     const next: Generation = { ...gen, days: [] };
     await advance(null, { plan, status: "draft", generation: {} });
     return reply(null, next, true);
