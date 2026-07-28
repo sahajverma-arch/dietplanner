@@ -16,12 +16,9 @@ import {
   type Question,
   type Section,
 } from "@/lib/counselling/questions";
-import { audit, redFlags, toIntake } from "@/lib/counselling/assessment";
-import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
-import PlanProgressBar from "./PlanProgressBar";
+import { audit, redFlags } from "@/lib/counselling/assessment";
 import MealVariantsInput from "./MealVariantsInput";
 import FitnessScore from "./FitnessScore";
-import ClientReview from "./ClientReview";
 import IntakeOverride from "./IntakeOverride";
 import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
 import {
@@ -52,7 +49,6 @@ export default function ClinicalCounsellingForm({
   const [saveState, setSaveState] = useState<SaveState>(initialAnswers ? "saved" : "idle");
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showScore, setShowScore] = useState(false);
   const mounted = useRef(false);
@@ -108,7 +104,11 @@ export default function ClinicalCounsellingForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers]);
 
-  async function handleSubmit() {
+  /**
+   * Close the consultation: go to the client summary, where the counselling is
+   * read back to the client and the plan is generated from.
+   */
+  async function handleReview() {
     const name = (answers.name as string | undefined)?.trim();
     if (!name) {
       setSectionId("client");
@@ -126,33 +126,27 @@ export default function ClinicalCounsellingForm({
     }
     setError(null);
     setSubmitting(true);
-    try {
-      // Generation runs as steps: each is saved before the next starts, so a
-      // dropped connection leaves a resumable plan rather than nothing.
-      const { clientId } = await runPlanSteps(
-        {
-          source: "first",
-          form: toIntake(answers, appointmentId),
-          ...(appointmentId ? { appointmentId } : {}),
-        },
-        setProgress
-      );
-      router.push(`/clients/${clientId}`);
+
+    // The summary page reads the saved draft, so the pending autosave has to
+    // land first — otherwise the last answer typed is missing from the page
+    // the client is about to be shown.
+    const { error: saveError } = await supabase.from("form_drafts").upsert(
+      {
+        dietitian_id: dietitianId,
+        kind: "first_counselling",
+        data: { answers, appointmentId },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "dietitian_id,kind" }
+    );
+    if (saveError) {
+      setSaveState("error");
+      setError("Could not save the counselling — check the connection and try again.");
+      setSubmitting(false);
       return;
-    } catch (e) {
-      const err = e as Error & { clientId?: string };
-      // The client row exists once the first step succeeded — send them to it
-      // rather than risking a duplicate from a resubmit.
-      if (err.clientId) {
-        router.push(`/clients/${err.clientId}`);
-        return;
-      }
-      setError(
-        err.message || "Something went wrong. Your counselling is still saved as a draft."
-      );
     }
-    setProgress(null);
-    setSubmitting(false);
+    setSaveState("saved");
+    router.push("/counselling/review");
   }
 
   const stages = useMemo(() => {
@@ -401,23 +395,14 @@ export default function ClinicalCounsellingForm({
             )}
           </div>
 
-          {/* The client-facing review: what the counselling measured, talked
-              through with the client, with the generate action underneath. */}
-          <ClientReview
-            answers={answers}
-            onGenerate={handleSubmit}
-            generating={submitting}
-            disabled={missing.length > 0}
-          />
-
-          {/* Submit */}
-          <div className="card mt-4">
-            <h3 className="text-sm font-semibold">Generate the Week 1 diet preview</h3>
+          {/* Close the consultation */}
+          <div className="card mt-4 border border-brand/30 bg-brand/5">
+            <h3 className="text-sm font-semibold">Finish and open the client summary</h3>
             <p className="mt-1 text-xs text-zinc-400">
-              The plan is built from the full assessment — goal, clinical restrictions, current
-              diet, protein pattern, training, barriers and your priorities. Macros are grounded
-              in the ICMR-NIN/INDB and USDA food databases. You&apos;ll review the preview first —
-              request any changes in writing — and the final PDF is only created once you approve.
+              Everything recorded here — BMI, BMR and daily energy need, the week of meals as
+              measured, clinical restrictions and the week-1 targets — is laid out on one page to
+              talk through with the client. The plan is generated from there, so nothing is built
+              before you and the client have both seen the picture it comes from.
             </p>
             {escalations.length > 0 && (
               <p className="mt-2 rounded bg-red-500/10 px-3 py-2 text-xs text-red-400">
@@ -462,17 +447,16 @@ export default function ClinicalCounsellingForm({
                 </div>
               </div>
             )}
-            {progress && <PlanProgressBar progress={progress} />}
             <button
-              onClick={handleSubmit}
+              onClick={handleReview}
               disabled={submitting || missing.length > 0}
-              className="btn-secondary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
+              className="btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:opacity-40"
             >
               {submitting
-                ? "Generating preview…"
+                ? "Saving…"
                 : missing.length > 0
-                  ? `Answer ${missing.length} mandatory question${missing.length > 1 ? "s" : ""} to generate the plan`
-                  : "Generate Week 1 Diet Preview"}
+                  ? `Answer ${missing.length} mandatory question${missing.length > 1 ? "s" : ""} to continue`
+                  : `Review with ${((answers.name as string | undefined)?.trim().split(/\s+/)[0]) || "the client"} →`}
             </button>
           </div>
         </div>
