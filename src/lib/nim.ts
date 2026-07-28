@@ -108,6 +108,15 @@ const NIM_FALLBACK_MODEL =
 // from 40s to over three minutes on a bad day, and the right cap depends on
 // how long the deployment's own request budget allows (Vercel maxDuration).
 const NIM_TIMEOUT_MS = Number(process.env.NVIDIA_TIMEOUT_MS) || 120_000;
+// Attempts on each model before the call is abandoned.
+const DEFAULT_ATTEMPTS = 3;
+// Corrections get more. A correction must satisfy the calorie band, the
+// protein ceiling, the weekday food rules AND the variety check at once, and
+// three tries was not enough: an 8B model put egg and chicken on a client's
+// no-non-veg Thursday three times running, the round was abandoned, and the
+// plan shipped with every day over its protein target.
+const CORRECTION_ATTEMPTS = 6;
+
 // Extra attempts on the fallback model when it fails TRANSIENTLY (timeout or
 // network). A model that genuinely cannot produce a valid plan is not retried.
 const FALLBACK_TRANSIENT_RETRIES = 2;
@@ -641,14 +650,23 @@ async function generateValidated<T>(
    * generation (e.g. day calories off target) — on the final attempt the plan
    * is accepted with a warning instead of thrown away.
    */
-  softCheck?: (value: T) => string[]
+  softCheck?: (value: T) => string[],
+  /**
+   * Attempts on each model before giving up. Raised for corrections, which
+   * must satisfy far more at once than a first draft — the calorie band, the
+   * protein ceiling, the weekday food rules and the variety check together —
+   * and were being abandoned after three tries with the plan left uncorrected.
+   */
+  maxAttempts = DEFAULT_ATTEMPTS
 ): Promise<T> {
   // A model that keeps truncating or mis-shaping its output usually keeps
   // doing so — once the primary model burns its attempts, the conversation
   // restarts from scratch on the fallback model before giving up.
   const original = messages.slice();
   try {
-    return await validatedAttempts(messages, NIM_MODEL, schema, expectation, check, softCheck);
+    return await validatedAttempts(
+      messages, NIM_MODEL, schema, expectation, check, softCheck, maxAttempts
+    );
   } catch (e) {
     if (NIM_FALLBACK_MODEL === NIM_MODEL) throw e;
     console.warn(
@@ -669,7 +687,8 @@ async function generateValidated<T>(
           schema,
           expectation,
           check,
-          softCheck
+          softCheck,
+          maxAttempts
         );
       } catch (fallbackError) {
         lastError = fallbackError;
@@ -695,11 +714,12 @@ async function validatedAttempts<T>(
   schema: z.ZodType<T, z.ZodTypeDef, unknown>,
   expectation: string,
   check?: (value: T) => string[],
-  softCheck?: (value: T) => string[]
+  softCheck?: (value: T) => string[],
+  maxAttempts = DEFAULT_ATTEMPTS
 ): Promise<T> {
   let lastError = "";
 
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const content = await callNim(messages, model);
 
     let json: unknown;
@@ -755,7 +775,7 @@ async function validatedAttempts<T>(
     const issues = check?.(parsed.data) ?? [];
     const soft = softCheck?.(parsed.data) ?? [];
     if (issues.length === 0 && soft.length === 0) return parsed.data;
-    if (issues.length === 0 && attempt === 3) {
+    if (issues.length === 0 && attempt === maxAttempts) {
       console.warn(`plan accepted with unresolved quality issues: ${soft.join("; ")}`);
       return parsed.data;
     }
@@ -1493,7 +1513,8 @@ export async function generatePlanDays(
     (p) => [
       ...qualityIssues(p.days, overview.daily_calories),
       ...varietyIssues(pickDays(p.days, names), alreadyPlanned),
-    ]
+    ],
+    ctx.revision ? CORRECTION_ATTEMPTS : DEFAULT_ATTEMPTS
   );
   return pickDays(result.days, names);
 }
