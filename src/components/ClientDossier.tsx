@@ -708,8 +708,11 @@ function BodyJourney({
           ["Height", val(answers, "q9_height") ? `${val(answers, "q9_height")} cm` : ""],
           ["Body fat", val(answers, "q15_bf") ? `${val(answers, "q15_bf")} %` : ""],
           ["Muscle mass", val(answers, "q15_muscle") ? `${val(answers, "q15_muscle")} kg` : ""],
-          ["Waist", val(answers, "q15_waist") ? `${val(answers, "q15_waist")} cm` : ""],
-          ["Hip", val(answers, "q15_hip") ? `${val(answers, "q15_hip")} cm` : ""],
+          // Girths are recorded as a bare number because the form itself says
+          // "cm — note the unit if inches". Printing "cm" here would assert a
+          // unit nobody captured.
+          ["Waist", val(answers, "q15_waist")],
+          ["Hip", val(answers, "q15_hip")],
           ["Visceral fat", val(answers, "q15_visceral")],
         ]}
       />
@@ -789,8 +792,10 @@ function MovementCard({
     ["Training", form.exercise],
     ["Counted as", energy.activityFactor ? `×${energy.activityFactor} on BMR` : ""],
     ["Work", form.workSchedule],
-    ["Sleep", form.sleepHours ? `${form.sleepHours} hrs` : ""],
-    ["Water", form.waterIntakeLitres ? `${form.waterIntakeLitres} L` : ""],
+    // Both of these are recorded as banded answers that already carry their
+    // unit ("6-7 hours", "1.5-2 litres") — appending one reads as "hours hrs".
+    ["Sleep", form.sleepHours],
+    ["Water", form.waterIntakeLitres],
     ["Alcohol", form.alcohol],
     ["Tobacco", form.smoking],
   ];
