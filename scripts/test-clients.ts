@@ -15,6 +15,7 @@ export type Answers = Record<string, string | string[]>;
 // PEANUT ALLERGY (tests the allergen-must-never-appear enforcement).
 // ---------------------------------------------------------------------------
 export const PRIYA: Answers = {
+  q76_category: "First-timer — never dieted with structure before",
   name: "Priya Test",
   clientCode: "TEST-001",
   gender: "Female",
@@ -220,6 +221,7 @@ export const PRIYA: Answers = {
 // non-veg + eggs on Tuesdays & Thursdays (tests day-of-week rules q38a–c).
 // ---------------------------------------------------------------------------
 export const RAHUL: Answers = {
+  q76_category: "Re-starter — lost weight before and regained it",
   name: "Rahul Test",
   clientCode: "TEST-002",
   gender: "Male",
@@ -416,6 +418,9 @@ export const RAHUL: Answers = {
 // foods offered) and a dislike that is not a day-of-week rule.
 // ---------------------------------------------------------------------------
 export const SNEHA: Answers = {
+  q76_category: "Plateaued — dieting now, weight has stopped moving",
+  q76_weeks_on_plan: "11",
+  q76_weeks_stagnant: "4",
   name: "Sneha Test",
   clientCode: "TEST-003",
   gender: "Female",
@@ -613,6 +618,7 @@ export const SNEHA: Answers = {
 // the harder test: those two days must find protein elsewhere.
 // ---------------------------------------------------------------------------
 export const AADI: Answers = {
+  q76_category: "Maintenance — at or near goal, holding it",
   name: "Aadi Test",
   clientCode: "TEST-004",
   gender: "Male",

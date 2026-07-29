@@ -861,6 +861,20 @@ const S4: Section = {
 // keyed by these strings — a rename here silently stops that expansion.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The diet engine's one human input.
+// ---------------------------------------------------------------------------
+
+export const ROADMAP_CATEGORY_ID = "q76_category";
+export const ROADMAP_WEEKS_ON_PLAN_ID = "q76_weeks_on_plan";
+export const ROADMAP_WEEKS_STAGNANT_ID = "q76_weeks_stagnant";
+
+/** The chosen category, or null when the dietitian has not classified yet. */
+export function roadmapCategory(a: Answers): Category | null {
+  const chosen = val(a, ROADMAP_CATEGORY_ID);
+  return CATEGORIES.find((c) => c.label === chosen)?.id ?? null;
+}
+
 export const PROBLEM_NONE = "No known allergy or intolerance";
 export const PROBLEM_OTHER = "Other";
 export const PROBLEM_ALLERGY = "Allergy — never serve";
@@ -1084,6 +1098,7 @@ const S5: Section = {
 export { MEAL_OCCASIONS } from "./meal-occasions";
 import { MEAL_OCCASIONS } from "./meal-occasions";
 import { VARIANT_MEAL_KEYS, variantsQuestionId } from "./meal-variants";
+import { CATEGORIES, type Category } from "../roadmap";
 import { FITNESS_IDS, REACH_OPTIONS } from "./fitness-assessment";
 
 // The six physical tests are all scored the same way.
@@ -2213,6 +2228,32 @@ const S13: Section = {
   // what they believe is holding the client back, the smallest changes they would
   // make, the energy direction, and the rules the plan may not break.
   questions: [
+    // The one judgement the engine cannot make. BMI, TDEE and measured intake
+    // are measurements; "is this client stuck, or restarting?" is a
+    // conversation. Putting it here, as an explicit human input, is what lets
+    // everything downstream — calorie strategy, protein band, the phases —
+    // be computed rather than guessed. See src/lib/roadmap.ts.
+    {
+      id: ROADMAP_CATEGORY_ID, n: 76, tag: "planning", type: "single", required: true,
+      label: "Which kind of client is this?",
+      options: CATEGORIES.map((c) => c.label),
+      why: "Sets the calorie strategy and the protein band. Nothing else in the roadmap branches on it — BMI, target weight, timeline, fat and fibre are identical for all four.",
+      note: "Four different starting problems, not four different diets: habit formation, diagnosis, confidence, not regaining.",
+    },
+    {
+      id: ROADMAP_WEEKS_ON_PLAN_ID, n: 76, tag: "conditional", type: "number",
+      label: "How many weeks have they held the current deficit?",
+      placeholder: "e.g. 10",
+      showIf: (a) => val(a, ROADMAP_CATEGORY_ID) === CATEGORIES[1].label,
+      why: "Adaptation is depth × duration. Past 8 weeks at a steep deficit the drop in resting expenditure becomes measurable rather than theoretical.",
+    },
+    {
+      id: ROADMAP_WEEKS_STAGNANT_ID, n: 76, tag: "conditional", type: "number",
+      label: "How many weeks has the weight not moved?",
+      placeholder: "e.g. 4",
+      showIf: (a) => val(a, ROADMAP_CATEGORY_ID) === CATEGORIES[1].label,
+      why: "One week of no movement is noise — water, salt, cycle and bowel timing each hide 1–2 kg. Three weeks is the shortest window where the absence of loss is signal.",
+    },
     {
       id: "q76", n: 76, tag: "planning", type: "multi", max: 5,
       label: "Main factors currently limiting the client's progress",

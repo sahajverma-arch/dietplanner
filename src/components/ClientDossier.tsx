@@ -11,7 +11,9 @@ import { variantIntake, macrosOf, variantLabel } from "@/lib/counselling/meal-va
 import { missingRequired, val, list, type Answers } from "@/lib/counselling/questions";
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
+import { roadmapFor, roadmapNeeds } from "@/lib/counselling/roadmap-input";
 import FitnessScore from "./FitnessScore";
+import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
 
 /**
@@ -74,6 +76,8 @@ export default function ClientDossier({
   const record = useMemo(() => counsellingRecord(answers), [answers]);
   const fitness = useMemo(() => fitnessAssessment(answers), [answers]);
   const form = useMemo(() => toIntake(answers, appointmentId), [answers, appointmentId]);
+  const roadmap = useMemo(() => roadmapFor(answers), [answers]);
+  const roadmapMissing = useMemo(() => (roadmap ? [] : roadmapNeeds(answers)), [roadmap, answers]);
 
   const name = val(answers, "name").trim() || "This client";
   const first = name.split(/\s+/)[0];
@@ -116,6 +120,18 @@ export default function ClientDossier({
       <KpiStrip energy={energy} intake={intake} target={target} />
 
       {escalations.length > 0 && <Escalations flags={escalations} />}
+
+      {roadmap ? (
+        <RoadmapPanel roadmap={roadmap} />
+      ) : (
+        roadmapMissing.length > 0 && (
+          <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">
+            The roadmap — target weight, timeline, calorie phases and macros — needs{" "}
+            <strong className="text-zinc-200">{roadmapMissing.join(", ")}</strong>. Everything else
+            on this page is unaffected.
+          </p>
+        )
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
