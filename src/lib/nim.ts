@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { FollowUpInput, IntakeForm } from "./types";
 import { aiProfile } from "./counselling/assessment";
 import { estimateProteinIntake, proteinTarget } from "./protein-intake";
+import { roadmapFor } from "./counselling/roadmap-input";
+import { weekTargets, type Roadmap } from "./roadmap";
 import type { Answers } from "./counselling/questions";
 // Value import; nutrition.ts only imports types from here, so there is no
 // runtime cycle. The model must size portions with the same household weights
@@ -1265,6 +1267,52 @@ function measuredProteinTarget(intake: IntakeForm): number | null {
 }
 
 /**
+ * The roadmap for this client, when the counselling classified them.
+ *
+ * Counsellings taken before the category question existed have no roadmap, and
+ * still have to generate — they fall back to the measured-intake progression
+ * below.
+ */
+function planRoadmap(intake: IntakeForm): Roadmap | null {
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  if (!answers || typeof answers !== "object") return null;
+  const roadmap = roadmapFor(answers);
+  // A stop is a stop: an underweight client or an impossible TDEE must not
+  // have a prescription computed FROM the very numbers that are wrong.
+  return roadmap && !roadmap.warnings.some((w) => w.stop) ? roadmap : null;
+}
+
+/**
+ * The engine's numbers, stated to the model as fixed.
+ *
+ * They are applied after generation regardless, but a model told to aim at
+ * 1,669 kcal writes a strategy paragraph consistent with 1,669 kcal.
+ * Overriding numbers it never saw leaves the prose arguing for a different
+ * plan than the one the client actually receives.
+ */
+function prescriptionBlock(intake: IntakeForm, week: number): string {
+  const roadmap = planRoadmap(intake);
+  if (!roadmap) return "";
+  const t = weekTargets(roadmap, week);
+  const lines = [
+    `\n\nPRESCRIPTION — computed by the clinical engine from this client's own measurements. These numbers are FIXED. Do not adjust them, do not round them, and make sure your strategy text is consistent with them:`,
+    `- Daily calories: ${t.kcal}`,
+    `- Protein: ${t.protein_g} g (${roadmap.category.proteinPerKg} g/kg on ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adjusted body weight" : ""})`,
+    `- Fat: ${t.fat_g} g`,
+    `- Carbohydrate: ${t.carbs_g} g`,
+    `- Aim for at least ${roadmap.macros.fibre_g} g fibre.`,
+    `Client category: ${roadmap.category.label} — ${roadmap.category.constraint}.`,
+    `This week is "${t.phase.label}". ${t.phase.note}`,
+  ];
+  if (t.kcal !== roadmap.targetKcal) {
+    lines.push(
+      `NOTE: ${t.kcal} kcal is this phase's figure, deliberately above the ${roadmap.targetKcal} kcal steady-state target. Do not "correct" it downward.`
+    );
+  }
+  return lines.join("\n");
+}
+
+/**
  * The plan's strategy and daily targets, with no days. Small and quick — the
  * days are then generated against these numbers, a batch per step.
  */
@@ -1286,6 +1334,7 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
       role: "user",
       content:
         `Set the strategy and daily targets for the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
+        prescriptionBlock(intake, week) +
         (previousPlan
           ? `\n\nLast week's meals (keep what worked, introduce sensible variety):\n${compactDays(previousPlan.days)}`
           : "") +
@@ -1300,17 +1349,41 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
     "the strategy and daily targets, with no days"
   );
 
-  // Rule 8 tells the model this number is fixed; it does not always listen, so
-  // the measured target is applied here rather than requested. A plan built to
-  // a protein figure the model picked is not a progression from what the
-  // client actually eats, which is the entire point of measuring it.
-  const measured = measuredProteinTarget(intake);
-  if (measured !== null && Math.round(overview.macros.protein_g) !== measured) {
-    console.warn(
-      `protein target: model wrote ${Math.round(overview.macros.protein_g)} g, ` +
-        `using the measured ${measured} g`
-    );
-    overview.macros = { ...overview.macros, protein_g: measured };
+  // The engine computes; the model writes. Calories and macros are arithmetic
+  // over this client's own measurements — never the model's to choose — and it
+  // demonstrably does choose when left to: a client measured at 76 g with an
+  // 86 g target had a plan written to 92 g because the clinical review
+  // mentioned 92 as a week-2 figure and the model pulled it forward. So the
+  // numbers are applied here rather than requested.
+  const roadmap = planRoadmap(intake);
+  if (roadmap) {
+    // The WEEK being planned, not the steady state: a first-timer's week 1 is
+    // the transition, and building week 1 to the final target is exactly the
+    // 700 kcal overnight cut the transition exists to prevent.
+    const t = weekTargets(roadmap, week);
+    if (Math.round(overview.daily_calories) !== t.kcal) {
+      console.warn(
+        `calorie target: model wrote ${Math.round(overview.daily_calories)} kcal, ` +
+          `using the roadmap's ${t.kcal} (${t.phase.label})`
+      );
+    }
+    overview.daily_calories = t.kcal;
+    overview.macros = {
+      ...overview.macros,
+      protein_g: t.protein_g,
+      fat_g: t.fat_g,
+      carbs_g: t.carbs_g,
+    };
+  } else {
+    // No category recorded — fall back to the measured-intake progression.
+    const measured = measuredProteinTarget(intake);
+    if (measured !== null && Math.round(overview.macros.protein_g) !== measured) {
+      console.warn(
+        `protein target: model wrote ${Math.round(overview.macros.protein_g)} g, ` +
+          `using the measured ${measured} g`
+      );
+      overview.macros = { ...overview.macros, protein_g: measured };
+    }
   }
 
   return { ...overview, foods_to_avoid: cleanFoodsToAvoid(overview.foods_to_avoid, intake) };

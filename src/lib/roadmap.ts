@@ -165,6 +165,10 @@ export interface CaloriePhase {
   kcal: number;
   /** What this phase is FOR — phases without this read as arbitrary. */
   note: string;
+  /** First week this phase applies to (1-based). */
+  fromWeek: number;
+  /** Last week, or null for "and onward". */
+  toWeek: number | null;
 }
 
 export interface RoadmapWarning {
@@ -395,6 +399,8 @@ function calorieStrategy(
       for (let i = 1; i <= steps; i++) {
         phases.push({
           label: `Week ${i}`,
+          fromWeek: i,
+          toWeek: i === steps ? null : i,
           kcal: Math.min(target, round(currentKcal! + i * REVERSE_STEP_KCAL)),
           note:
             i === 1
@@ -409,6 +415,8 @@ function calorieStrategy(
       phases: [
         {
           label: "Ongoing",
+          fromWeek: 1,
+          toWeek: null,
           kcal: target,
           note:
             gap > 0
@@ -429,11 +437,15 @@ function calorieStrategy(
         phases: [
           {
             label: `Diet break (${DIET_BREAK_DAYS})`,
+            fromWeek: 1,
+            toWeek: 2,
             kcal: clamp(tdee, "Diet break"),
             note: `Eat at TDEE; the extra calories go to carbohydrate specifically, and add ${DIET_BREAK_STEPS}. Warn the client first: the scale will rise 1–2 kg as glycogen refills, and each gram of it holds about three grams of water.`,
           },
           {
             label: "Then",
+            fromWeek: 3,
+            toWeek: null,
             kcal: reentry,
             note: `Re-enter at ${Math.round(DEFICIT_FULL * 100)}%, not at the previous deficit — the previous deficit is what produced the adaptation.`,
           },
@@ -449,6 +461,8 @@ function calorieStrategy(
       phases: [
         {
           label: "14 days, no change to the target",
+          fromWeek: 1,
+          toWeek: null,
           kcal: held,
           note: "Weighed logging for two weeks — weighed, not estimated, because the error being hunted is exactly the one estimation produces: cooking oil, portion size, unlogged tastings. Fix the measurement before touching the prescription.",
         },
@@ -462,6 +476,8 @@ function calorieStrategy(
     // change in intake is consciously felt.
     const phases: CaloriePhase[] = RESTART_RAMP.map((deficit, i) => ({
       label: i === RESTART_RAMP.length - 1 ? `Week ${i + 1} onward` : `Week ${i + 1}`,
+      fromWeek: i + 1,
+      toWeek: i === RESTART_RAMP.length - 1 ? null : i + 1,
       kcal: clamp(tdee * (1 - deficit), `Ramp step ${i + 1}`),
       note:
         i === 0
@@ -494,12 +510,16 @@ function calorieStrategy(
       phases: [
         {
           label: `Weeks 1–${TRANSITION_WEEKS}`,
+          fromWeek: 1,
+          toWeek: TRANSITION_WEEKS,
           kcal: transition,
           note:
             "Transition, not a deficit — this phase exists to stop the gain, change the food structure and build the logging habit while hunger is still near zero. Tell the client the scale will barely move; otherwise they conclude on day 14 that the plan does not work, two weeks before it has started.",
         },
         {
           label: `Week ${TRANSITION_WEEKS + 1} onward`,
+          fromWeek: TRANSITION_WEEKS + 1,
+          toWeek: null,
           kcal: target,
           note: `The full ${Math.round(DEFICIT_FIRST_TIMER * 100)}% deficit, landing on a client who already has the habits in place.`,
         },
@@ -512,6 +532,8 @@ function calorieStrategy(
     phases: [
       {
         label: "From week 1",
+        fromWeek: 1,
+        toWeek: null,
         kcal: target,
         note: `${Math.round(DEFICIT_FIRST_TIMER * 100)}% below TDEE — the midpoint of the 15–20% band. The gap from current intake is inside normal daily variation, so no transition phase is needed.`,
       },
@@ -564,4 +586,26 @@ function adaptationVerdict(
       ? "Diet break at TDEE, extra calories into carbohydrate, more steps — then re-enter at 20%."
       : "No adaptation test fired: fix the measurement before touching the prescription. 14 days of weighed logging.",
   };
+}
+
+/**
+ * The phase a given week falls in, and the macros to build that week to.
+ *
+ * Protein and fat do NOT scale with the phase: they are requirements, computed
+ * once at the steady-state target. A transition or diet-break week is carrying
+ * extra ENERGY, and the spec is explicit about where extra energy goes — into
+ * carbohydrate, which is what refills glycogen and what the hormonal response
+ * is most sensitive to. So carbohydrate absorbs the difference and the residual
+ * is recomputed for the week actually being planned.
+ */
+export function weekTargets(
+  roadmap: Roadmap,
+  week: number
+): { phase: CaloriePhase; kcal: number; protein_g: number; fat_g: number; carbs_g: number } {
+  const phase =
+    roadmap.phases.find((p) => week >= p.fromWeek && (p.toWeek === null || week <= p.toWeek)) ??
+    roadmap.phases[roadmap.phases.length - 1];
+  const { protein_g, fat_g } = roadmap.macros;
+  const carbs_g = Math.max(0, Math.round((phase.kcal - protein_g * 4 - fat_g * 9) / 4));
+  return { phase, kcal: phase.kcal, protein_g, fat_g, carbs_g };
 }

@@ -11,6 +11,7 @@
 // Run: npx -y tsx scripts/tests/roadmap.test.mts
 import {
   buildRoadmap,
+  weekTargets,
   band,
   categoryMeta,
   CATEGORIES,
@@ -194,6 +195,32 @@ check("a missing category yields no roadmap", buildRoadmap({ ...WORKED, category
 check("missing height yields no roadmap", buildRoadmap({ ...WORKED, heightCm: null }) === null);
 check("nothing recorded is not read as eating nothing", buildRoadmap({ ...WORKED, currentKcal: null })!.phases.length === 1);
 check("the engine version is stamped on the result", worked.version === ENGINE_VERSION);
+
+// --- Which week is being planned -------------------------------------------
+// A first-timer's week 1 is the transition. Building week 1 to the final
+// target IS the overnight cut the transition exists to prevent.
+const w1 = weekTargets(worked, 1);
+const w3 = weekTargets(worked, 3);
+check("week 1 is planned at the transition figure", w1.kcal === 2249, `${w1.kcal} kcal`);
+check("week 2 is still the transition", weekTargets(worked, 2).kcal === 2249);
+check("week 3 is the full target", w3.kcal === 1898, `${w3.kcal} kcal`);
+check("a later week holds the target", weekTargets(worked, 40).kcal === 1898);
+check(
+  "protein does not scale with the phase — it is a requirement",
+  w1.protein_g === w3.protein_g && w1.fat_g === w3.fat_g,
+  `P${w1.protein_g}/${w3.protein_g}`
+);
+check(
+  "...so the extra energy goes to carbohydrate",
+  w1.carbs_g - w3.carbs_g === Math.round((2249 - 1898) / 4),
+  `${w3.carbs_g} -> ${w1.carbs_g} g`
+);
+const ramp = buildRoadmap({ ...WORKED, category: 3 })!;
+check(
+  "a re-starter's weeks step down in order, then hold",
+  [1, 2, 3, 9].map((w) => weekTargets(ramp, w).kcal).join(",") === "2070,1955,1840,1840",
+  [1, 2, 3, 9].map((w) => weekTargets(ramp, w).kcal).join(",")
+);
 
 console.log(failed === 0 ? `\nall roadmap checks pass` : `\n${failed} FAILURES`);
 process.exitCode = failed === 0 ? 0 : 1;
