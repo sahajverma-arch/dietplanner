@@ -31,6 +31,9 @@ export function roadmapInput(a: Answers): RoadmapInput {
     // Zero means "nothing recorded", not "eats nothing" — the engine must not
     // read an unfilled form as a client on a starvation diet.
     currentKcal: intake.kcalPerDay > 0 ? intake.kcalPerDay : null,
+    currentProteinG: intake.gramsPerDay,
+    currentCarbsG: intake.carbsPerDay,
+    currentFatG: intake.fatPerDay,
     category: roadmapCategory(a),
     weeksOnCurrentPlan: num(a, ROADMAP_WEEKS_ON_PLAN_ID),
     weeksStagnant: num(a, ROADMAP_WEEKS_STAGNANT_ID),

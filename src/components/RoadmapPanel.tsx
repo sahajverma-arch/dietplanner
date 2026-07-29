@@ -135,6 +135,8 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
         </ol>
       </div>
 
+      <DeltaTable roadmap={roadmap} />
+
       {/* Macros, in the order the engine allocates them: protein and fat are
           requirements, carbohydrate is what is left. */}
       <div className="mt-4">
@@ -188,6 +190,81 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
         client actually reaches.
       </p>
     </section>
+  );
+}
+
+/**
+ * Now versus the target, per nutrient.
+ *
+ * "Protein 50 g → 79 g" is an instruction; "protein 79 g" is a number. The
+ * delta is what the dietitian actually talks through, and for calories it is a
+ * sequence rather than a pair whenever a phase sits in between — which is the
+ * form the spec itself uses for the transition: 2,600 → 2,249 → 1,898.
+ */
+function DeltaTable({ roadmap }: { roadmap: Roadmap }) {
+  const now = roadmap.current;
+  if (!now) return null;
+  const target = weekTargets(roadmap, roadmap.phases[roadmap.phases.length - 1].fromWeek);
+  const first = weekTargets(roadmap, 1);
+  // Only worth showing the middle step when it is genuinely a step.
+  const via = first.kcal !== target.kcal ? first.kcal : null;
+
+  const rows: { label: string; from: number; via: number | null; to: number; unit: string }[] = [
+    { label: "Energy", from: now.kcal, via, to: target.kcal, unit: "kcal" },
+    { label: "Protein", from: now.protein_g, via: null, to: target.protein_g, unit: "g" },
+    { label: "Carbohydrate", from: now.carbs_g, via: null, to: target.carbs_g, unit: "g" },
+    { label: "Fat", from: now.fat_g, via: null, to: target.fat_g, unit: "g" },
+  ];
+
+  return (
+    <div className="mt-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">What actually changes</h3>
+        <span className="text-xs text-zinc-500">measured now → the target</span>
+      </div>
+      <div className="mt-2 space-y-1">
+        {rows.map((r) => {
+          const change = r.to - r.from;
+          return (
+            <div key={r.label} className="flex items-baseline gap-2 rounded-lg bg-zinc-900/60 px-3 py-1.5 text-xs">
+              <span className="w-24 shrink-0 text-zinc-400">{r.label}</span>
+              <span className="tabular-nums text-zinc-400">{r.from}</span>
+              <span className="text-zinc-600">→</span>
+              {r.via !== null && (
+                <>
+                  <span className="tabular-nums text-zinc-300">{r.via}</span>
+                  <span className="text-zinc-600">→</span>
+                </>
+              )}
+              <span className="font-semibold tabular-nums text-zinc-100">
+                {r.to} {r.unit}
+              </span>
+              <span
+                className={`ml-auto shrink-0 tabular-nums ${
+                  change > 0 ? "text-emerald-400" : change < 0 ? "text-amber-400" : "text-zinc-600"
+                }`}
+              >
+                {change === 0 ? "no change" : `${change > 0 ? "+" : "−"}${Math.abs(change)} ${r.unit}`}
+              </span>
+            </div>
+          );
+        })}
+        {/* Fibre has a target but no measurement — the food pricing tracks
+            calories and the three macros only. Saying so is better than
+            printing a delta from a number nobody counted. */}
+        <div className="flex items-baseline gap-2 rounded-lg bg-zinc-900/60 px-3 py-1.5 text-xs">
+          <span className="w-24 shrink-0 text-zinc-400">Fibre</span>
+          <span className="text-zinc-600">not measured yet</span>
+          <span className="text-zinc-600">→</span>
+          <span className="font-semibold tabular-nums text-zinc-100">
+            {roadmap.macros.fibre_g} g
+          </span>
+          <span className="ml-auto shrink-0 text-[11px] text-zinc-500">
+            build it over two weeks, with more water
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 

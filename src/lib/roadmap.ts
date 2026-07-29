@@ -153,6 +153,10 @@ export interface RoadmapInput {
   tdee: number | null;
   /** What the client eats now, measured. Null when nothing was recorded. */
   currentKcal: number | null;
+  /** The rest of the measured day, for the delta table. */
+  currentProteinG?: number | null;
+  currentCarbsG?: number | null;
+  currentFatG?: number | null;
   category: Category | null;
   /** Category 2 only: weeks held at the current deficit. */
   weeksOnCurrentPlan?: number | null;
@@ -191,6 +195,13 @@ export interface Roadmap {
   /** 5% of body weight: where measurable metabolic benefit begins (§10.8). */
   milestone5pctKg: number;
   timeline: { fastestWeeks: number; slowestWeeks: number } | null;
+  /**
+   * What they eat now, carried alongside what they will eat.
+   *
+   * The report is only coachable as a delta: "protein 50 g to 79 g" is an
+   * instruction, "protein 79 g" is a number. Null when nothing was measured.
+   */
+  current: { kcal: number; protein_g: number; carbs_g: number; fat_g: number } | null;
   /** The steady-state target, after the BMR clamp. */
   targetKcal: number;
   /** Carried so a week can be shown as a deficit, not just a calorie count. */
@@ -339,6 +350,15 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
     version: ENGINE_VERSION,
     category: meta,
     tdee,
+    current:
+      input.currentKcal && input.currentKcal > 0
+        ? {
+            kcal: input.currentKcal,
+            protein_g: Math.round(input.currentProteinG ?? 0),
+            carbs_g: Math.round(input.currentCarbsG ?? 0),
+            fat_g: Math.round(input.currentFatG ?? 0),
+          }
+        : null,
     bmi: round1(bmi),
     band: bandName,
     targetWeightKg: round1(targetWeightKg),
