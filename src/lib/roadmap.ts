@@ -193,6 +193,8 @@ export interface Roadmap {
   timeline: { fastestWeeks: number; slowestWeeks: number } | null;
   /** The steady-state target, after the BMR clamp. */
   targetKcal: number;
+  /** Carried so a week can be shown as a deficit, not just a calorie count. */
+  tdee: number;
   /** Every phase in order, including any transition or ramp. */
   phases: CaloriePhase[];
   /** Weight protein is dosed on, and whether it was adjusted. */
@@ -336,6 +338,7 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
   return {
     version: ENGINE_VERSION,
     category: meta,
+    tdee,
     bmi: round1(bmi),
     band: bandName,
     targetWeightKg: round1(targetWeightKg),
@@ -521,7 +524,7 @@ function calorieStrategy(
           fromWeek: TRANSITION_WEEKS + 1,
           toWeek: null,
           kcal: target,
-          note: `The full ${Math.round(DEFICIT_FIRST_TIMER * 100)}% deficit, landing on a client who already has the habits in place.`,
+          note: "The full deficit, landing on a client who already has the habits in place.",
         },
       ],
     };
@@ -535,7 +538,7 @@ function calorieStrategy(
         fromWeek: 1,
         toWeek: null,
         kcal: target,
-        note: `${Math.round(DEFICIT_FIRST_TIMER * 100)}% below TDEE — the midpoint of the 15–20% band. The gap from current intake is inside normal daily variation, so no transition phase is needed.`,
+        note: "The midpoint of the 15–20% band. The gap from current intake is inside normal daily variation, so no transition phase is needed.",
       },
     ],
   };

@@ -1,11 +1,14 @@
-import type { Roadmap } from "@/lib/roadmap";
+import { weekTargets, type Roadmap } from "@/lib/roadmap";
+
+/** The horizon the summary shows. A month is what a client can picture. */
+const WEEKS = [1, 2, 3, 4];
 
 /**
  * The computed roadmap, shown on the client summary before anything is planned.
  *
  * This is the arithmetic the diet engine did, laid out so the dietitian can
  * check it in front of the client — the target weight and why it is not the top
- * of the range, how long it takes, what the calories do week by week, and the
+ * of the range, what the calories do week by week for the first month, and the
  * macros that follow. Nothing here was written by the model; it is all derived
  * from the counselling by src/lib/roadmap.ts.
  */
@@ -51,25 +54,84 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
         <Cell label="Daily target" value={`${roadmap.targetKcal}`} sub="kcal, steady state" accent />
       </div>
 
-      {/* The phases. A plan that changes over time reads as arbitrary unless
-          each step says what it is for. */}
+      {/* The first four weeks, week by week.
+          Phases are how the engine thinks; weeks are how the client lives it.
+          A dietitian sitting with someone needs to answer "so what do I eat on
+          Monday, and does that change next month" — which a phase list makes
+          them work out, and this does not. */}
       <div className="mt-4">
-        <h3 className="text-sm font-semibold">How the calories move</h3>
-        <ol className="mt-2 space-y-2">
-          {roadmap.phases.map((p, i) => (
-            <li key={`${p.label}-${i}`} className="flex gap-3">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[10px] font-bold tabular-nums text-zinc-300">
-                {i + 1}
-              </span>
-              <div className="min-w-0">
-                <p className="text-xs">
-                  <span className="font-semibold text-zinc-200">{p.label}</span>
-                  <span className="ml-2 tabular-nums text-brand">{p.kcal} kcal</span>
-                </p>
-                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{p.note}</p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold">The first four weeks</h3>
+          <span className="text-xs text-zinc-500">against a {roadmap.tdee} kcal daily need</span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {WEEKS.map((w) => {
+            const t = weekTargets(roadmap, w);
+            const previous = w > 1 ? weekTargets(roadmap, w - 1) : null;
+            const changed = previous !== null && previous.kcal !== t.kcal;
+            const deficit = Math.round(((roadmap.tdee - t.kcal) / roadmap.tdee) * 100);
+            return (
+              <div
+                key={w}
+                className={`rounded-lg px-3 py-2 ${
+                  changed || w === 1
+                    ? "bg-zinc-900 ring-1 ring-brand/40"
+                    : "bg-zinc-900/60"
+                }`}
+              >
+                <div className="flex items-baseline justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Week {w}
+                  </span>
+                  {changed && (
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-brand">
+                      changes
+                    </span>
+                  )}
+                </div>
+                <div className="text-lg font-bold tabular-nums">{t.kcal}</div>
+                <div className="text-[11px] text-zinc-500">
+                  {deficit > 0 ? `${deficit}% deficit` : deficit < 0 ? `${-deficit}% surplus` : "maintenance"}
+                </div>
+                <div className="mt-1.5 flex gap-2 text-[11px] tabular-nums text-zinc-400">
+                  <span title="protein">P{t.protein_g}</span>
+                  <span title="fat">F{t.fat_g}</span>
+                  <span title="carbohydrate">C{t.carbs_g}</span>
+                </div>
               </div>
-            </li>
-          ))}
+            );
+          })}
+        </div>
+
+        {/* Why each phase is what it is — the phases the first four weeks
+            actually touch, plus anything still ahead of them. */}
+        <ol className="mt-3 space-y-2">
+          {roadmap.phases.map((p, i) => {
+            const ahead = p.fromWeek > WEEKS.length;
+            return (
+              <li key={`${p.label}-${i}`} className="flex gap-3">
+                <span
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums ${
+                    ahead ? "bg-zinc-900 text-zinc-600" : "bg-zinc-800 text-zinc-300"
+                  }`}
+                >
+                  {i + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs">
+                    <span className={ahead ? "font-semibold text-zinc-400" : "font-semibold text-zinc-200"}>
+                      {p.label}
+                    </span>
+                    <span className={`ml-2 tabular-nums ${ahead ? "text-zinc-500" : "text-brand"}`}>
+                      {p.kcal} kcal
+                    </span>
+                    {ahead && <span className="ml-2 text-[10px] text-zinc-600">beyond week 4</span>}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">{p.note}</p>
+                </div>
+              </li>
+            );
+          })}
         </ol>
       </div>
 
