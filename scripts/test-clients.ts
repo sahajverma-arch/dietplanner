@@ -68,9 +68,12 @@ export const PRIYA: Answers = {
   q23: "Occasionally uncomfortable",
   q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After lunch"], q24c: "4",
   q25: "Once daily",
-  q26: ["No repeated discomfort"],
-  q27: ["Peanut"], q27d: "Peanut — throat tightens and hives within minutes",
+  q27: ["Peanut", "Rajma or beans"],
+  q27_peanut_type: "Allergy — never serve",
+  q27_rajma_or_beans_type: "Intolerance — causes symptoms",
+  q27d: "Peanut — throat tightens and hives within minutes",
   q27a: "Severe", q27b: "Yes",
+  q26a: ["Bloating", "Gas"], q26d: "1–2 times per week", q26b: "Often",
 
   // 5 — Actual food day
   q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
@@ -259,8 +262,7 @@ export const RAHUL: Answers = {
   q23: "Mostly comfortable",
   q24: ["Acidity or heartburn"], q24a: "1–2 times per week", q24b: ["After dinner"], q24c: "3",
   q25: "Once daily",
-  q26: ["No repeated discomfort"],
-  q27: ["No known allergy"],
+  q27: ["No known allergy or intolerance"],
 
   // 5 — Actual food day
   q28: ["Breakfast", "Lunch", "Evening", "Post-Workout", "Dinner"],
@@ -461,8 +463,7 @@ export const SNEHA: Answers = {
   q23: "Mostly comfortable",
   q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After dinner"], q24c: "3",
   q25: "Once daily",
-  q26: ["No repeated discomfort"],
-  q27: ["No known allergy"],
+  q27: ["No known allergy or intolerance"],
 
   // 5 — Actual food day
   q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
@@ -654,8 +655,7 @@ export const AADI: Answers = {
   q23: "Mostly comfortable",
   q24: ["No frequent symptom"],
   q25: "Once daily",
-  q26: ["No repeated discomfort"],
-  q27: ["No known allergy"],
+  q27: ["No known allergy or intolerance"],
 
   // 5 — Actual food day
   q28: ["Breakfast", "Lunch", "Evening", "Post-Workout", "Dinner"],

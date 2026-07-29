@@ -11,6 +11,11 @@ import type { DietType, IntakeForm } from "../types";
 import { emptyIntake } from "../types";
 import {
   SUBSTANCES,
+  allergenFoods,
+  hasAllergen,
+  intoleranceFoods,
+  otherIsAllergy,
+  PROBLEM_OTHER,
   substanceContextId,
   substanceFreqId,
   substanceQtyId,
@@ -194,7 +199,10 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
     flag: { label: "Blood / black tarry stool", action: "Medical evaluation required.", escalate: true },
   },
   {
-    when: (a) => hasBeyond(a, "q27", ["No known allergy", "No Known Allergy", "None"]),
+    // Since the allergy and intolerance lists merged, a q27 selection alone is
+    // no longer an allergy — "onion, intolerance" must not raise an allergy
+    // flag that says the food can never appear in any meal.
+    when: hasAllergen,
     flag: {
       label: "Known food allergy",
       action: "Allergen must never appear in any meal, in any form or preparation.",
@@ -203,7 +211,7 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   },
   {
     when: (a) =>
-      hasBeyond(a, "q27", ["No known allergy", "No Known Allergy", "None"]) &&
+      hasAllergen(a) &&
       isOneOf(a, "q27a", ["Severe", "Previous emergency reaction", "Anaphylaxis"]),
     flag: {
       label: "Severe / emergency food allergy",
@@ -583,11 +591,18 @@ export interface ClinicalIntake extends IntakeForm {
   appointmentId?: string | null;
 }
 
-/** Allergens the plan must never contain (q27 selections + "Other" detail). */
+/**
+ * Allergens the plan must never contain.
+ *
+ * Foods named on the merged question and marked as an allergy, plus the typed
+ * "Other" when that was called an allergy too. A food marked as an intolerance
+ * is deliberately absent — it belongs in `intolerances`, which the plan reduces
+ * and times rather than banning outright.
+ */
 export function allergenList(a: Answers): string[] {
-  const chosen = list(a, "q27").filter((v) => v !== "No known allergy" && v !== "Other");
+  const chosen = allergenFoods(a);
   const other = val(a, "q27c").trim();
-  return other ? [...chosen, other] : chosen;
+  return other && otherIsAllergy(a) ? [...chosen, other] : chosen;
 }
 
 export function toIntake(a: Answers, appointmentId?: string | null): ClinicalIntake {
@@ -597,8 +612,12 @@ export function toIntake(a: Answers, appointmentId?: string | null): ClinicalInt
   if (has(a, "q66", "Pregnant")) conditions.push("Pregnant");
   if (has(a, "q66", "Breastfeeding")) conditions.push("Breastfeeding");
 
+  const otherFood = val(a, "q27c").trim();
   const intolerances = [
-    joinList(a, "q26", ["No repeated discomfort", "Other"]),
+    intoleranceFoods(a).join(", "),
+    // The typed "Other" goes to whichever side it was classified as.
+    has(a, "q27", PROBLEM_OTHER) && !otherIsAllergy(a) ? otherFood : "",
+    // Counsellings taken before the merge kept their free-text trigger here.
     val(a, "q26c").trim(),
   ]
     .filter(Boolean)
@@ -844,7 +863,7 @@ export function aiProfile(a: Answers): Block {
     severity_1_10: val(a, "q24c"),
     bowel_frequency: val(a, "q25"),
     stool_experience: dropNone(list(a, "q25a"), ["Normal", "Comfortable and formed"]),
-    discomfort_foods: list(a, "q26").filter((v) => v !== "No repeated discomfort"),
+    discomfort_foods: intoleranceFoods(a),
     discomfort_reaction: list(a, "q26a"),
     discomfort_pattern: val(a, "q26b"),
     other_trigger_foods: val(a, "q26c"),
@@ -863,7 +882,7 @@ export function aiProfile(a: Answers): Block {
     allergies_never_include: allergenList(a),
     allergy_reaction: val(a, "q27d"),
     allergy_severity: val(a, "q27a"),
-    intolerances_avoid: list(a, "q26").filter((v) => !["No repeated discomfort", "Other"].includes(v)),
+    intolerances_avoid: intoleranceFoods(a),
     dislikes: val(a, "q36"),
     dislike_strength: val(a, "q36a"),
     favourites_protect: val(a, "q35"),

@@ -841,6 +841,113 @@ const S4: Section = {
 };
 
 // ---------------------------------------------------------------------------
+// Foods that cause a problem — allergy and intolerance in one question.
+//
+// These used to be asked separately: an allergen list, then a near-identical
+// trigger-food list underneath it. The dietitian had to decide which bucket a
+// food belonged in BEFORE naming it, and half the foods appeared on both lists,
+// so "milk" was asked twice in two minutes.
+//
+// One list now, and the distinction is recorded per food instead — which is
+// where it belongs, because it was never a property of the question. The plan
+// still treats the two completely differently: an allergen never appears in any
+// meal in any form, while a trigger food is reduced, timed differently or
+// retested at a smaller portion.
+//
+// The allergen names are spelled exactly as they were, because the plan expands
+// them into their derivatives ("milk" reaching paneer, curd, ghee) off a table
+// keyed by these strings — a rename here silently stops that expansion.
+// ---------------------------------------------------------------------------
+
+export const PROBLEM_NONE = "No known allergy or intolerance";
+export const PROBLEM_OTHER = "Other";
+export const PROBLEM_ALLERGY = "Allergy — never serve";
+export const PROBLEM_INTOLERANCE = "Intolerance — causes symptoms";
+
+export const PROBLEM_FOODS: string[] = [
+  PROBLEM_NONE,
+  // The major allergens, in the spelling the derivative table expects.
+  "Milk", "Egg", "Peanut", "Tree nuts", "Wheat", "Soy", "Fish", "Shellfish", "Sesame",
+  // Everything else that repeatedly causes symptoms.
+  "Curd", "Paneer", "Dal", "Chickpeas", "Rajma or beans", "Onion", "Garlic",
+  "Spicy food", "Fried food", "High-fat food", "Artificial sweeteners", "Protein powder",
+  PROBLEM_OTHER,
+];
+
+/** Where one food's allergy-or-intolerance answer is stored. */
+export const problemTypeId = (food: string) =>
+  `q27_${food.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_type`;
+
+/**
+ * Every spelling of "nothing to report" this question has ever had. The option
+ * text changed when the allergy and intolerance lists merged, and counsellings
+ * already on file still hold the old wording — read as a food, "No known
+ * allergy" would become an allergen the plan bans by name.
+ */
+const PROBLEM_NONE_OPTIONS = new Set([
+  PROBLEM_NONE,
+  "No known allergy",
+  "No Known Allergy",
+  "No repeated discomfort",
+  "None",
+]);
+
+const problemSelections = (a: Answers): string[] =>
+  list(a, "q27").filter((f) => !PROBLEM_NONE_OPTIONS.has(f));
+
+/**
+ * Foods that must never appear in a meal.
+ *
+ * An untyped selection counts as an allergy, deliberately. It is what the
+ * answer meant before the questions merged — the old q27 was allergens only —
+ * and for a food the dietitian named but has not yet classified, "never serve"
+ * is the side to be wrong on.
+ */
+export function allergenFoods(a: Answers): string[] {
+  return problemSelections(a).filter(
+    (f) => f !== PROBLEM_OTHER && val(a, problemTypeId(f)) !== PROBLEM_INTOLERANCE
+  );
+}
+
+/** Foods to reduce, time differently or retest — never a hard exclusion. */
+export function intoleranceFoods(a: Answers): string[] {
+  const tagged = problemSelections(a).filter(
+    (f) => f !== PROBLEM_OTHER && val(a, problemTypeId(f)) === PROBLEM_INTOLERANCE
+  );
+  // Counsellings taken before the merge kept their trigger foods in q26.
+  const legacy = list(a, "q26").filter(
+    (f) => !PROBLEM_NONE_OPTIONS.has(f) && f !== PROBLEM_OTHER
+  );
+  return Array.from(new Set([...tagged, ...legacy]));
+}
+
+/** True when the client typed an "Other" food and called it an allergy. */
+export const otherIsAllergy = (a: Answers): boolean =>
+  has(a, "q27", PROBLEM_OTHER) && val(a, problemTypeId(PROBLEM_OTHER)) !== PROBLEM_INTOLERANCE;
+
+export const hasAllergen = (a: Answers): boolean =>
+  allergenFoods(a).length > 0 || (otherIsAllergy(a) && Boolean(val(a, "q27c").trim()));
+
+export const hasIntolerance = (a: Answers): boolean =>
+  intoleranceFoods(a).length > 0 ||
+  (has(a, "q27", PROBLEM_OTHER) && !otherIsAllergy(a) && Boolean(val(a, "q27c").trim()));
+
+/** One allergy-or-intolerance select per food actually named. */
+function problemFoodQuestions(): Question[] {
+  return PROBLEM_FOODS.filter((f) => f !== PROBLEM_NONE).map((food) => ({
+    id: problemTypeId(food),
+    n: 23,
+    group: "q27",
+    tag: "clinical" as const,
+    type: "single" as const,
+    label: `${food} — which is it?`,
+    options: [PROBLEM_ALLERGY, PROBLEM_INTOLERANCE],
+    showIf: (a: Answers) => has(a, "q27", food),
+    required: (a: Answers) => has(a, "q27", food),
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // STAGE 5 — DIGESTION, ALLERGIES & FOOD TOLERANCE (Q22–Q23)
 //
 // v3.0's Q23 is one question covering allergy, intolerance and digestive
@@ -905,16 +1012,13 @@ const S5: Section = {
     },
     {
       id: "q27", n: 23, tag: "clinical", type: "multi", required: true,
-      label: "Do you have any known food allergy?",
-      // v3.0 leaves the allergen list free text. The named major allergens are
-      // kept because an allergen typed as free text is one spelling away from
-      // not matching anything the plan checks against.
-      options: [
-        "No known allergy", "Milk", "Egg", "Peanut", "Tree nuts", "Wheat", "Soy", "Fish",
-        "Shellfish", "Sesame", "Other",
-      ],
-      note: "An allergen must never appear in any meal, in any form or preparation.",
+      label: "Any food that causes a problem — allergy or intolerance?",
+      // v3.0 leaves this free text. The named foods are kept because one typed
+      // as free text is a spelling away from matching nothing the plan checks.
+      options: PROBLEM_FOODS,
+      note: "Name every food first — you say which is an allergy and which an intolerance underneath. An allergen never appears in any meal, in any form; a trigger food is reduced, timed differently or retested smaller.",
     },
+    ...problemFoodQuestions(),
     {
       // Asked in the client's own words before the severity band, because
       // "throat tightens" and "stomach feels heavy" are both called severe by
@@ -922,33 +1026,22 @@ const S5: Section = {
       id: "q27d", n: 23, tag: "clinical", type: "textarea",
       label: "What happens when they eat it?",
       placeholder: "e.g. Egg — lips swell and throat tightens within minutes; Peanut — hives and vomiting",
-      showIf: (a) => hasOther(a, "q27", ["No known allergy"]),
+      showIf: hasAllergen,
       note: "One line per allergen. Record the reaction as described, then classify it below.",
     },
     {
       id: "q27a", n: 23, tag: "clinical", type: "single", label: "Reaction severity",
       options: ["Mild", "Moderate", "Severe", "Previous emergency reaction", "Unknown"],
-      showIf: (a) => hasOther(a, "q27", ["No known allergy"]),
+      showIf: hasAllergen,
     },
     {
       id: "q27b", n: 23, tag: "clinical", type: "single", label: "Professionally diagnosed?",
       options: ["Yes", "No", "Not sure"],
-      showIf: (a) => hasOther(a, "q27", ["No known allergy"]),
+      showIf: hasAllergen,
     },
     {
-      id: "q27c", n: 23, tag: "conditional", type: "text", label: "Other allergen",
-      showIf: (a) => has(a, "q27", "Other"),
-    },
-    {
-      id: "q26", n: 23, tag: "clinical", type: "multi",
-      label: "Are there other foods that repeatedly cause symptoms?",
-      options: [
-        "Milk", "Curd", "Paneer", "Wheat or gluten foods", "Fried food", "High-fat food",
-        "Spicy food", "Onion", "Garlic", "Dal", "Chickpeas", "Rajma or beans", "Soy", "Eggs",
-        "Seafood", "Nuts", "Artificial sweeteners", "Protein powder",
-        "No repeated discomfort", "Other",
-      ],
-      note: "Allergies belong in the previous question — this is intolerance and digestive-trigger territory.",
+      id: "q27c", n: 23, tag: "conditional", type: "text", label: "Other food — name it",
+      showIf: (a) => has(a, "q27", PROBLEM_OTHER),
     },
     {
       id: "q26a", n: 23, tag: "conditional", type: "multi", label: "Reaction / symptoms",
@@ -956,22 +1049,18 @@ const S5: Section = {
         "Bloating", "Gas", "Acidity", "Reflux", "Pain", "Nausea", "Loose stools",
         "Constipation", "Skin reaction", "Other",
       ],
-      showIf: (a) => hasOther(a, "q26", ["No repeated discomfort"]),
+      showIf: hasIntolerance,
     },
     {
       id: "q26d", n: 23, tag: "conditional", type: "single", label: "Frequency of the reaction",
       options: ["Rare", "1–2 times per week", "3–5 times per week", "Daily", "Multiple times daily"],
-      showIf: (a) => hasOther(a, "q26", ["No repeated discomfort"]),
+      showIf: hasIntolerance,
     },
     {
       id: "q26b", n: 23, tag: "conditional", type: "single", label: "Reproducibility",
       options: ["Almost every time", "Often", "Sometimes", "Client is unsure"],
-      showIf: (a) => hasOther(a, "q26", ["No repeated discomfort"]),
+      showIf: hasIntolerance,
       why: "A food that reacts almost every time is excluded; one that reacts sometimes is retested with a smaller portion.",
-    },
-    {
-      id: "q26c", n: 23, tag: "conditional", type: "text", label: "Other trigger foods",
-      showIf: (a) => has(a, "q26", "Other"),
     },
   ],
 };
