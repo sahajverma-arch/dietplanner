@@ -609,6 +609,33 @@ function WeekOfEating({
         </div>
       )}
 
+      {intake.beverages.length > 0 && (
+        <div className="mt-4 border-t border-zinc-800 pt-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">Drinks through the day</h3>
+            <span className="tabular-nums text-xs text-zinc-400">
+              {intake.beverageKcalPerDay} kcal
+              <span className="text-zinc-600"> — counted on top of the meals</span>
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {intake.beverages.map((b) => (
+              <span
+                key={b.label}
+                className="rounded-lg bg-zinc-900/60 px-2.5 py-1 text-xs text-zinc-300 ring-1 ring-zinc-800"
+                title={`${b.gramsPerDay.toFixed(1)} g protein · ${b.carbsPerDay.toFixed(1)} g carbs · ${Math.round(b.kcalPerDay)} kcal per day`}
+              >
+                {b.label}
+                {b.units > 1 && <span className="text-zinc-500"> × {b.units}</span>}
+                <span className="ml-1.5 tabular-nums text-zinc-500">
+                  {Math.round(b.kcalPerDay)} kcal
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {week.unpriced.length > 0 && (
         <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-400">
           Not in the food database, so excluded from every total above:{" "}

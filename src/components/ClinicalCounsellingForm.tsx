@@ -698,6 +698,17 @@ export function ProteinIntakePanel({
         </div>
       )}
 
+      {estimate.beverages.length > 0 && (
+        <p className="mt-2 text-xs text-zinc-500">
+          Drinks add{" "}
+          <strong className="text-zinc-300">{estimate.beverageKcalPerDay} kcal/day</strong> —{" "}
+          {estimate.beverages
+            .map((b) => `${b.label}${b.units > 1 ? ` × ${b.units}` : ""}`)
+            .join(", ")}
+          . Counted on top of the meals.
+        </p>
+      )}
+
       {estimate.stapleGramsPerDay > 0 && (
         <p className="mt-2 text-xs text-zinc-500">
           Includes {estimate.stapleGramsPerDay} g/day from roti, rice and other staples in the

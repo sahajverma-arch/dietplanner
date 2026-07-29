@@ -226,7 +226,9 @@ export function decodeStaplePick(entry: string): { label: string; units: number 
   const m = entry.match(/^(.+?)\s*[×x]\s*(\d+(?:\.\d+)?)$/i);
   if (!m) return null;
   const label = m[1].trim();
-  if (!STAPLE_LABELS.includes(label)) return null;
+  // Staples and drinks share the encoding, and therefore the whitelist — the
+  // list is what stops a stray "note x 3" being parsed as food.
+  if (!STAPLE_LABELS.includes(label) && !BEVERAGE_LABELS.includes(label)) return null;
   const units = parseFloat(m[2]);
   return Number.isFinite(units) && units > 0 ? { label, units } : null;
 }
@@ -295,6 +297,132 @@ export function stapleProtein(a: Answers): StapleContribution[] {
   })).sort((x, y) => y.gramsPerDay - x.gramsPerDay);
 }
 
+// ---------------------------------------------------------------------------
+// Drinks
+//
+// These were captured as free text and then counted by nobody. Three cups of
+// sweet milk tea is around 200 kcal and 5 g of protein a day — for a client
+// eating 1,400 kcal that is a seventh of the day, invisible, and it lands
+// straight in the gap between what the counselling measures and what the
+// client actually eats.
+//
+// Same shape as the staples so they price the same way: tapped picks first,
+// and the pattern is used to read drinks out of counsellings recorded before
+// the picker existed.
+// ---------------------------------------------------------------------------
+
+const BEVERAGES: {
+  pattern: RegExp;
+  label: string;
+  perUnit: number;
+  carbsPerUnit: number;
+  fatPerUnit: number;
+  kcalPerUnit: number;
+  defaultUnits: number;
+  /**
+   * How specific this entry is, when more than one pattern matches the same
+   * words. "Green tea" and "black coffee" both contain a generic drink, so the
+   * specific reading has to win — stated as a number rather than inferred from
+   * the order or the pattern length, both of which get this silently wrong.
+   */
+  priority?: number;
+}[] = [
+  // Milk tea is the default reading of "chai"/"tea" in this client base, and
+  // sugar is asked separately because it is most of the difference.
+  { pattern: /\b(tea|chai)\b/i, label: "Tea with sugar", perUnit: 1.8, carbsPerUnit: 9.5, fatPerUnit: 2.4, kcalPerUnit: 70, defaultUnits: 2 },
+  { pattern: /\b(tea|chai)\b.*\b(no|without|zero)\s*sugar\b/i, priority: 2, label: "Tea without sugar", perUnit: 1.8, carbsPerUnit: 4.5, fatPerUnit: 2.4, kcalPerUnit: 47, defaultUnits: 2 },
+  { pattern: /\b(green tea|black tea|herbal tea)\b/i, priority: 3, label: "Green or black tea", perUnit: 0, carbsPerUnit: 0.3, fatPerUnit: 0, kcalPerUnit: 2, defaultUnits: 1 },
+  { pattern: /\bcoffee\b/i, label: "Coffee with sugar", perUnit: 2, carbsPerUnit: 10, fatPerUnit: 2.6, kcalPerUnit: 75, defaultUnits: 1 },
+  { pattern: /\bblack coffee\b/i, priority: 2, label: "Black coffee", perUnit: 0.3, carbsPerUnit: 0, fatPerUnit: 0, kcalPerUnit: 5, defaultUnits: 1 },
+  { pattern: /\b(milk|doodh)\b/i, label: "Milk", perUnit: 6.4, carbsPerUnit: 9.7, fatPerUnit: 6.6, kcalPerUnit: 122, defaultUnits: 1 },
+  { pattern: /\b(buttermilk|chaas|chhach)\b/i, label: "Buttermilk or chaas", perUnit: 3, carbsPerUnit: 5, fatPerUnit: 1.5, kcalPerUnit: 48, defaultUnits: 1 },
+  { pattern: /\blassi\b/i, label: "Lassi", perUnit: 4.6, carbsPerUnit: 25, fatPerUnit: 5, kcalPerUnit: 160, defaultUnits: 1 },
+  { pattern: /\b(fresh juice|nimbu paani|lemonade|sugarcane)\b/i, label: "Fresh juice", perUnit: 0.8, carbsPerUnit: 24, fatPerUnit: 0.2, kcalPerUnit: 100, defaultUnits: 1 },
+  { pattern: /\b(packaged juice|tetra|frooti|maaza)\b/i, label: "Packaged juice", perUnit: 0.4, carbsPerUnit: 26, fatPerUnit: 0.1, kcalPerUnit: 108, defaultUnits: 1 },
+  { pattern: /\b(cola|soft drink|soda|pepsi|coke|thums)\b/i, label: "Soft drink", perUnit: 0, carbsPerUnit: 33, fatPerUnit: 0, kcalPerUnit: 132, defaultUnits: 1 },
+  { pattern: /\b(diet|zero)\s*(coke|cola|soda|soft drink)\b/i, priority: 2, label: "Diet soft drink", perUnit: 0, carbsPerUnit: 0, fatPerUnit: 0, kcalPerUnit: 1, defaultUnits: 1 },
+  { pattern: /\b(coconut water|nariyal)\b/i, label: "Coconut water", perUnit: 0.4, carbsPerUnit: 7.6, fatPerUnit: 0.2, kcalPerUnit: 38, defaultUnits: 1 },
+  // Not "protein powder" — that is a Q50 protein food and a tappable variant
+  // food, so matching it here as well would count one shake twice.
+  { pattern: /\b(protein shake|whey)\b/i, label: "Protein shake", perUnit: 24, carbsPerUnit: 3, fatPerUnit: 1.5, kcalPerUnit: 120, defaultUnits: 1 },
+  // Worth recording rather than leaving blank: "water only" is an answer, an
+  // empty field is an unasked question.
+  { pattern: /\bwater only\b/i, label: "Water only", perUnit: 0, carbsPerUnit: 0, fatPerUnit: 0, kcalPerUnit: 0, defaultUnits: 1 },
+];
+
+/** The drinks offered by the picker, in tap order. */
+export const BEVERAGE_LABELS: string[] = BEVERAGES.map((b) => b.label);
+
+export const beverageQuestionId = (mealKey: string) => `q28_${mealKey}_drinks`;
+
+/**
+ * Drinks per day across the whole recorded day.
+ *
+ * Counted on TOP of the meals: a variant records what was eaten at breakfast,
+ * and the tea alongside it is recorded here. Nothing in the variant capture
+ * offers a drink, so there is no double count to guard against.
+ */
+export function beverageIntake(a: Answers): StapleContribution[] {
+  const totals = new Map<
+    string,
+    { units: number; grams: number; carbs: number; fat: number; kcal: number }
+  >();
+  const add = (label: string, units: number) => {
+    const drink = BEVERAGES.find((b) => b.label === label);
+    if (!drink) return;
+    const prev = totals.get(label) ?? { units: 0, grams: 0, carbs: 0, fat: 0, kcal: 0 };
+    totals.set(label, {
+      units: prev.units + units,
+      grams: prev.grams + units * drink.perUnit,
+      carbs: prev.carbs + units * drink.carbsPerUnit,
+      fat: prev.fat + units * drink.fatPerUnit,
+      kcal: prev.kcal + units * drink.kcalPerUnit,
+    });
+  };
+
+  for (const key of MEAL_KEYS) {
+    const picks = list(a, beverageQuestionId(key))
+      .map(decodeStaplePick)
+      .filter((p): p is { label: string; units: number } => p !== null);
+    if (picks.length > 0) {
+      for (const p of picks) add(p.label, p.units);
+      continue;
+    }
+    // Counsellings recorded before the picker typed it instead — and typed it
+    // in either field, because "Poha 1 plate + tea with 1 tsp sugar" is one
+    // sentence to a dietitian even though the form offered two boxes. Staples
+    // and drinks share no labels, so reading the food text for drinks cannot
+    // double-count what stapleProtein already found in it.
+    const text = [val(a, `q28_${key}_beverage`), val(a, `q28_${key}_food`)]
+      .filter((t) => t.trim())
+      .join("; ");
+    if (!text.trim()) continue;
+    for (const part of text.split(/[+,;·]/)) {
+      const segment = part.trim();
+      if (!segment) continue;
+      // The most specific match wins: "green tea" must not be read as "tea
+      // with sugar", nor "black coffee" as "coffee with sugar".
+      const drink = BEVERAGES.filter((b) => b.pattern.test(segment)).sort(
+        (x, y) => (y.priority ?? 1) - (x.priority ?? 1)
+      )[0];
+      if (!drink) continue;
+      const num = segment.match(/(\d+(?:\.\d+)?)/);
+      const isWeight = /\d\s*(g|gm|gram|ml)\b/i.test(segment);
+      const units = num && !isWeight ? Math.min(10, parseFloat(num[1])) : drink.defaultUnits;
+      add(drink.label, units);
+    }
+  }
+
+  return Array.from(totals, ([label, v]) => ({
+    label,
+    units: v.units,
+    gramsPerDay: v.grams,
+    carbsPerDay: v.carbs,
+    fatPerDay: v.fat,
+    kcalPerDay: v.kcal,
+  })).sort((x, y) => y.kcalPerDay - x.kcalPerDay);
+}
+
 export interface FoodContribution {
   food: ProteinFood;
   perWeek: number;
@@ -333,6 +461,16 @@ export interface ProteinIntakeEstimate {
   unrecorded: ProteinFood[];
   /** Staples from the Q28 food day (roti, rice, sabzi) — not Q50 foods. */
   staples: StapleContribution[];
+  /**
+   * Drinks recorded across the day, counted on top of the meals.
+   *
+   * Separate from `staples` and `contributions` because they are neither: a
+   * drink is not part of any meal variant, and until this existed it was the
+   * one thing the counselling recorded and then never counted.
+   */
+  beverages: StapleContribution[];
+  /** Energy per day from those drinks — usually the whole reason to ask. */
+  beverageKcalPerDay: number;
   /** Protein per day contributed by those staples. */
   stapleGramsPerDay: number;
   /**
@@ -358,6 +496,8 @@ export interface ProteinIntakeEstimate {
   variants?: VariantIntake;
 }
 
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
 const bodyWeightKg = (a: Answers): number | null => {
   const w = Number(val(a, "q9_weight"));
   return Number.isFinite(w) && w > 0 ? w : null;
@@ -376,8 +516,23 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
   // one is actually eaten. The legacy path stays for counsellings taken before
   // variants existed, which still have to open and still have to generate.
   const variants = variantIntake(a);
+  const beverages = beverageIntake(a);
+  const drinks = beverages.reduce(
+    (t, b) => ({
+      protein: t.protein + b.gramsPerDay,
+      carbs: t.carbs + b.carbsPerDay,
+      fat: t.fat + b.fatPerDay,
+      kcal: t.kcal + b.kcalPerDay,
+    }),
+    { protein: 0, carbs: 0, fat: 0, kcal: 0 }
+  );
+
   if (variants.recorded) {
-    const { protein_g, carbs_g, fat_g, calories } = variants.perDay;
+    // The meals as measured, plus what was drunk alongside them.
+    const protein_g = round1(variants.perDay.protein_g + drinks.protein);
+    const carbs_g = round1(variants.perDay.carbs_g + drinks.carbs);
+    const fat_g = round1(variants.perDay.fat_g + drinks.fat);
+    const calories = Math.round(variants.perDay.calories + drinks.kcal);
     const weight = bodyWeightKg(a);
     const macroKcal = 4 * protein_g + 4 * carbs_g + 9 * fat_g;
     const share = (kcal: number) => (macroKcal > 0 ? Math.round((kcal / macroKcal) * 100) : 0);
@@ -396,6 +551,8 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
       unrecorded: [],
       staples: [],
       stapleGramsPerDay: 0,
+      beverages,
+      beverageKcalPerDay: Math.round(drinks.kcal),
       foodDay: "counted",
       measured: true,
       source: "variants",
@@ -440,7 +597,9 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
   const sum = (
     key: "gramsPerDay" | "carbsPerDay" | "fatPerDay" | "kcalPerDay"
   ): number =>
-    contributions.reduce((s, c) => s + c[key], 0) + staples.reduce((s, c) => s + c[key], 0);
+    contributions.reduce((s, c) => s + c[key], 0) +
+    staples.reduce((s, c) => s + c[key], 0) +
+    beverages.reduce((s, c) => s + c[key], 0);
 
   const stapleGrams = staples.reduce((s, c) => s + c.gramsPerDay, 0);
   const gramsPerDay = sum("gramsPerDay");
@@ -457,6 +616,8 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
     carbsPerDay: Math.round(carbsPerDay),
     fatPerDay: Math.round(fatPerDay),
     kcalPerDay: Math.round(sum("kcalPerDay")),
+    beverages,
+    beverageKcalPerDay: Math.round(drinks.kcal),
     energySplit: {
       protein: share(4 * gramsPerDay),
       carbs: share(4 * carbsPerDay),

@@ -25,10 +25,12 @@
 // ---------------------------------------------------------------------------
 
 import {
+  BEVERAGE_LABELS,
   FREQUENCY_OPTIONS,
   PORTION_OPTIONS,
   PROTEIN_FOODS,
   STAPLE_LABELS,
+  beverageQuestionId,
   foodsForPattern,
   freqQuestionId,
   portionQuestionId,
@@ -1197,10 +1199,20 @@ function mealTimelineQuestions(): Question[] {
               showIf: show,
             },
           ]),
+      // Tapped, not typed — and counted. A drink was free text nobody costed,
+      // so three cups of sweet milk tea (around 200 kcal) sat outside the
+      // measured intake entirely.
+      {
+        id: beverageQuestionId(key), n: 24, group: `q28_${key}`,
+        tag: "conditional", type: "portions",
+        label: `${label} — anything to drink?`,
+        options: BEVERAGE_LABELS,
+        showIf: show,
+      },
       {
         id: `q28_${key}_beverage`, n: 24, group: `q28_${key}`, tag: "conditional", type: "text",
-        label: `${label} — beverage`,
-        placeholder: "e.g. tea with 1 tsp sugar; buttermilk; water only",
+        label: `${label} — any other drink`,
+        placeholder: "only if it is not in the list above",
         showIf: show,
       }
     );
