@@ -117,7 +117,7 @@ export default function ClientDossier({
         answersCount={recordSize(record)}
       />
 
-      <KpiStrip energy={energy} intake={intake} target={target} />
+      <KpiStrip energy={energy} intake={intake} target={target} roadmap={roadmap} />
 
       {escalations.length > 0 && <Escalations flags={escalations} />}
 
@@ -286,11 +286,23 @@ function KpiStrip({
   energy,
   intake,
   target,
+  roadmap,
 }: {
   energy: ReturnType<typeof energyEstimate>;
   intake: ReturnType<typeof estimateProteinIntake>;
   target: ReturnType<typeof proteinTarget>;
+  roadmap: ReturnType<typeof roadmapFor>;
 }) {
+  // The roadmap is what the plan is actually built to, so it is what this tile
+  // must show. Leaving the measured-intake progression here put two different
+  // protein targets on the same screen — 57 in the tile, 79 in the roadmap
+  // directly below it — with nothing saying which one the client would get.
+  const proteinTargetG = roadmap ? roadmap.macros.protein_g : target.targetG;
+  const proteinBasis = roadmap
+    ? `${roadmap.category.proteinPerKg} g/kg × ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adj" : ""}`
+    : intake.gramsPerKg
+      ? `now ${intake.gramsPerDay} g · ${intake.gramsPerKg} g/kg`
+      : "g/day aim";
   // Single values with no comparison to make — stat tiles, not a chart.
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
@@ -321,10 +333,8 @@ function KpiStrip({
       />
       <Stat
         label="Week-1 protein"
-        value={target.targetG ? String(target.targetG) : "—"}
-        sub={
-          intake.gramsPerKg ? `now ${intake.gramsPerDay} g · ${intake.gramsPerKg} g/kg` : "g/day aim"
-        }
+        value={proteinTargetG ? String(proteinTargetG) : "—"}
+        sub={proteinBasis}
         accent
       />
     </div>

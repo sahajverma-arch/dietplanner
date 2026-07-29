@@ -538,7 +538,14 @@ function calorieStrategy(
         fromWeek: 1,
         toWeek: null,
         kcal: target,
-        note: "The midpoint of the 15–20% band. The gap from current intake is inside normal daily variation, so no transition phase is needed.",
+        // Two quite different situations arrive here, and saying "no
+        // transition needed" for both hides the one that matters: a client
+        // ALREADY eating at or under the target is not being eased into a
+        // deficit, they are being asked to eat differently, not less.
+        note:
+          gap < 0
+            ? "The midpoint of the 15–20% band. No step down is needed — the client already eats at or below this figure, so week 1 changes WHAT is on the plate rather than how much. Check the recorded intake before telling them to eat more."
+            : "The midpoint of the 15–20% band. The gap from current intake is inside normal daily variation, so no transition phase is needed.",
       },
     ],
   };
