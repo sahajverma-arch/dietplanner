@@ -30,13 +30,24 @@ import PlanProgressBar from "./PlanProgressBar";
 
 // Two marks, one accent + one de-emphasised gray. Identity is carried by
 // position and a direct label at both ends, never by colour alone, and both
-// clear 3:1 on the zinc-900 surface.
-const NOW = "#a1a1aa";
-const PLAN = "#E0D000";
+// clear 3:1 on the surface they sit on.
+//
+// Every value here is a CSS variable rather than a hex, because a chart is the
+// one place a theme switch cannot be handled by utilities alone: light mode
+// re-steps these to darker marks that hold up on white, and re-points the
+// overlap ring to white so it still matches what is underneath it.
+const NOW = "var(--chart-now)";
+const PLAN = "var(--chart-plan)";
+const RING = "var(--chart-ring)";
+const MUTED = "var(--chart-muted)";
 
-// Protein / carbohydrate / fat, the same three colours PlanView uses, so a
-// macro reads identically in counselling and in the finished plan.
-const MACRO = { protein: "#38bdf8", carbs: "#f59e0b", fat: "#ef4444" };
+// Protein / carbohydrate / fat, the same three the finished plan uses, so a
+// macro reads identically in counselling and in the PDF.
+const MACRO = {
+  protein: "var(--macro-protein)",
+  carbs: "var(--macro-carbs)",
+  fat: "var(--macro-fat)",
+};
 
 export default function ClientDossier({
   answers,
@@ -462,7 +473,7 @@ function Dumbbell({
             key={c}
             className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full"
             // 2px surface ring so the dots stay legible where they overlap.
-            style={{ left: `${pct(v)}%`, background: c, boxShadow: "0 0 0 2px #18181b" }}
+            style={{ left: `${pct(v)}%`, background: c, boxShadow: `0 0 0 2px ${RING}` }}
           />
         ))}
       </div>
@@ -671,9 +682,9 @@ function BodyJourney({
             style={{
               left: `${pct(healthy.low)}%`,
               width: `${pct(healthy.high) - pct(healthy.low)}%`,
-              background: "rgba(52, 211, 153, 0.10)",
-              borderLeft: "1px solid rgba(52, 211, 153, 0.35)",
-              borderRight: "1px solid rgba(52, 211, 153, 0.35)",
+              background: "var(--band-healthy)",
+              borderLeft: "1px solid var(--band-healthy-edge)",
+              borderRight: "1px solid var(--band-healthy-edge)",
             }}
           />
         )}
@@ -692,7 +703,7 @@ function BodyJourney({
                 className="h-full rounded-full"
                 style={{
                   width: `${Math.max(1, pct(r.kg))}%`,
-                  background: r.current ? PLAN : "#52525b",
+                  background: r.current ? PLAN : MUTED,
                 }}
               />
             </div>

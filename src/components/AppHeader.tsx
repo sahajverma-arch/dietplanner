@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "./ThemeToggle";
 
 export default function AppHeader({
   email,
@@ -8,7 +9,7 @@ export default function AppHeader({
   isAdmin?: boolean;
 }) {
   return (
-    <header className="sticky top-0 z-20 border-b border-zinc-800 bg-black/95 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-5">
           <Link href="/" className="flex items-center">
@@ -16,10 +17,10 @@ export default function AppHeader({
             <img src="/logo.png" alt="LEANR by Fitelo" className="h-9 w-auto" />
           </Link>
           <nav className="flex items-center gap-4 text-sm font-medium text-zinc-400">
-            <Link href="/today" className="hover:text-white">
+            <Link href="/today" className="hover:text-zinc-100">
               Today&apos;s Activity
             </Link>
-            <Link href="/" className="hover:text-white">
+            <Link href="/" className="hover:text-zinc-100">
               My Clients
             </Link>
           </nav>
@@ -34,6 +35,7 @@ export default function AppHeader({
             </Link>
           )}
           <span className="hidden text-sm text-zinc-400 sm:inline">{email}</span>
+          <ThemeToggle />
           <form action="/auth/signout" method="post">
             <button className="btn-secondary !px-3 !py-1.5 text-xs">Sign out</button>
           </form>

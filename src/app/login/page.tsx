@@ -80,7 +80,10 @@ function LoginCard() {
             type="button"
             onClick={signInWithGoogle}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-zinc-700 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:opacity-60"
+            // Google's button is white with #1f1f1f text in both themes — it
+            // is their branding, not ours, so these are pinned literals rather
+            // than theme tokens (text-zinc-900 would turn white on white).
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-zinc-700 bg-white px-4 py-2.5 text-sm font-semibold text-[#1f1f1f] transition hover:bg-[#f1f3f4] disabled:opacity-60"
           >
             <GoogleIcon />
             {busy ? "Redirecting to Google…" : "Continue with Google"}

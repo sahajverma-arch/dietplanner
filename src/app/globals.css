@@ -2,6 +2,120 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Two themes, one set of tokens.
+ *
+ * Dark is the original look, and its values are Tailwind's own zinc/sky/amber/
+ * red/emerald steps verbatim — so putting the app on variables changed nothing
+ * about how it already looked.
+ *
+ * Light is chosen, not flipped. Surfaces invert to white and text to near
+ * black, but every accent is re-stepped rather than reused: the -400 steps are
+ * text on a dark surface and far too pale on white, so light mode points them
+ * at the darker steps that pass contrast there, while the -500 steps stay put
+ * because they are only ever used as 10-30% tinted fills and borders, where a
+ * mid step is right on either surface.
+ */
+:root {
+  color-scheme: dark;
+
+  --z-50: 250 250 250;
+  --z-100: 244 244 245;
+  --z-200: 228 228 231;
+  --z-300: 212 212 216;
+  --z-400: 161 161 170;
+  --z-500: 113 113 122;
+  --z-600: 82 82 91;
+  --z-700: 63 63 70;
+  --z-800: 39 39 42;
+  --z-900: 24 24 27;
+  --z-950: 9 9 11;
+
+  --sky-400: 56 189 248;
+  --sky-500: 14 165 233;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-500: 245 158 11;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --red-500: 239 68 68;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+
+  /* Chart marks, which are set in inline styles rather than utilities. */
+  --chart-now: #a1a1aa;
+  --chart-plan: #e0d000;
+  --chart-muted: #52525b;
+  /* The 2px ring that keeps overlapping marks legible has to BE the surface
+     underneath them, so it changes with the theme. */
+  --chart-ring: #18181b;
+  --macro-protein: #38bdf8;
+  --macro-carbs: #f59e0b;
+  --macro-fat: #ef4444;
+  --band-healthy: rgba(52, 211, 153, 0.1);
+  --band-healthy-edge: rgba(52, 211, 153, 0.35);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Text, darkest first. 400 is 7.4:1 on white and 500 is 5.2:1, so the two
+     steps carrying almost all the body copy clear AA comfortably. 600 is a
+     3.3:1 hint step, only ever used for asides that repeat something already
+     stated above them. */
+  --z-50: 9 9 11;
+  --z-100: 24 24 27;
+  --z-200: 39 39 42;
+  --z-300: 63 63 70;
+  --z-400: 82 82 91;
+  --z-500: 107 107 116;
+  --z-600: 138 138 147;
+  /* Lines and chips. */
+  --z-700: 214 214 220;
+  --z-800: 234 234 238;
+  /* Surfaces: cards pure white, the page a shade off it, so a card reads as
+     raised without leaning on a shadow. */
+  --z-900: 255 255 255;
+  --z-950: 246 246 248;
+
+  --sky-400: 2 132 199;
+  --sky-500: 14 165 233;
+  --amber-300: 180 83 9;
+  --amber-400: 180 83 9;
+  --amber-500: 217 119 6;
+  --red-300: 185 28 28;
+  --red-400: 220 38 38;
+  --red-500: 239 68 68;
+  --emerald-400: 5 150 105;
+  --emerald-500: 16 185 129;
+
+  /* Validated against the white surface with the dataviz palette checker:
+     protein/carbs/fat clear CVD separation and the normal-vision floor, and
+     the carbs step's 2.86:1 is relieved by the direct labels printed under
+     every bar that uses it. "now" is deliberately gray — it is the
+     de-emphasised half of a before/after pair, and both ends are labelled. */
+  --chart-now: #71717a;
+  --chart-plan: #a68f00;
+  --chart-muted: #a1a1aa;
+  --chart-ring: #ffffff;
+  --macro-protein: #2563eb;
+  --macro-carbs: #ca8a04;
+  --macro-fat: #dc2626;
+  --band-healthy: rgba(5, 150, 105, 0.1);
+  --band-healthy-edge: rgba(5, 150, 105, 0.4);
+}
+
+/* Yellow type on white is unreadable at 1.1:1, so light mode swaps the brand
+   INK for a dark gold while every filled `bg-brand` keeps the real yellow —
+   which is what makes the light theme read as white-and-yellow rather than
+   white-and-olive. */
+:root[data-theme="light"] .text-brand {
+  color: #6f6100;
+}
+:root[data-theme="light"] .hover\:text-brand:hover {
+  color: #6f6100;
+}
+
 @layer base {
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
