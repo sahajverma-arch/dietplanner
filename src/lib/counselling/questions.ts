@@ -837,20 +837,6 @@ const S4: Section = {
       showIf: (a) => is(a, "gender", "Female"),
       note: "Several of these drive appetite and water retention on their own — worth knowing before a stall gets blamed on the plan.",
     },
-
-    // CARRIED OVER from the pre-v3.0 bank. v3.0 Section 1 has no equivalent,
-    // and each of these is the sole trigger for a clinical red flag that would
-    // otherwise stop firing entirely (see scripts/tests/clinical-rules.test.mts).
-    {
-      id: "cr1", tag: "clinical", type: "multi",
-      label: "Clinical reflection — your selection",
-      options: [
-        "No major clinical limitation identified", "Diet requires clinical modification",
-        "Blood-report review required", "Medical instruction affects planning",
-        "Digestive strategy required", "Allergy restriction required",
-        "Doctor clearance should be considered", "Senior Dietitian review required",
-      ],
-    },
   ],
 };
 
@@ -2388,7 +2374,7 @@ const REQUIRED_IDS = new Set<string>([
   // 2 — Body & transformation history
   "q9_age", "q9_height", "q9_weight", "q10", "q12", "q13", "q14",
   // 3 — Medical & clinical safety
-  "q17", "q19", "q19a", "q20", "q21", "q22", "cr1",
+  "q17", "q19", "q19a", "q20", "q21", "q22",
   // 4 — Digestion & tolerance
   "q23", "q25", "q27",
   // 5 — Actual food day

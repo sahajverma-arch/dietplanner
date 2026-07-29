@@ -339,10 +339,15 @@ const RULES: { when: (a: Answers) => boolean; flag: Omit<RedFlag, "id"> }[] = [
   },
   {
     when: (a) =>
+      // cr1 is no longer asked — the clinical-reflection question was removed
+      // from the form — but counsellings already on file answered it, and a
+      // recorded clearance decision must not stop escalating because the
+      // question that captured it is gone.
       hasAnyOf(a, "cr1", [
         "Doctor clearance should be considered", "Senior Dietitian review required",
       ]) ||
-      // v3.0 records the same decision on Q19's dietitian safety call.
+      // Live counsellings record the same decision on Q19's dietitian safety
+      // call, which is what fires this now.
       isOneOf(a, "q21c", ["Doctor Clearance Recommended", "Clinical Dietitian Review"]),
     flag: {
       label: "Clinical reflection: clearance / senior review",
