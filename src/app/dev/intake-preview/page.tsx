@@ -15,6 +15,7 @@
 import { useState } from "react";
 import { notFound } from "next/navigation";
 import { ProteinIntakePanel } from "@/components/ClinicalCounsellingForm";
+import RoadmapButton from "@/components/RoadmapButton";
 import type { Answers } from "@/lib/counselling/questions";
 import { PRIYA, RAHUL, SNEHA, AADI } from "../../../../scripts/test-clients";
 
@@ -54,7 +55,13 @@ export default function IntakePreviewPage() {
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-500">{CLIENTS[i].note}</p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-zinc-500">{CLIENTS[i].note}</p>
+        {/* The same button the counselling form's header carries, on the same
+            finished answers — the roadmap needs height, weight, age/sex and the
+            category, which is four sections apart in a real consultation. */}
+        <RoadmapButton answers={CLIENTS[i].answers} />
+      </div>
 
       <ProteinIntakePanel answers={CLIENTS[i].answers} />
     </main>

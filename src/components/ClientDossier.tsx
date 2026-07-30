@@ -11,7 +11,7 @@ import { variantIntake, macrosOf, variantLabel } from "@/lib/counselling/meal-va
 import { missingRequired, val, list, type Answers } from "@/lib/counselling/questions";
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
-import { roadmapFor, roadmapNeeds } from "@/lib/counselling/roadmap-input";
+import { roadmapAtGoal, roadmapFor, roadmapNeeds } from "@/lib/counselling/roadmap-input";
 import FitnessScore from "./FitnessScore";
 import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
@@ -77,6 +77,7 @@ export default function ClientDossier({
   const fitness = useMemo(() => fitnessAssessment(answers), [answers]);
   const form = useMemo(() => toIntake(answers, appointmentId), [answers, appointmentId]);
   const roadmap = useMemo(() => roadmapFor(answers), [answers]);
+  const atGoal = useMemo(() => roadmapAtGoal(answers, roadmap), [answers, roadmap]);
   const roadmapMissing = useMemo(() => (roadmap ? [] : roadmapNeeds(answers)), [roadmap, answers]);
 
   const name = val(answers, "name").trim() || "This client";
@@ -122,7 +123,7 @@ export default function ClientDossier({
       {escalations.length > 0 && <Escalations flags={escalations} />}
 
       {roadmap ? (
-        <RoadmapPanel roadmap={roadmap} />
+        <RoadmapPanel roadmap={roadmap} atGoal={atGoal} />
       ) : (
         roadmapMissing.length > 0 && (
           <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-xs text-zinc-400">

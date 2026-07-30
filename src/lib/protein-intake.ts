@@ -701,7 +701,7 @@ const isFatLoss = (a: Answers): boolean =>
  * condition, or an explicit protein limit written into the hard constraints.
  * Never auto-raises past these; the dietitian decides with the doctor.
  */
-function medicalProteinCap(a: Answers): string | null {
+export function medicalProteinCap(a: Answers): string | null {
   const conditions = [...list(a, "q17"), ...list(a, "q18")].join(" ").toLowerCase();
   if (/kidney|renal|nephro|dialysis|liver|hepatic|cirrhosis/.test(conditions)) {
     return "kidney or liver condition recorded";

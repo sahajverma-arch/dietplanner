@@ -18,7 +18,7 @@
 // maintain.
 
 /** Bumped whenever a constant below changes, and stored with each roadmap. */
-export const ENGINE_VERSION = "1.0";
+export const ENGINE_VERSION = "1.1";
 
 export type Category = 1 | 2 | 3 | 4;
 
@@ -142,6 +142,33 @@ export const CARB_FLOOR_G = 100;
 export const ADJUSTED_WEIGHT_FROM_BMI = BMI_OBESE;
 export const ADJUSTED_WEIGHT_FACTOR = 0.25;
 
+// --- Step 5 constants: the protein ramp -------------------------------------
+
+/**
+ * Protein is a requirement, but it is not a requirement anyone meets on week 1.
+ *
+ * The standards companion sets the destination (g/kg, by category) and says
+ * nothing at all about how a client gets there — so a client measured at 20 g a
+ * day was handed their full 91 g target in week 1. That is a fourfold overnight
+ * change in what someone eats, and it is precisely the restrictive jump the
+ * counselling's dropout and restriction questions exist to predict.
+ *
+ * This ladder closes a quarter of the REMAINING gap each week, so the steps
+ * start large and taper: 20 → 35 → 45 → 55 → 60 → 65 → 70 → 75 → 80. That is
+ * the shape adherence actually follows — the first change is the easy one, and
+ * the last few grams are the ones that need the habit already in place.
+ *
+ * It applies to all four categories. The category decides the DESTINATION; it
+ * has never had anything to say about the speed of approach, and two clients
+ * eating the same 20 g today face the same practical problem tomorrow whatever
+ * brought them in.
+ */
+export const PROTEIN_STEP_SHARE = 0.25;
+/** No single week raises protein by more than this, however wide the gap. */
+export const PROTEIN_STEP_CAP_G = 20;
+/** Steps land on a multiple of this — "eat 47.3 g" is not an instruction. */
+export const PROTEIN_STEP_ROUND_G = 5;
+
 // ---------------------------------------------------------------------------
 
 export interface RoadmapInput {
@@ -162,6 +189,17 @@ export interface RoadmapInput {
   weeksOnCurrentPlan?: number | null;
   /** Category 2 only: weeks the weight has not moved. */
   weeksStagnant?: number | null;
+  /**
+   * Why protein must NOT be raised for this client, when that applies.
+   *
+   * A recorded kidney or liver condition, or a protein limit written into the
+   * clinical constraints. The engine cannot read this off the numbers, so it
+   * arrives as an explicit input the same way the category does — and when it
+   * is set the ladder does not run at all. Raising protein 1.9 g/kg on a renal
+   * client because a category was selected would be the most consequential
+   * thing this file could get wrong.
+   */
+  proteinCapReason?: string | null;
 }
 
 export interface CaloriePhase {
@@ -212,6 +250,14 @@ export interface Roadmap {
   dosingWeightKg: number;
   usedAdjustedWeight: boolean;
   macros: { protein_g: number; fat_g: number; carbs_g: number; fibre_g: number };
+  /**
+   * One protein target per week, from what the client eats now to the
+   * requirement. The last rung is always `macros.protein_g`; a week past the
+   * end of the ladder holds it.
+   */
+  proteinPath: number[];
+  /** The g/kg requirement before any medical hold, for the record. */
+  proteinRequirementG: number;
   /** What the coach has to be told before this plan is handed over. */
   warnings: RoadmapWarning[];
   /** Category 2's verdict, when it applies. */
@@ -220,6 +266,52 @@ export interface Roadmap {
 
 const round = (n: number) => Math.round(n);
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * The weekly protein targets, from what the client eats now to what they need.
+ *
+ *   PG  = target − current
+ *   WPI = MIN(PG × 0.25, 20 g), rounded to the nearest 5 g
+ *
+ * recomputed each week against the gap that is left, which is what makes the
+ * steps taper. With nothing measured, or a client already at or above the
+ * requirement, there is no ramp to build and the target applies from week 1.
+ */
+export function proteinLadder(currentG: number | null, targetG: number): number[] {
+  if (currentG === null || currentG <= 0 || currentG >= targetG) return [targetG];
+
+  const rungs: number[] = [];
+  let at = currentG;
+  // Each pass closes at least PROTEIN_STEP_ROUND_G, so this terminates far
+  // inside the bound. The bound is for a constant edited to zero, not for any
+  // client who could walk through the door.
+  while (at < targetG && rungs.length < 52) {
+    const gap = targetG - at;
+    const raw = Math.min(gap * PROTEIN_STEP_SHARE, PROTEIN_STEP_CAP_G);
+    let step = Math.round(raw / PROTEIN_STEP_ROUND_G) * PROTEIN_STEP_ROUND_G;
+    // Rounding to 5 g stalls the ladder one rung short of the destination: at a
+    // 5 g gap the step computes 1.25 g and rounds to nothing, so the client
+    // would sit below their requirement permanently. A step that cannot round
+    // up closes the gap instead — the last rung is always the target.
+    if (step <= 0 || step >= gap) step = gap;
+    at += step;
+    rungs.push(round(at));
+  }
+  return rungs;
+}
+
+/**
+ * The first week nothing moves any more: calories at their steady state and
+ * protein at the requirement.
+ *
+ * The protein ladder usually outlasts the calorie phases — a 60 g gap takes
+ * eight weeks to close while a transition takes two — so this is the later of
+ * the two, and it is the week the summary shows as the destination.
+ */
+export function settleWeek(roadmap: Roadmap): number {
+  const lastPhase = roadmap.phases[roadmap.phases.length - 1];
+  return Math.max(lastPhase.fromWeek, roadmap.proteinPath.length);
+}
 
 /** The clinical band for a BMI, on Asian-Indian cut-offs. */
 export function band(bmi: number): string {
@@ -261,7 +353,11 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
   // --- Step 1: target weight ------------------------------------------------
   const targetWeightKg = BMI_TARGET * m ** 2;
   const healthyRangeKg = { low: BMI_NORMAL_LOW * m ** 2, high: BMI_RANGE_HIGH * m ** 2 };
-  const weightToLoseKg = Math.max(0, weightKg - targetWeightKg);
+  // Rounded before the timeline is derived from it, not after. Rounding only on
+  // the way out let a client sit 40 g above their unrounded target and be shown
+  // "0 kg to lose" beside a timeline of several weeks — the two figures have to
+  // come from the same number to agree.
+  const weightToLoseKg = round1(Math.max(0, weightKg - targetWeightKg));
 
   // A weight-loss prescription for an underweight client is a foreseeable
   // harm, and a low BMI in someone presenting for weight loss is a signal that
@@ -310,7 +406,31 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
     ? targetWeightKg + ADJUSTED_WEIGHT_FACTOR * (weightKg - targetWeightKg)
     : weightKg;
 
-  const protein_g = round(meta.proteinPerKg * dosingWeightKg);
+  const proteinRequirementG = round(meta.proteinPerKg * dosingWeightKg);
+
+  // A medical hold outranks the requirement: the g/kg bands assume kidneys and
+  // a liver that can clear the load. Held at what the client already eats,
+  // because that intake is at least known to be tolerated.
+  const measuredProteinG =
+    input.currentProteinG && input.currentProteinG > 0 ? Math.round(input.currentProteinG) : null;
+  const holdReason = input.proteinCapReason ?? null;
+
+  if (holdReason) {
+    warnings.push({
+      id: "protein-held",
+      label: "Protein held — not raised toward the g/kg band",
+      detail: measuredProteinG
+        ? `${holdReason}. Held at the measured ${measuredProteinG} g/day instead of the ${proteinRequirementG} g the band would give. Any increase comes from the treating doctor, not from here.`
+        : `${holdReason}, and no intake was measured to hold at. Do not issue this plan until the protein limit is confirmed with the treating doctor — the ${proteinRequirementG} g below is the band's figure, not a safe one for this client.`,
+      stop: false,
+    });
+  }
+
+  const protein_g = holdReason ? (measuredProteinG ?? proteinRequirementG) : proteinRequirementG;
+
+  // The route to the requirement, one rung per week. A held client has no
+  // route — their target is where they already are.
+  const proteinPath = holdReason ? [protein_g] : proteinLadder(measuredProteinG, protein_g);
 
   // The floor overrides the percentage, because a percentage-based allocation
   // collapses at low calorie targets — and it is dosed on ACTUAL weight, since
@@ -363,7 +483,7 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
     band: bandName,
     targetWeightKg: round1(targetWeightKg),
     healthyRangeKg: { low: round1(healthyRangeKg.low), high: round1(healthyRangeKg.high) },
-    weightToLoseKg: round1(weightToLoseKg),
+    weightToLoseKg,
     milestone5pctKg: round1(weightKg * 0.05),
     timeline,
     targetKcal,
@@ -371,6 +491,8 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
     dosingWeightKg: round1(dosingWeightKg),
     usedAdjustedWeight,
     macros: { protein_g, fat_g, carbs_g, fibre_g },
+    proteinPath,
+    proteinRequirementG,
     warnings,
     ...(adaptation ? { adaptation } : {}),
   };
@@ -621,12 +743,19 @@ function adaptationVerdict(
 /**
  * The phase a given week falls in, and the macros to build that week to.
  *
- * Protein and fat do NOT scale with the phase: they are requirements, computed
- * once at the steady-state target. A transition or diet-break week is carrying
- * extra ENERGY, and the spec is explicit about where extra energy goes — into
+ * Fat does NOT scale with the phase: it is a requirement computed once at the
+ * steady-state target, and its floor is a hormonal one that does not care which
+ * week it is. Protein has a requirement too, but it also has a route — a client
+ * cannot eat their target on week 1 just because the arithmetic says so — so it
+ * follows the ladder and arrives over several weeks.
+ *
+ * Carbohydrate absorbs both. A transition or diet-break week is carrying extra
+ * ENERGY, and the spec is explicit about where extra energy goes: into
  * carbohydrate, which is what refills glycogen and what the hormonal response
- * is most sensitive to. So carbohydrate absorbs the difference and the residual
- * is recomputed for the week actually being planned.
+ * is most sensitive to. A week still low on the protein ladder frees up energy
+ * for the same reason. So the residual is recomputed for the week actually
+ * being planned, which is what keeps every week's macros summing to its
+ * calories instead of to the steady state's.
  */
 export function weekTargets(
   roadmap: Roadmap,
@@ -635,7 +764,11 @@ export function weekTargets(
   const phase =
     roadmap.phases.find((p) => week >= p.fromWeek && (p.toWeek === null || week <= p.toWeek)) ??
     roadmap.phases[roadmap.phases.length - 1];
-  const { protein_g, fat_g } = roadmap.macros;
+  const { fat_g } = roadmap.macros;
+  const path = roadmap.proteinPath;
+  // Week 0 or a negative week is a caller bug, not a client; clamp rather than
+  // return undefined and price a plan against NaN.
+  const protein_g = path[Math.min(Math.max(1, Math.floor(week)), path.length) - 1];
   const carbs_g = Math.max(0, Math.round((phase.kcal - protein_g * 4 - fat_g * 9) / 4));
   return { phase, kcal: phase.kcal, protein_g, fat_g, carbs_g };
 }

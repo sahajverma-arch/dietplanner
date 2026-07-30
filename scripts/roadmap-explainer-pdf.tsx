@@ -140,15 +140,20 @@ const Head = ({ w, children }: { w: string; children: React.ReactNode }) => (
   </View>
 );
 
-const Footer = ({ page }: { page: string }) => (
+// The engine version is read, never typed: a footer claiming v1.0 on a document
+// generated from v1.1 is the exact drift this script exists to make impossible.
+const Footer = ({ page, version }: { page: string; version: string }) => (
   <View style={s.footer} fixed>
-    <Text>LEANR · Diet engine v1.0 — implementation of the Fitelo/Fitty Standards Companion v1.0</Text>
+    <Text>
+      LEANR · Diet engine v{version} — implementation of the Fitelo/Fitty Standards Companion v1.0
+    </Text>
     <Text>{page}</Text>
   </View>
 );
 
 async function main() {
-  const { buildRoadmap, weekTargets, CATEGORIES } = await import("../src/lib/roadmap");
+  const { buildRoadmap, weekTargets, proteinLadder, settleWeek, CATEGORIES, ENGINE_VERSION } =
+    await import("../src/lib/roadmap");
   const { roadmapFor } = await import("../src/lib/counselling/roadmap-input");
   const { estimateProteinIntake } = await import("../src/lib/protein-intake");
   const { energyEstimate } = await import("../src/lib/counselling/energy");
@@ -223,6 +228,7 @@ async function main() {
     ["2", "Timeline", "Weight to lose ÷ (0.5–1.0% of body weight per week). Reported as a range, never a date.", "§5"],
     ["3", "Calories", "By category (see page 1). Never below BMR — below resting requirement a nutritionally adequate Indian plate cannot be built without dropping a whole food group.", "§6"],
     ["4", "Macros", "Protein first (band × dosing weight), then fat (greater of 25% of energy and 0.7 g/kg), then carbohydrate as the residual. Fibre 15 g/1,000 kcal, floored at 30 and capped at 45.", "§7"],
+    ["4b", "Protein ramp", "The band is the destination, not week 1. Each week closes a quarter of the remaining gap — capped at 20 g, rounded to 5 g — from what the client measurably eats now up to the requirement. Carbohydrate absorbs whatever protein has not yet claimed.", "ours"],
     ["5", "The report", "Flags travel with the numbers and are read first. The current-versus-target delta is what makes it coachable.", "§8"],
   ];
 
@@ -313,6 +319,32 @@ async function main() {
           ISSN 1.4–2.0 band. Category 4 has no deficit to defend against.
         </Text>
 
+        <Text style={s.h3}>
+          Getting to the band is a ramp, not a step (ours — the companion is silent)
+        </Text>
+        <Text style={s.p}>
+          The companion sets the destination and says nothing about the route, which left a client
+          measured at {worked.current!.protein_g} g/day being handed their full{" "}
+          {worked.macros.protein_g} g target in week 1. That is the restrictive jump the
+          counselling&rsquo;s dropout and restriction questions exist to predict, so the engine now
+          walks it up instead:
+        </Text>
+        <Text style={[s.code, { marginBottom: 3 }]}>
+          weekly increase = MIN(remaining gap × 0.25, 20 g), rounded to the nearest 5 g
+        </Text>
+        <Text style={s.p}>
+          Recomputed each week against the gap that is left, so the steps start large and taper —
+          for this client {worked.current!.protein_g} →{" "}
+          {proteinLadder(worked.current!.protein_g, worked.macros.protein_g).join(" → ")} g, arriving
+          in week {settleWeek(worked)}. The shape matches how adherence actually behaves: the first
+          change is the easy one, and the last few grams need the habit already in place. A step that
+          would round to nothing closes the gap instead, so the ladder always reaches the
+          requirement rather than stalling one rung short of it. It applies to all four categories —
+          the category decides where a client is going, never how fast they can get there — and it
+          does not run at all where a kidney or liver condition, or a recorded protein limit, means
+          protein must be held where it is.
+        </Text>
+
         <Text style={s.h3}>Heavier clients are dosed on adjusted body weight (§7.2)</Text>
         <Text style={[s.code, { marginBottom: 3 }]}>
           adjusted = ideal + 0.25 × (actual − ideal), where ideal = BMI 21 × height²
@@ -326,7 +358,7 @@ async function main() {
           instead.
         </Text>
 
-        <Footer page="Page 1 of 3" />
+        <Footer page="Page 1 of 3" version={ENGINE_VERSION} />
       </Page>
 
       {/* ---------------------------------------------------------------- 2 */}
@@ -424,7 +456,7 @@ async function main() {
           on each of these, but nothing yet blocks generation on them.
         </Text>
 
-        <Footer page="Page 2 of 3" />
+        <Footer page="Page 2 of 3" version={ENGINE_VERSION} />
       </Page>
 
       {/* ---------------------------------------------------------------- 3 */}
@@ -576,7 +608,7 @@ async function main() {
           </Text>
         </View>
 
-        <Footer page="Page 3 of 3" />
+        <Footer page="Page 3 of 3" version={ENGINE_VERSION} />
       </Page>
     </Document>
   );

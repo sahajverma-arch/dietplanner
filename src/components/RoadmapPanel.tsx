@@ -1,4 +1,5 @@
-import { weekTargets, type Roadmap } from "@/lib/roadmap";
+import { settleWeek, weekTargets, type Roadmap } from "@/lib/roadmap";
+import RoadmapGoalBlock from "./RoadmapGoalBlock";
 
 /** The horizon the summary shows. A month is what a client can picture. */
 const WEEKS = [1, 2, 3, 4];
@@ -12,7 +13,14 @@ const WEEKS = [1, 2, 3, 4];
  * macros that follow. Nothing here was written by the model; it is all derived
  * from the counselling by src/lib/roadmap.ts.
  */
-export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
+export default function RoadmapPanel({
+  roadmap,
+  atGoal = null,
+}: {
+  roadmap: Roadmap;
+  /** The same client projected at their target weight; see roadmapAtGoal(). */
+  atGoal?: Roadmap | null;
+}) {
   const stops = roadmap.warnings.filter((w) => w.stop);
   const cautions = roadmap.warnings.filter((w) => !w.stop);
   const { macros } = roadmap;
@@ -51,7 +59,20 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
           value={roadmap.timeline ? `${roadmap.timeline.fastestWeeks}–${roadmap.timeline.slowestWeeks}` : "—"}
           sub={roadmap.timeline ? "weeks, at 0.5–1.0%/week" : "no loss required"}
         />
-        <Cell label="Daily target" value={`${roadmap.targetKcal}`} sub="kcal, steady state" accent />
+        {/* "Steady state" meant "after any transition or ramp phase" — engine
+            vocabulary that reads as "her settled long-term intake", which made
+            the higher maintenance figure in the goal block below look like a
+            contradiction rather than the end of the diet. */}
+        <Cell
+          label="Daily target"
+          value={`${roadmap.targetKcal}`}
+          sub={
+            roadmap.tdee > roadmap.targetKcal
+              ? `kcal a day while losing`
+              : `kcal a day, maintenance`
+          }
+          accent
+        />
       </div>
 
       {/* The first four weeks, week by week.
@@ -68,7 +89,12 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
           {WEEKS.map((w) => {
             const t = weekTargets(roadmap, w);
             const previous = w > 1 ? weekTargets(roadmap, w - 1) : null;
-            const changed = previous !== null && previous.kcal !== t.kcal;
+            // Protein counts as a change too. It was climbing 55 → 60 → 65 → 70
+            // across these blocks with none of them flagged, because only
+            // calories were compared.
+            const changed =
+              previous !== null &&
+              (previous.kcal !== t.kcal || previous.protein_g !== t.protein_g);
             const deficit = Math.round(((roadmap.tdee - t.kcal) / roadmap.tdee) * 100);
             return (
               <div
@@ -133,6 +159,7 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
             );
           })}
         </ol>
+        <RoadmapGoalBlock roadmap={roadmap} atGoal={atGoal} />
       </div>
 
       <DeltaTable roadmap={roadmap} />
@@ -204,14 +231,24 @@ export default function RoadmapPanel({ roadmap }: { roadmap: Roadmap }) {
 function DeltaTable({ roadmap }: { roadmap: Roadmap }) {
   const now = roadmap.current;
   if (!now) return null;
-  const target = weekTargets(roadmap, roadmap.phases[roadmap.phases.length - 1].fromWeek);
+  // The week everything has arrived, not the last calorie phase: protein
+  // usually keeps climbing for weeks after calories have settled, and reading
+  // the destination off the calorie phase reported a protein figure that was
+  // still mid-ramp as though it were the target.
+  const target = weekTargets(roadmap, settleWeek(roadmap));
   const first = weekTargets(roadmap, 1);
-  // Only worth showing the middle step when it is genuinely a step.
-  const via = first.kcal !== target.kcal ? first.kcal : null;
+  // Only worth showing the middle step where it is genuinely a step.
+  const step = (from: number, to: number) => (from !== to ? from : null);
 
   const rows: { label: string; from: number; via: number | null; to: number; unit: string }[] = [
-    { label: "Energy", from: now.kcal, via, to: target.kcal, unit: "kcal" },
-    { label: "Protein", from: now.protein_g, via: null, to: target.protein_g, unit: "g" },
+    { label: "Energy", from: now.kcal, via: step(first.kcal, target.kcal), to: target.kcal, unit: "kcal" },
+    {
+      label: "Protein",
+      from: now.protein_g,
+      via: step(first.protein_g, target.protein_g),
+      to: target.protein_g,
+      unit: "g",
+    },
     { label: "Carbohydrate", from: now.carbs_g, via: null, to: target.carbs_g, unit: "g" },
     { label: "Fat", from: now.fat_g, via: null, to: target.fat_g, unit: "g" },
   ];

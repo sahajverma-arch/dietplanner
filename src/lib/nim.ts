@@ -1273,14 +1273,28 @@ function measuredProteinTarget(intake: IntakeForm): number | null {
  * still have to generate — they fall back to the measured-intake progression
  * below.
  */
-function planRoadmap(intake: IntakeForm): Roadmap | null {
+function planRoadmap(intake: IntakeForm, weightKg?: number | null): Roadmap | null {
   const answers = (intake as IntakeForm & { answers?: Answers }).answers;
   if (!answers || typeof answers !== "object") return null;
-  const roadmap = roadmapFor(answers);
+  const roadmap = roadmapFor(answers, { weightKg });
   // A stop is a stop: an underweight client or an impossible TDEE must not
   // have a prescription computed FROM the very numbers that are wrong.
   return roadmap && !roadmap.warnings.some((w) => w.stop) ? roadmap : null;
 }
+
+/**
+ * The weight to compute this week's prescription from.
+ *
+ * The follow-up for the week being planned, when there is one — it was recorded
+ * at the start of that week, which is exactly the weight the week should be
+ * built for. Falls back to the counselling: week 1 has no follow-up, and
+ * regenerating an older week must not re-base it on a weight from later than
+ * the week itself.
+ */
+const planWeightKg = (ctx: PlanContext): number | null => {
+  const recorded = Number(ctx.followup?.weightKg);
+  return Number.isFinite(recorded) && recorded > 0 ? recorded : null;
+};
 
 /**
  * The engine's numbers, stated to the model as fixed.
@@ -1290,14 +1304,20 @@ function planRoadmap(intake: IntakeForm): Roadmap | null {
  * Overriding numbers it never saw leaves the prose arguing for a different
  * plan than the one the client actually receives.
  */
-function prescriptionBlock(intake: IntakeForm, week: number): string {
-  const roadmap = planRoadmap(intake);
+function prescriptionBlock(ctx: PlanContext): string {
+  const { intake, week } = ctx;
+  const roadmap = planRoadmap(intake, planWeightKg(ctx));
   if (!roadmap) return "";
   const t = weekTargets(roadmap, week);
   const lines = [
     `\n\nPRESCRIPTION — computed by the clinical engine from this client's own measurements. These numbers are FIXED. Do not adjust them, do not round them, and make sure your strategy text is consistent with them:`,
     `- Daily calories: ${t.kcal}`,
-    `- Protein: ${t.protein_g} g (${roadmap.category.proteinPerKg} g/kg on ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adjusted body weight" : ""})`,
+    // On a ramping week the g/kg basis would read as a contradiction — 35 g is
+    // not 1.35 g/kg of anything — and a model handed a number it cannot derive
+    // tends to "correct" it back to the one it can.
+    t.protein_g === roadmap.macros.protein_g
+      ? `- Protein: ${t.protein_g} g (${roadmap.category.proteinPerKg} g/kg on ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adjusted body weight" : ""})`
+      : `- Protein: ${t.protein_g} g. This is week ${week} of a planned progression from the ${roadmap.current?.protein_g ?? "currently measured"} g/day this client eats now up to their ${roadmap.macros.protein_g} g requirement (${roadmap.category.proteinPerKg} g/kg on ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adjusted body weight" : ""}), raised in steps they can actually keep. Build to ${t.protein_g} g and do NOT pull the ${roadmap.macros.protein_g} g figure forward — the whole point of the progression is that this week is not that week.`,
     `- Fat: ${t.fat_g} g`,
     `- Carbohydrate: ${t.carbs_g} g`,
     `- Aim for at least ${roadmap.macros.fibre_g} g fibre.`,
@@ -1334,7 +1354,7 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
       role: "user",
       content:
         `Set the strategy and daily targets for the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
-        prescriptionBlock(intake, week) +
+        prescriptionBlock(ctx) +
         (previousPlan
           ? `\n\nLast week's meals (keep what worked, introduce sensible variety):\n${compactDays(previousPlan.days)}`
           : "") +
@@ -1355,7 +1375,10 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
   // 86 g target had a plan written to 92 g because the clinical review
   // mentioned 92 as a week-2 figure and the model pulled it forward. So the
   // numbers are applied here rather than requested.
-  const roadmap = planRoadmap(intake);
+  // Re-based on the weight recorded for THIS week, not the counselling's: a
+  // target computed once at 84 kg is a 17.5% deficit on day one and a 6% one by
+  // goal weight, which is a plateau the software would have manufactured.
+  const roadmap = planRoadmap(intake, planWeightKg(ctx));
   if (roadmap) {
     // The WEEK being planned, not the steady state: a first-timer's week 1 is
     // the transition, and building week 1 to the final target is exactly the

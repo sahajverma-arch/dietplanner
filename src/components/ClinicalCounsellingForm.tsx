@@ -20,6 +20,7 @@ import { audit, redFlags } from "@/lib/counselling/assessment";
 import MealVariantsInput from "./MealVariantsInput";
 import FitnessScore from "./FitnessScore";
 import IntakeOverride from "./IntakeOverride";
+import RoadmapButton from "./RoadmapButton";
 import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
 import {
   decodeStaplePick,
@@ -188,6 +189,7 @@ export default function ClinicalCounsellingForm({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <RoadmapButton answers={answers} />
           <button
             type="button"
             onClick={() => setShowScore((v) => !v)}

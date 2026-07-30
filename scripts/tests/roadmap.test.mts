@@ -12,6 +12,8 @@
 import {
   buildRoadmap,
   weekTargets,
+  proteinLadder,
+  settleWeek,
   band,
   categoryMeta,
   CATEGORIES,
@@ -206,14 +208,108 @@ check("week 2 is still the transition", weekTargets(worked, 2).kcal === 2249);
 check("week 3 is the full target", w3.kcal === 1898, `${w3.kcal} kcal`);
 check("a later week holds the target", weekTargets(worked, 40).kcal === 1898);
 check(
-  "protein does not scale with the phase — it is a requirement",
-  w1.protein_g === w3.protein_g && w1.fat_g === w3.fat_g,
-  `P${w1.protein_g}/${w3.protein_g}`
+  "fat does not scale with the phase — the hormone floor is not weekly",
+  w1.fat_g === w3.fat_g,
+  `F${w1.fat_g}/${w3.fat_g}`
+);
+
+// --- The protein ladder ------------------------------------------------------
+// WPI = MIN(remaining gap × 0.25, 20 g), rounded to the nearest 5 g, recomputed
+// each week against the gap that is left.
+check(
+  "the worked formula: 20 g toward 80 g steps to 35 g in week 1",
+  proteinLadder(20, 80)[0] === 35,
+  String(proteinLadder(20, 80)[0])
 );
 check(
-  "...so the extra energy goes to carbohydrate",
-  w1.carbs_g - w3.carbs_g === Math.round((2249 - 1898) / 4),
-  `${w3.carbs_g} -> ${w1.carbs_g} g`
+  "...and tapers to the target from there",
+  proteinLadder(20, 80).join(",") === "35,45,55,60,65,70,75,80",
+  proteinLadder(20, 80).join(",")
+);
+check(
+  "the last rung is always the requirement, never one step short",
+  [[20, 80], [26, 118], [50, 79], [12, 91], [78, 80]].every((pair) => {
+    const l = proteinLadder(pair[0], pair[1]);
+    return l[l.length - 1] === pair[1];
+  })
+);
+check(
+  "no week raises protein by more than 20 g",
+  proteinLadder(20, 200).every((rung, i, all) => rung - (i === 0 ? 20 : all[i - 1]) <= 20),
+  proteinLadder(20, 200).slice(0, 4).join(",")
+);
+check(
+  "every step is a round 5 g, bar the last one that closes the gap",
+  [[20, 80], [22, 80], [26, 118]].every((pair) => {
+    const l = proteinLadder(pair[0], pair[1]);
+    return l.slice(0, -1).every((rung, i) => (rung - (i === 0 ? pair[0] : l[i - 1])) % 5 === 0);
+  }),
+  proteinLadder(22, 80).join(",")
+);
+check(
+  "a client already at the requirement gets it from week 1",
+  proteinLadder(95, 91).join(",") === "91" && proteinLadder(91, 91).join(",") === "91"
+);
+check(
+  "nothing measured means no ramp to build",
+  proteinLadder(null, 91).join(",") === "91" && proteinLadder(0, 91).join(",") === "91"
+);
+
+// The ladder runs for all four categories — the category sets the destination,
+// not the speed of approach.
+for (const c of [1, 2, 3, 4] as const) {
+  const r = buildRoadmap({ ...WORKED, category: c, currentProteinG: 20 })!;
+  const w1 = weekTargets(r, 1).protein_g;
+  check(
+    `category ${c} ramps protein rather than jumping to the band`,
+    w1 > 20 && w1 < r.macros.protein_g && r.proteinPath[r.proteinPath.length - 1] === r.macros.protein_g,
+    `20 -> ${w1} -> ${r.macros.protein_g} g over ${r.proteinPath.length} wk`
+  );
+}
+
+const ramped = buildRoadmap({ ...WORKED, currentProteinG: 20 })!;
+check(
+  "the requirement is still the destination, not the week-1 figure",
+  ramped.macros.protein_g === 91 && ramped.proteinRequirementG === 91,
+  `${ramped.macros.protein_g} g`
+);
+check(
+  "a week past the ladder holds the requirement",
+  weekTargets(ramped, 40).protein_g === 91,
+  `${weekTargets(ramped, 40).protein_g} g`
+);
+check(
+  "the energy protein has not yet claimed goes to carbohydrate",
+  // Weeks 1 and 2 sit in the same calorie phase, so the only thing that moves
+  // between them is the protein rung — and it trades gram for gram with carbs.
+  weekTargets(ramped, 1).carbs_g - weekTargets(ramped, 2).carbs_g ===
+    weekTargets(ramped, 2).protein_g - weekTargets(ramped, 1).protein_g,
+  `P${weekTargets(ramped, 1).protein_g}/C${weekTargets(ramped, 1).carbs_g} -> P${weekTargets(ramped, 2).protein_g}/C${weekTargets(ramped, 2).carbs_g}`
+);
+check(
+  "...so every week's macros still sum to that week's calories",
+  [1, 2, 3, 5, 9].every((w) => {
+    const t = weekTargets(ramped, w);
+    return Math.abs(t.protein_g * 4 + t.fat_g * 9 + t.carbs_g * 4 - t.kcal) <= 3;
+  })
+);
+check(
+  "the settle week is the later of the ramp and the phases",
+  settleWeek(ramped) === ramped.proteinPath.length && settleWeek(ramped) > 3,
+  `week ${settleWeek(ramped)}`
+);
+
+// A medical hold outranks the band, on the engine path as well as the legacy one.
+const renal = buildRoadmap({ ...WORKED, currentProteinG: 20, proteinCapReason: "kidney or liver condition recorded" })!;
+check("a protein cap holds protein at the measured intake", renal.macros.protein_g === 20, `${renal.macros.protein_g} g`);
+check("...runs no ramp at all", renal.proteinPath.join(",") === "20", renal.proteinPath.join(","));
+check("...keeps the band on the record", renal.proteinRequirementG === 91);
+check("...and says so", renal.warnings.some((w) => w.id === "protein-held"));
+check(
+  "a cap with nothing measured refuses to look safe",
+  buildRoadmap({ ...WORKED, currentProteinG: null, proteinCapReason: "a protein limit is recorded" })!
+    .warnings.find((w) => w.id === "protein-held")!
+    .detail.includes("treating doctor")
 );
 const ramp = buildRoadmap({ ...WORKED, category: 3 })!;
 check(
