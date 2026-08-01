@@ -168,10 +168,13 @@ export default function RoadmapPanel({
           requirements, carbohydrate is what is left. */}
       <div className="mt-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-sm font-semibold">Macros at the target</h3>
+          {/* "Macros at the target" collided with the "at the target weight"
+              block above it — the same word for the calorie target and the goal
+              weight, stacked, showing different protein figures. */}
+          <h3 className="text-sm font-semibold">Macros while losing</h3>
           <span className="text-xs text-zinc-500">
-            protein {roadmap.category.proteinPerKg} g/kg on {roadmap.dosingWeightKg} kg
-            {roadmap.usedAdjustedWeight && " adjusted"}
+            at {roadmap.targetKcal} kcal · protein {roadmap.category.proteinPerKg} g/kg on{" "}
+            {roadmap.dosingWeightKg} kg{roadmap.usedAdjustedWeight && " adjusted"}
           </span>
         </div>
         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -257,7 +260,7 @@ function DeltaTable({ roadmap }: { roadmap: Roadmap }) {
     <div className="mt-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">What actually changes</h3>
-        <span className="text-xs text-zinc-500">measured now → the target</span>
+        <span className="text-xs text-zinc-500">measured now → while losing</span>
       </div>
       <div className="mt-2 space-y-1">
         {rows.map((r) => {

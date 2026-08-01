@@ -115,6 +115,24 @@ export default function RoadmapGoalBlock({
           21 would go on driving weight down. Nothing switches the client across automatically:
           re-counsel when they arrive.
         </p>
+
+        {/* The protein figure here will not match the one in "Macros while
+            losing", and the difference is not obvious: the band changes with the
+            category AND the dosing basis changes when BMI crosses 25. Two
+            unexplained protein numbers on one screen is what this spells out. */}
+        {atGoal.macros.protein_g !== roadmap.macros.protein_g && (
+          <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+            <strong className="text-zinc-300">
+              Protein reads {atGoal.macros.protein_g} g here, not the {roadmap.macros.protein_g} g
+              shown for the losing phase
+            </strong>{" "}
+            — two things move at once. The band goes {roadmap.category.proteinPerKg} →{" "}
+            {atGoal.category.proteinPerKg} g/kg with the change of category, and
+            {roadmap.usedAdjustedWeight && !atGoal.usedAdjustedWeight
+              ? ` dosing switches from ${roadmap.dosingWeightKg} kg adjusted body weight to the actual ${atGoal.dosingWeightKg} kg, because BMI is no longer 25 or above.`
+              : ` dosing weight goes ${roadmap.dosingWeightKg} → ${atGoal.dosingWeightKg} kg.`}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -29,7 +29,7 @@ const num = (a: Answers, id: string): number | null => {
  * so this multiplier must describe the REST of the day. Using a full
  * "very active" 1.9 here and then adding training on top double-counts the gym.
  */
-const NEAT_FACTOR: Record<string, number> = {
+export const NEAT_FACTOR: Record<string, number> = {
   "Mostly seated": 1.2,
   "Lightly active": 1.35,
   "Moderately active": 1.45,
@@ -38,7 +38,7 @@ const NEAT_FACTOR: Record<string, number> = {
 };
 
 /** Roughly what a training session adds per day, averaged across the week. */
-const KCAL_PER_SESSION = 250;
+export const KCAL_PER_SESSION = 250;
 
 export interface EnergyEstimate {
   /** Resting energy, Mifflin-St Jeor. Null when height/weight/age/sex missing. */

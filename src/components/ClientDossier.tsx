@@ -12,6 +12,7 @@ import { missingRequired, val, list, type Answers } from "@/lib/counselling/ques
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import { roadmapAtGoal, roadmapFor, roadmapNeeds } from "@/lib/counselling/roadmap-input";
+import { weekTargets } from "@/lib/roadmap";
 import FitnessScore from "./FitnessScore";
 import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
@@ -298,9 +299,19 @@ function KpiStrip({
   // must show. Leaving the measured-intake progression here put two different
   // protein targets on the same screen — 57 in the tile, 79 in the roadmap
   // directly below it — with nothing saying which one the client would get.
-  const proteinTargetG = roadmap ? roadmap.macros.protein_g : target.targetG;
+  //
+  // The tile says WEEK-1, so it has to be week 1. Once protein started ramping,
+  // reading macros.protein_g here showed the DESTINATION under a week-1 label —
+  // 79 g in the tile against P55 in the week 1 block immediately below, which is
+  // the same two-numbers problem in the opposite direction. The destination
+  // moves to the subtitle, where it belongs as the thing being walked toward.
+  const week1 = roadmap ? weekTargets(roadmap, 1) : null;
+  const proteinTargetG = week1 ? week1.protein_g : roadmap ? roadmap.macros.protein_g : target.targetG;
+  const ramping = roadmap !== null && week1 !== null && week1.protein_g !== roadmap.macros.protein_g;
   const proteinBasis = roadmap
-    ? `${roadmap.category.proteinPerKg} g/kg × ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adj" : ""}`
+    ? ramping
+      ? `step 1 of ${roadmap.proteinPath.length} → ${roadmap.macros.protein_g} g`
+      : `${roadmap.category.proteinPerKg} g/kg × ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adj" : ""}`
     : intake.gramsPerKg
       ? `now ${intake.gramsPerDay} g · ${intake.gramsPerKg} g/kg`
       : "g/day aim";
