@@ -11,7 +11,11 @@ import {
   type DietPlan,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
-import { reconcileNutrition } from "@/lib/nutrition-reconcile";
+import {
+  reconcileNutrition,
+  daysOverCeiling,
+  CALORIE_HARD_CEILING,
+} from "@/lib/nutrition-reconcile";
 import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
@@ -301,6 +305,25 @@ export async function POST(request: Request) {
         console.warn(
           "nutrition reconcile skipped:",
           topupError instanceof Error ? topupError.message : topupError
+        );
+      }
+
+      // The same refusal the stepped path makes. Both paths correct the same
+      // number of times for the same reason — a plan must not depend on which
+      // one generated it — so both must reject the same blowout.
+      const over = daysOverCeiling(plan);
+      if (over.length > 0) {
+        const list = over.map((d) => `${d.day} ${d.kcal} kcal`).join(", ");
+        console.error(`plan refused: ${over.length} day(s) over the calorie ceiling — ${list}`);
+        return NextResponse.json(
+          {
+            error:
+              `Generation refused: ${over.length} day${over.length > 1 ? "s" : ""} came out more than ` +
+              `${Math.round((CALORIE_HARD_CEILING - 1) * 100)}% over the ${Math.round(plan.daily_calories)} kcal target ` +
+              `(${list}) and the correction rounds could not bring them down. ` +
+              `Nothing was saved — generate again, and if it repeats, the target may be too low for the foods this client accepts.`,
+          },
+          { status: 422 }
         );
       }
     }

@@ -78,7 +78,12 @@ const over = reconcileNeed(highProtein);
 check("over-target protein days are caught", over.offTargetDays.length === 7);
 check(
   "and the instruction says to reduce, not add",
-  over.instructions.includes("OVER the measured week-1 target"),
+  // Checks the instruction's INTENT, not its phrasing: the wording moved off
+  // "the measured week-1 target" once protein became a rung on a ladder rather
+  // than a single measured figure, and a test that pins prose blocks the fix.
+  over.instructions.includes("OVER the 90 g target") &&
+    over.instructions.includes("shrink the concentrated protein portions"),
+  over.instructions.slice(over.instructions.indexOf("g protein"), over.instructions.indexOf("g protein") + 60)
 );
 // Comfortably above target but inside the band must still pass — the ceiling
 // is 1.25x, and a naturally protein-rich day is not a defect.

@@ -18,7 +18,12 @@ import {
   type PlanOverview,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
-import { acceptRevision, reconcileNeed } from "@/lib/nutrition-reconcile";
+import {
+  acceptRevision,
+  daysOverCeiling,
+  reconcileNeed,
+  CALORIE_HARD_CEILING,
+} from "@/lib/nutrition-reconcile";
 
 // Matches MAX_ROUNDS in nutrition-reconcile: both paths correct the same number
 // of times, so a plan does not depend on which one generated it.
@@ -592,8 +597,15 @@ async function step(supabase: Supa, planId: string) {
 
     // Another round, while it keeps helping. One was not enough: a plan
     // improved from deviation 1432 to 584 and still shipped 50% over target.
+    //
+    // A round that did not improve normally ends the loop — but not while a day
+    // is still over the hard ceiling. That plan cannot ship either way, so
+    // spending the remaining rounds on it is strictly better than stopping and
+    // refusing immediately.
     const round = gen.round + 1;
-    const stillOff = improved && round < MAX_CORRECTION_ROUNDS ? reconcileNeed(plan) : null;
+    const breaching = daysOverCeiling(plan).length > 0;
+    const stillOff =
+      (improved || breaching) && round < MAX_CORRECTION_ROUNDS ? reconcileNeed(plan) : null;
     if (stillOff?.needed) {
       console.log(`nutrition reconcile round ${round + 1}: ${stillOff.reason}`);
       const next: Generation = {
@@ -607,6 +619,30 @@ async function step(supabase: Supa, planId: string) {
       };
       await advance("days:0", { plan, generation: next });
       return reply("days:0", next);
+    }
+
+    // The correction loop has spent its rounds. A day still 20%+ over target is
+    // not a draft with a note on it — on a weight-loss plan it is a prescription
+    // to gain weight, and handing it to a dietitian as finished-looking work
+    // relies on them catching a badge. Refuse it the way an allergen is refused.
+    const over = daysOverCeiling(plan);
+    if (over.length > 0) {
+      // Nothing half-built is left behind pretending to be real work; the
+      // client and the counselling are untouched, so regenerating is one click.
+      await supabase.from("diet_plans").delete().eq("id", planId);
+      const list = over.map((d) => `${d.day} ${d.kcal} kcal`).join(", ");
+      console.error(`plan refused: ${over.length} day(s) over the calorie ceiling — ${list}`);
+      return NextResponse.json(
+        {
+          error:
+            `Generation refused: ${over.length} day${over.length > 1 ? "s" : ""} came out more than ` +
+            `${Math.round((CALORIE_HARD_CEILING - 1) * 100)}% over the ${Math.round(plan.daily_calories)} kcal target ` +
+            `(${list}) and ${MAX_CORRECTION_ROUNDS} correction rounds could not bring them down. ` +
+            `Nothing was saved — generate again, and if it repeats, the target may be too low for the foods this client accepts.`,
+          clientId: row.client_id,
+        },
+        { status: 422 }
+      );
     }
 
     const next: Generation = { ...gen, days: [] };

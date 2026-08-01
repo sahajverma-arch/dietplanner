@@ -19,6 +19,8 @@ import {
   bandsFor,
   dayCalories,
   dayProtein,
+  perMainMeal,
+  perSnack,
   type DayBands,
 } from "./day-targets";
 
@@ -46,7 +48,24 @@ import {
 // No day of a revision may exceed this multiple of the target, whatever the
 // deviation score says — a revision once smuggled 2823 kcal days past an
 // average-only gate on a weight-loss plan.
-const CALORIE_HARD_CEILING = 1.2;
+export const CALORIE_HARD_CEILING = 1.2;
+
+/**
+ * Days so far over target that the plan must not ship at all.
+ *
+ * A badge saying "1147 kcal over" on an otherwise finished-looking draft is not
+ * enough: a 2,816 kcal day on a 1,669 kcal weight-loss plan does not need
+ * reviewing, it needs rejecting. The correction loop is allowed three rounds to
+ * fix it; what survives that is a wrong plan, not a draft with a note on it.
+ */
+export function daysOverCeiling(plan: DietPlan): { day: string; kcal: number }[] {
+  const target = plan.daily_calories ?? 0;
+  if (!Number.isFinite(target) || target <= 0) return [];
+  const ceiling = target * CALORIE_HARD_CEILING;
+  return plan.days
+    .map((d) => ({ day: d.day, kcal: Math.round(dayCalories(d)) }))
+    .filter((d) => d.kcal > ceiling);
+}
 
 /**
  * Total distance from target across the week, on one kcal scale (protein grams
@@ -137,10 +156,16 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
         .slice(0, 2)
         .map((m) => `${m.name} (${Math.round(m.protein_g || 0)} g)`)
         .join(" and ");
+      // SWAP, not cut. Told only to reduce protein, the model removed the
+      // portions and left the calories to fall — then compensated somewhere
+      // else and blew a day past the ceiling, so the whole correction was
+      // rejected and the overshoot shipped (deviation 85 -> 1117). Naming the
+      // replacement is what makes the instruction executable.
+      const swapKcal = Math.round((protein - proteinTarget) * 4);
       gaps.push(
         `${Math.round(protein)} g protein (${Math.round(
           protein - proteinTarget
-        )} g OVER the measured week-1 target — reduce the protein portions in ${richest} toward the target. The target is the client's own recorded intake raised slightly on purpose; overshooting it is the jump this progression exists to avoid, not a bonus)`
+        )} g OVER the ${Math.round(proteinTarget)} g target, ceiling ${Math.round(bands.highP)} g — SWAP, do not simply cut: shrink the concentrated protein portions in ${richest} and put back roughly ${swapKcal} kcal of vegetables, roti, rice or fruit so the day's calories DO NOT drop. A day does not need dal AND curd AND paneer AND tofu — drop the extra source, keep the dal. That target is this week's step on a planned progression from the client's own measured intake; overshooting it is the restrictive jump the progression exists to avoid, not a bonus)`
       );
     }
     if (calories < bands.lowCal) {
@@ -152,10 +177,20 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
     } else if (calories > bands.highCal) {
       // Trimming must not undo the protein target, so name the levers: fats
       // and refined carbs come down first, protein foods stay.
+      //
+      // UNLESS the day is over on protein too. On a vegetarian Indian day the
+      // protein foods ARE the energy-dense ones — dal, curd, paneer — so
+      // "cut calories" and "do not cut protein foods" name the same items, and
+      // a model handed both instructions in one message satisfies neither. Once
+      // protein is over target, cutting those portions is the answer to both.
+      const alsoOverProtein = protein > bands.highP;
       gaps.push(
         `${Math.round(calories)} kcal (${Math.round(
           calories - calorieTarget
-        )} kcal OVER — reduce the most energy-dense portions: cooking oil/ghee, fried items, nuts, and rice/roti quantity. Do NOT cut protein foods (dal, curd, paneer, eggs, chicken) to achieve this)`
+        )} kcal OVER — reduce the most energy-dense portions: cooking oil/ghee, fried items, nuts, and rice/roti quantity.` +
+          (alsoOverProtein
+            ? ` This day is over on protein as well, so the oversized dal/curd/paneer/tofu portions named above are part of the excess — bringing them down to the protein target is what fixes both)`
+            : ` Do NOT cut protein foods (dal, curd, paneer, eggs, chicken) to achieve this)`)
       );
     }
     return `- ${day.day}: ${gaps.join("; ")}.`;
@@ -169,6 +204,9 @@ export function reconcileNeed(plan: DietPlan): ReconcileNeed {
     `${lines.join("\n")}\n` +
     `Fix ONLY the listed days, using genuine foods the client accepts ` +
     `(protein: curd, milk, paneer, tofu, soya, eggs, chicken as diet allows). ` +
+    `Protein is a CEILING as well as a floor — ${Math.round(bands.highP)} g is the most any day may carry, ` +
+    `and a day over it has missed the target just as a day under ${Math.round(bands.lowP)} g has. ` +
+    `Aim at roughly ${perMainMeal(proteinTarget)} g of protein per main meal and ${perSnack(proteinTarget)} g per snack. ` +
     `Every day must land within 10% of the calorie target — days marked SHORT must come up, ` +
     `days marked OVER must come down. Do not alter days that already meet the targets, ` +
     `keep every meal's calories consistent with its macros, and use realistic portions — ` +
