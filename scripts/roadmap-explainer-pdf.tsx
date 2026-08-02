@@ -217,7 +217,7 @@ async function main() {
     ["Height, weight", "Q7", "BMI band, target weight, weight to lose, timeline, fat floor"],
     ["Age, sex", "Q1, client details", "BMR (Mifflin-St Jeor) — the floor no target may go below"],
     ["Everyday activity", "Q54c", "The NEAT multiplier: ×1.2 seated → ×1.7 highly physical"],
-    ["Training days a week", "Q44a", "Added to TDEE at ~250 kcal per session, averaged over 7 days"],
+    ["Training days a week, intensity, duration", "Q44a, Q44e, Q44b", "kcal/session = (MET − 1) × weight × hours, added to TDEE averaged over 7 days"],
     ["The whole food day", "Meal options × days a week, staples, drinks", "Measured current intake — drives the transition trigger, the under-eating warning, and two of the three adaptation tests"],
     ["Client category", "Dietitian assessment", "Calorie strategy and protein band. The one judgement the engine cannot make."],
     ["Weeks on deficit / stagnant", "Dietitian assessment (Category 2 only)", "Adaptation tests 2 and 3"],

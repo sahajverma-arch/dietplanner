@@ -5,7 +5,7 @@
 // UI — 1,600 and 2,100 both look plausible on screen.
 //
 // Run: npx -y tsx scripts/tests/energy.test.mts
-import { energyEstimate, bmiBand } from "../../src/lib/counselling/energy";
+import { energyEstimate, bmiBand, kcalPerSession } from "../../src/lib/counselling/energy";
 import type { Answers } from "../../src/lib/counselling/questions";
 
 let failed = 0;
@@ -32,10 +32,13 @@ const seated = energyEstimate({ ...male, q54c: "Mostly seated" });
 check("sedentary TDEE is BMR x1.2", seated.tdee === Math.round(1780 * 1.2), String(seated.tdee));
 const active = energyEstimate({ ...male, q54c: "Highly physical" });
 check("activity level raises TDEE", (active.tdee ?? 0) > (seated.tdee ?? 0), `${seated.tdee} -> ${active.tdee}`);
-const trains = energyEstimate({ ...male, q54c: "Mostly seated", q44a: "7" });
+// Training kcal/session = (MET - 1) x weight x duration hours, not a flat
+// figure per day — an 80 kg client, "Moderate" (MET 5.0), "45–60 minutes"
+// (0.875 h): (5 - 1) x 80 x 0.875 = 280 kcal/session.
+const trains = energyEstimate({ ...male, q54c: "Mostly seated", q44a: "7", q44e: "Moderate", q44b: "45–60 minutes" });
 check(
-  "training adds on top, averaged over the week",
-  trains.tdee === Math.round(1780 * 1.2 + 250),
+  "training adds on top, by intensity x duration x weight",
+  trains.tdee === Math.round(1780 * 1.2 + 280),
   String(trains.tdee)
 );
 check(
@@ -43,6 +46,19 @@ check(
   energyEstimate({ ...male, q54c: "Mostly seated", q44a: "0" }).tdee === seated.tdee
 );
 check("an unanswered activity level falls back to sedentary", energyEstimate(male).activityFactor === 1.2);
+
+// kcalPerSession() directly: intensity and duration both move the figure,
+// and an unanswered or unrecognised value (blank, "Variable", "Not sure")
+// falls back to the same default (Light, 30-45 min) rather than erroring.
+check("hard, long session costs the most", kcalPerSession(80, "Hard", "60–90 minutes") === 600, String(kcalPerSession(80, "Hard", "60–90 minutes")));
+check("very light, short session costs the least", kcalPerSession(80, "Very light", "Less than 30 minutes") === 45, String(kcalPerSession(80, "Very light", "Less than 30 minutes")));
+check("unanswered intensity/duration falls back to Light, 30–45 min", kcalPerSession(80, "", "") === 100, String(kcalPerSession(80, "", "")));
+check("'Variable' and 'Not sure' use the same fallback as unanswered", kcalPerSession(80, "Not sure", "Variable") === kcalPerSession(80, "", ""));
+check(
+  "the resting hour (already inside BMR) is subtracted, not billed twice",
+  kcalPerSession(80, "Moderate", "60–90 minutes") === Math.round(5 * 80 * 1.25 - 80 * 1.25),
+  `net ${kcalPerSession(80, "Moderate", "60–90 minutes")} vs gross ${Math.round(5 * 80 * 1.25)}`
+);
 
 // Missing inputs must not produce a confident wrong number.
 for (const [label, a] of [

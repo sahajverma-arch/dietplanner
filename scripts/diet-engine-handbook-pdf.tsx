@@ -84,7 +84,7 @@ const Footer = ({ page, version }: { page: string; version: string }) => (
 
 async function main() {
   const R = await import("../src/lib/roadmap");
-  const { NEAT_FACTOR, KCAL_PER_SESSION } = await import("../src/lib/counselling/energy");
+  const { NEAT_FACTOR, INTENSITY_MET, DURATION_H } = await import("../src/lib/counselling/energy");
   const { roadmapFor, roadmapAtGoal } = await import("../src/lib/counselling/roadmap-input");
   const { PRIYA } = await import("./test-clients");
 
@@ -118,7 +118,8 @@ async function main() {
           ["Height, weight", "Q7 (q9_height, q9_weight)", "BMI, target weight, timeline, fat floor, protein dosing weight"],
           ["Age, sex", "q9_age, gender", "BMR — the floor no calorie target may go below"],
           ["Everyday activity", "q54c", "NEAT multiplier"],
-          ["Training days/week", "q44a", "Added to TDEE"],
+          ["Training days/week", "q44a", "How many sessions get added to TDEE"],
+          ["Session intensity, duration", "q44e, q44b", "kcal per session, with body weight"],
           ["Measured food day", "meals · staples · drinks", "Current kcal/protein/carbs/fat — transition trigger, warnings, protein ramp start"],
           ["Client category", "q76_category — DIETITIAN JUDGEMENT", "Calorie strategy and protein band. The one input the engine cannot measure."],
           ["Weeks on deficit / stagnant", "Category 2 only", "Adaptation tests 2 and 3"],
@@ -134,12 +135,20 @@ async function main() {
         <Text style={s.h2}>1 · Energy (src/lib/counselling/energy.ts)</Text>
         <Fx>
           BMR = 10·weight + 6.25·height − 5·age + (male ? +5 : −161){"\n"}
-          TDEE = BMR × NEAT + (training days × {KCAL_PER_SESSION}) ÷ 7
+          kcal/session = (MET − 1) × weight × hours{"\n"}
+          TDEE = BMR × NEAT + (training days × kcal/session) ÷ 7
         </Fx>
         <Text style={s.small}>
           NEAT by q54c: {Object.entries(NEAT_FACTOR).map(([k, v]) => `${k} ×${v}`).join(" · ")}. Low
           end of the usual range because training is counted separately — a full &ldquo;very
           active&rdquo; multiplier plus sessions would bill the gym twice.
+        </Text>
+        <Text style={s.small}>
+          MET by session intensity (q44e): {Object.entries(INTENSITY_MET).map(([k, v]) => `${k} ${v}`).join(" · ")}
+          — &ldquo;Variable&rdquo;/&ldquo;Not sure&rdquo;/unanswered fall back to Light. Hours by duration
+          (q44b): {Object.entries(DURATION_H).map(([k, v]) => `${k} ${v}h`).join(" · ")}. The −1 nets out the
+          resting hour the session occupies, since BMR already covers it — the gross MET figure would bill
+          that hour twice.
         </Text>
 
         <Text style={s.h2}>2 · BMI band and target weight</Text>

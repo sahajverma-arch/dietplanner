@@ -1,10 +1,12 @@
 // A 2-page proposal: counting steps and training intensity toward energy.
 //
-// PROPOSAL ONLY — nothing in src/ implements this yet. The rules below are
-// modelled locally, in this file, and every figure is computed at render time
-// from the four test clients and the real engine (buildRoadmap takes BMR and
-// TDEE as inputs, so the downstream effect on a prescription is the engine's
-// own arithmetic, not an estimate of it).
+// RULE 2 (session cost by intensity x duration x weight) IS NOW ADOPTED —
+// see kcalPerSession() in src/lib/counselling/energy.ts, which implements
+// exactly the formula and tables below. Rule 1 (steps replacing q54c for the
+// NEAT multiplier) is still just a proposal; nothing in src/ reads q106 yet.
+// This file's own model is left as originally drafted — a record of what was
+// proposed and approved — and does not import from energy.ts, so it keeps
+// running standalone even as the real implementation evolves.
 //
 // Run: npx -y tsx scripts/activity-energy-proposal-pdf.tsx
 
