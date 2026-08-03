@@ -347,7 +347,7 @@ function KpiStrip({
         value={energy.tdee ? String(energy.tdee) : "—"}
         sub={
           energy.activityFactor
-            ? `×${energy.activityFactor} activity${energy.trainingDays ? ` · ${energy.trainingDays} training days` : ""}`
+            ? `×${energy.activityFactor} activity${energy.trainingDays ? ` · ${energy.trainingDays} training days` : ""}${energy.tefKcal ? ` · +${energy.tefKcal} TEF` : ""}`
             : "needs the above"
         }
       />

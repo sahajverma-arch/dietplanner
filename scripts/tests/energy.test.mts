@@ -5,7 +5,7 @@
 // UI — 1,600 and 2,100 both look plausible on screen.
 //
 // Run: npx -y tsx scripts/tests/energy.test.mts
-import { energyEstimate, bmiBand, kcalPerSession } from "../../src/lib/counselling/energy";
+import { energyEstimate, bmiBand, kcalPerSession, TEF_SHARE } from "../../src/lib/counselling/energy";
 import type { Answers } from "../../src/lib/counselling/questions";
 
 let failed = 0;
@@ -27,9 +27,19 @@ check(
   (energyEstimate({ ...male, gender: "Female" }).bmr ?? 0) === 1780 - 166
 );
 
-// TDEE = BMR x activity, plus training averaged across the week.
+// TDEE = (BMR x activity, plus training averaged across the week) grossed up
+// for TEF, so the 10% share lands on the FINAL total, not the pre-TEF figure.
 const seated = energyEstimate({ ...male, q54c: "Mostly seated" });
-check("sedentary TDEE is BMR x1.2", seated.tdee === Math.round(1780 * 1.2), String(seated.tdee));
+check(
+  "sedentary TDEE is BMR x1.2, grossed up for TEF",
+  seated.tdee === Math.round((1780 * 1.2) / (1 - TEF_SHARE)),
+  String(seated.tdee)
+);
+check(
+  "TEF is exactly 10% of the total, not of the pre-TEF estimate",
+  seated.tefKcal === Math.round((seated.tdee ?? 0) * TEF_SHARE),
+  `${seated.tefKcal} vs 10% of ${seated.tdee}`
+);
 const active = energyEstimate({ ...male, q54c: "Highly physical" });
 check("activity level raises TDEE", (active.tdee ?? 0) > (seated.tdee ?? 0), `${seated.tdee} -> ${active.tdee}`);
 // Training kcal/session = (MET - 1) x weight x duration hours, not a flat
@@ -38,7 +48,7 @@ check("activity level raises TDEE", (active.tdee ?? 0) > (seated.tdee ?? 0), `${
 const trains = energyEstimate({ ...male, q54c: "Mostly seated", q44a: "7", q44e: "Moderate", q44b: "45–60 minutes" });
 check(
   "training adds on top, by intensity x duration x weight",
-  trains.tdee === Math.round(1780 * 1.2 + 280),
+  trains.tdee === Math.round((1780 * 1.2 + 280) / (1 - TEF_SHARE)),
   String(trains.tdee)
 );
 check(
@@ -68,7 +78,7 @@ for (const [label, a] of [
   ["no sex", { ...male, gender: "Prefer not to say" }],
 ] as const) {
   const e = energyEstimate(a as Answers);
-  check(`${label} yields no BMR`, e.bmr === null && e.tdee === null);
+  check(`${label} yields no BMR`, e.bmr === null && e.tdee === null && e.tefKcal === null);
   check(`...and says what is missing`, e.missing.length > 0, e.missing.join(", "));
 }
 
