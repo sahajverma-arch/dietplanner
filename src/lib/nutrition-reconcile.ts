@@ -15,6 +15,7 @@ const MAX_ROUNDS = 3;
 // is faster and truncates less, and it has to fit one request on a 60s host.
 const REBUILD_BATCH = 2;
 import { groundPlan } from "./nutrition";
+import { parseCuisines } from "./cuisines";
 import {
   bandsFor,
   dayCalories,
@@ -302,7 +303,11 @@ export async function reconcileNutrition(
 
     // If grounding throws, the revision is unverifiable — the caller's catch
     // keeps whatever the last accepted round produced.
-    const { plan: grounded } = await groundPlan(supabase, { ...current, days: merged });
+    const { plan: grounded } = await groundPlan(
+      supabase,
+      { ...current, days: merged },
+      parseCuisines(ctx.intake.cuisines)
+    );
 
     const verdict = acceptRevision(current, grounded);
     if (!verdict.accept) {

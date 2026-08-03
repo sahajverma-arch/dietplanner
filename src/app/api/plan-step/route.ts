@@ -18,6 +18,7 @@ import {
   type PlanOverview,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
+import { parseCuisines } from "@/lib/cuisines";
 import {
   acceptRevision,
   daysOverCeiling,
@@ -540,7 +541,7 @@ async function step(supabase: Supa, planId: string) {
       return NextResponse.json({ error: "This generation lost its place — start it again" }, { status: 422 });
     }
     const assembled = assemblePlan(ctx, gen.overview, gen.days);
-    const plan = await groundSafely(supabase, assembled);
+    const plan = await groundSafely(supabase, assembled, parseCuisines(ctx.intake.cuisines));
     await audit(supabase, plan);
 
     // A dietitian's own revision is not second-guessed by the automatic
@@ -583,7 +584,7 @@ async function step(supabase: Supa, planId: string) {
         (d) => gen.days.find((r) => r.day === d.day) ?? d
       );
       const revised = assemblePlan(ctx, gen.overview, merged);
-      const grounded = await groundSafely(supabase, revised);
+      const grounded = await groundSafely(supabase, revised, parseCuisines(ctx.intake.cuisines));
       const verdict = acceptRevision(gen.base, grounded);
       console.log(`nutrition reconcile ${verdict.accept ? "applied" : "skipped"}: ${verdict.reason}`);
       if (verdict.accept) {
@@ -654,9 +655,9 @@ async function step(supabase: Supa, planId: string) {
 }
 
 /** Grounding is never fatal: an unseeded foods table keeps model estimates. */
-async function groundSafely(supabase: Supa, plan: DietPlan): Promise<DietPlan> {
+async function groundSafely(supabase: Supa, plan: DietPlan, cuisines?: string[]): Promise<DietPlan> {
   try {
-    const { plan: grounded, stats } = await groundPlan(supabase, plan);
+    const { plan: grounded, stats } = await groundPlan(supabase, plan, cuisines);
     console.log(
       `nutrition grounding: ${stats.grounded_meals}/${stats.total_meals} meals, ` +
         `${stats.matched_items}/${stats.total_items} items`

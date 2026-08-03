@@ -11,6 +11,7 @@ import {
   type DietPlan,
 } from "@/lib/nim";
 import { groundPlan } from "@/lib/nutrition";
+import { parseCuisines } from "@/lib/cuisines";
 import {
   reconcileNutrition,
   daysOverCeiling,
@@ -266,7 +267,7 @@ export async function POST(request: Request) {
     // fatal: if the table isn't seeded yet, the model estimates are kept.
     let wasGrounded = false;
     try {
-      const grounded = await groundPlan(supabase, plan);
+      const grounded = await groundPlan(supabase, plan, parseCuisines(intake.cuisines));
       plan = grounded.plan;
       wasGrounded = true;
       console.log(
@@ -479,7 +480,7 @@ async function handleDraftReview(
       });
 
       try {
-        const grounded = await groundPlan(supabase, plan);
+        const grounded = await groundPlan(supabase, plan, parseCuisines(intake.cuisines));
         plan = grounded.plan;
       } catch (groundError) {
         console.warn(

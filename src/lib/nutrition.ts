@@ -511,7 +511,9 @@ export async function fetchBestMatches(
   supabase: SupabaseClient,
   names: Iterable<string>,
   /** Optional: receives why each rejected name was dropped, for the QA audit. */
-  rejections?: Map<string, string>
+  rejections?: Map<string, string>,
+  /** Optional: the client's household cuisines (from intake), boosts same-region matches. */
+  cuisines?: string[]
 ): Promise<Map<string, FoodMatch>> {
   const originals = new Set<string>();
   Array.from(names).forEach((n) => {
@@ -539,8 +541,9 @@ export async function fetchBestMatches(
   for (let i = 0; i < list.length; i += CHUNK) chunks.push(list.slice(i, i + CHUNK));
 
   const runChunk = async (c: string[]) => {
-    let res = await supabase.rpc("match_foods_batch", { queries: c });
-    if (res.error) res = await supabase.rpc("match_foods_batch", { queries: c });
+    const args = { queries: c, cuisines: cuisines ?? [] };
+    let res = await supabase.rpc("match_foods_batch", args);
+    if (res.error) res = await supabase.rpc("match_foods_batch", args);
     return res;
   };
 
@@ -809,7 +812,9 @@ function makeMealGrounder(matches: Map<string, FoodMatch>, stats: GroundingStats
 
 export async function groundPlan(
   supabase: SupabaseClient,
-  plan: DietPlan
+  plan: DietPlan,
+  /** The client's household cuisines (from intake), boosts same-region matches. */
+  cuisines?: string[]
 ): Promise<{ plan: DietPlan; stats: GroundingStats }> {
   const stats = emptyStats();
 
@@ -817,7 +822,7 @@ export async function groundPlan(
   const names = plan.days.flatMap((day) => mealItemNames(day.meals));
   if (names.length === 0) return { plan, stats };
 
-  const matches = await fetchBestMatches(supabase, names);
+  const matches = await fetchBestMatches(supabase, names, undefined, cuisines);
   const groundMeal = makeMealGrounder(matches, stats);
 
   const grounded: DietPlan = {
@@ -855,12 +860,14 @@ export async function groundPlan(
  */
 export async function groundMeals(
   supabase: SupabaseClient,
-  meals: PlanMeal[]
+  meals: PlanMeal[],
+  /** The client's household cuisines (from intake), boosts same-region matches. */
+  cuisines?: string[]
 ): Promise<{ meals: PlanMeal[]; unpriced: string[][] }> {
   const names = mealItemNames(meals);
   if (names.length === 0) return { meals, unpriced: meals.map(() => []) };
 
-  const matches = await fetchBestMatches(supabase, names);
+  const matches = await fetchBestMatches(supabase, names, undefined, cuisines);
   const groundMeal = makeMealGrounder(matches, emptyStats());
   const results = meals.map((meal) => groundMeal(meal));
   return {

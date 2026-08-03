@@ -12,6 +12,7 @@ import {
   type PlanMeal,
 } from "@/lib/nim";
 import { groundMeals } from "@/lib/nutrition";
+import { parseCuisines } from "@/lib/cuisines";
 import type { IntakeForm, PlanRevision } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -79,11 +80,12 @@ const toAlternate = (meal: PlanMeal): MealAlternate => ({
 async function ground(
   supabase: ReturnType<typeof createClient>,
   meal: PlanMeal,
-  alternates: MealAlternate[]
+  alternates: MealAlternate[],
+  cuisines?: string[]
 ): Promise<{ priced: MealAlternate[]; unpriced: string[][] }> {
   const asMeals = alternates.map((a) => ({ ...meal, ...a, alternates: [] }));
   try {
-    const { meals, unpriced } = await groundMeals(supabase, asMeals);
+    const { meals, unpriced } = await groundMeals(supabase, asMeals, cuisines);
     return { priced: meals.map(toAlternate), unpriced };
   } catch (e) {
     console.warn(
@@ -200,7 +202,7 @@ export async function POST(request: Request) {
       // first, so the readily interchangeable ones are at the top — none are
       // dropped, because a dietitian deliberately choosing a lighter dinner is
       // a legitimate edit and the panel shows every option's delta.
-      const { priced } = await ground(supabase, meal, alternates);
+      const { priced } = await ground(supabase, meal, alternates, parseCuisines(intake.cuisines));
       const drift = (a: MealAlternate) =>
         meal.calories > 0 ? Math.abs((a.calories || 0) - meal.calories) / meal.calories : 0;
       return NextResponse.json({
@@ -213,7 +215,7 @@ export async function POST(request: Request) {
     // Nothing is stored until they press Replace or Add as option.
     if (body.type === "custom") {
       const parsed = await parseMealText({ intake, text: body.text, mealName: meal.name });
-      const { priced, unpriced } = await ground(supabase, meal, [parsed]);
+      const { priced, unpriced } = await ground(supabase, meal, [parsed], parseCuisines(intake.cuisines));
       const report = mealRuleReport({
         intake,
         plan,
@@ -274,7 +276,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const [alternate] = (await ground(supabase, meal, [body.alternate])).priced;
+    const [alternate] = (await ground(supabase, meal, [body.alternate], parseCuisines(intake.cuisines))).priced;
     const key = alternateKey(alternate.items);
     // An overruled preference is recorded in the plan's history — a later
     // reviewer must be able to see that it was a deliberate decision.
