@@ -611,7 +611,199 @@ export const SNEHA: Answers = {
 };
 
 // ---------------------------------------------------------------------------
-// Test client 4 — Aadi Test: 27M EGGETARIAN who does not eat eggs on Tuesdays
+// Test client 4 — Anna Test: 30M South Indian VEGETARIAN, rice-and-sambar
+// daily pattern typical of a Tamil household. Exercises the cuisine-aware
+// food matching (q34 = South Indian/Tamil): raising his low, rice-heavy
+// protein intake should pull in South Indian-appropriate sources (extra
+// dal/sambar, curd, sprouts, moong dal chilla) rather than defaulting to the
+// North Indian roti-paneer pattern the other fixtures produce.
+// ---------------------------------------------------------------------------
+export const ANNA: Answers = {
+  q76_category: "First-timer — never dieted with structure before",
+  name: "Anna Test",
+  clientCode: "TEST-005",
+  gender: "Male",
+  phone: "+91 90000 00005",
+  email: "anna.test@example.com",
+
+  // 1 — Goal & deeper motivation
+  q1: ["Recent weight gain", "Low energy"],
+  q2: "Fat loss with muscle preservation",
+  q3: ["Improve daily energy", "Improve fitness"],
+  q4: ["Feel physically fitter", "Improve confidence"],
+  q5: ["Target weight"],
+  q5_weight: "72",
+  q6: ["Leaner appearance"],
+  q8: "7",
+  gr_dietitian: "Goal correctly understood",
+  gr_client: "Correctly understood",
+
+  // 2 — Body & transformation history
+  q9_age: "30", q9_height: "170", q9_weight: "80",
+  q9_weight_1y: "75", q9_weight_high: "82", q9_weight_low: "68", q9_weight_comfort: "72",
+  q10: ["Gradual weight gain"], q10a: "5", q10b: "1–2 years",
+  q11: ["Desk job", "Sedentary lifestyle", "Frequent outside food"],
+  q12: ["Self-designed diet"],
+  q12a: "No clear result",
+  q12b: ["Food became repetitive", "Family food mismatch"],
+  q13: "No",
+  q14: ["Weight-loss plateau"], q14a: "3–6 months",
+  q15: ["No data"], q15_assess: "Baseline measurement required",
+  q16: ["Regular meals", "Home-cooked food", "Frequent check-ins"],
+  q16a: "1) Regular meals 2) Home-cooked food 3) Frequent check-ins",
+
+  // 3 — Medical & clinical safety
+  q17: ["No known condition"],
+  q18: ["None"],
+  q19: "No",
+  q20: ["No recent reports"],
+  q21: ["None"],
+  q22: ["No instruction"],
+  cr1: ["No major clinical limitation identified"],
+
+  // 4 — Digestion & tolerance
+  q23: "Mostly comfortable",
+  q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After lunch"], q24c: "3",
+  q25: "Once daily",
+  q27: ["No known allergy or intolerance"],
+
+  // 5 — Actual food day
+  q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Idli, sambar and chutney\",\"items\":[{\"food\":\"Idli\",\"qty\":\"3\"},{\"food\":\"Sambar\",\"qty\":\"1 katori\"},{\"food\":\"Coconut chutney\",\"qty\":\"2 tbsp\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":300,\"protein_g\":8,\"carbs_g\":55,\"fat_g\":6}},{\"id\":\"breakfast2\",\"label\":\"Dosa and chutney\",\"items\":[{\"food\":\"Dosa\",\"qty\":\"2\"},{\"food\":\"Coconut chutney\",\"qty\":\"2 tbsp\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":280,\"protein_g\":6,\"carbs_g\":45,\"fat_g\":8}}]",
+  "q112_midmorning_variants":
+    "[{\"id\":\"midmorning1\",\"label\":\"Filter coffee and banana\",\"items\":[{\"food\":\"Filter coffee\",\"qty\":\"1 cup\"},{\"food\":\"Banana\",\"qty\":\"1\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":150,\"protein_g\":3,\"carbs_g\":30,\"fat_g\":2}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Rice, sambar, poriyal and curd\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1.5 cups\"},{\"food\":\"Sambar\",\"qty\":\"1 katori\"},{\"food\":\"Poriyal\",\"qty\":\"1 katori\"},{\"food\":\"Curd\",\"qty\":\"1 katori\"},{\"food\":\"Rasam\",\"qty\":\"1 cup\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":650,\"protein_g\":18,\"carbs_g\":100,\"fat_g\":12}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Filter coffee and banana chips\",\"items\":[{\"food\":\"Filter coffee\",\"qty\":\"1 cup\"},{\"food\":\"Banana chips\",\"qty\":\"1 handful\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":180,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":10}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Dosa and sambar\",\"items\":[{\"food\":\"Dosa\",\"qty\":\"2\"},{\"food\":\"Sambar\",\"qty\":\"1 katori\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":350,\"protein_g\":9,\"carbs_g\":55,\"fat_g\":10}},{\"id\":\"dinner2\",\"label\":\"Idli and sambar\",\"items\":[{\"food\":\"Idli\",\"qty\":\"3\"},{\"food\":\"Sambar\",\"qty\":\"1 katori\"}],\"daysPerWeek\":3,\"measured\":{\"calories\":320,\"protein_g\":9,\"carbs_g\":58,\"fat_g\":5}}]",
+  q28_breakfast_time: "08:00",
+  q28_breakfast_food: "3 idlis with sambar and chutney, most mornings",
+  q28_breakfast_drinks: ["Filter coffee × 1"],
+  q109: "08:00 idli (3) with sambar and chutney, 5 mornings a week, dosa the other 2. 10:30 filter coffee and a banana. 13:00 lunch — rice, sambar, a poriyal, curd and rasam, home cooked, daily. 17:30 filter coffee with banana chips. 20:30 dinner — dosa or idli with sambar, home cooked, daily.",
+  q28_breakfast_prep: ["Steamed"],
+  q28_breakfast_source: "Home",
+  q28_breakfast_extras: ["Oil"],
+  q28_midmorning_food: "Filter coffee + 1 banana",
+  q28_lunch_time: "13:00",
+  q28_lunch_food: "Rice + sambar + poriyal + curd + rasam",
+  q28_lunch_source: "Home",
+  q28_evening_food: "Filter coffee + banana chips",
+  q28_evening_drinks: ["Filter coffee × 1"],
+  q28_dinner_time: "20:30",
+  q28_dinner_food: "Dosa or idli with sambar",
+  q28_dinner_source: "Home",
+  q29: "Weekdays are similar",
+  q30: ["Restaurant food", "More sweets"],
+  q31: "Once weekly", q31a: ["Restaurant"],
+  q31b: "Masala dosa, filter coffee, payasam",
+  q32: ["Filter coffee", "Banana chips", "Sweets or mithai"],
+  q32a: "Filter coffee ×2/day; banana chips most evenings",
+
+  // 6 — Preferences & feasibility
+  q33: "Vegetarian",
+  q34: ["South Indian", "Tamil"],
+  q35: "Masala dosa, filter coffee, curd rice, sambar, rasam, payasam",
+  q36: "Bitter gourd", q36a: "Will not eat",
+  q37: ["Filter coffee", "Rice", "Traditional household food"],
+  q38: ["Vegetarian household"],
+  q39: ["Self", "Parent or family"], q39a: "Good",
+  q40: ["Full kitchen", "Refrigerator", "Microwave"],
+  q41: ["Cook daily", "Simple cooking only"],
+  q42: "Moderate household-food budget", q42a: ["No major limitation"],
+
+  // 7 — Training, protein & recovery
+  q43: ["Walking"],
+  q44a: "3", q44b: "30–45 minutes", q44c: "Morning",
+  q44d: "Complete beginner", q44e: "Light", q44f: "Fat loss",
+  q45: ["No major problem"],
+  q46: ["Recover well"],
+  q47: ["Water only"],
+  q48: ["Water"],
+  q49: ["Small meal"], q49a: "30–60 minutes",
+  // Frequencies match the Q28 food day above: sambar/rasam (dal) at every
+  // main meal, curd at lunch daily, coffee-milk twice, sprouts occasional.
+  q50: ["Dal", "Curd", "Milk", "Sprouts", "Nuts or seeds"],
+  q50p_dal_freq: "Daily",
+  q50p_curd_freq: "Daily",
+  q50p_milk_freq: "Daily", q50p_milk_portion: "Half portion",
+  q50p_sprouts_freq: "1–2 days a week",
+  q50p_nuts_freq: "1–2 days a week",
+  q50a: "2", q50b: ["Vegetarian pattern", "Lack of knowledge"],
+  q51: ["None"],
+  q52: ["None"],
+  q53: ["No limitation"], q53b: "Not required",
+
+  // 8 — Routine & behaviour
+  q54: "Desk-based", q54a: "Day", q54b: "Fixed",
+  q54c: "Mostly seated", q106: "3,000–5,000", q112: "4000",
+  q55: ["Evening"], q55a: ["Cravings", "Habit"],
+  q56: "Moderate evening hunger",
+  q57: ["Good"],
+  q58: ["Sweets or mithai", "Fried foods"], q58a: ["Habit", "Boredom"],
+  q59: ["Eat more"],
+  q60: ["None"],
+
+  // 9 — Lifestyle
+  q61: "6–7 hours", q61a: "6", q61b: "Sometimes", q61c: ["Late screen time"],
+  q62: "5", q62a: ["Work"], q62b: ["Food intake"],
+  q63: "1.5–2 litres", q63a: ["None"], q63b: "Never",
+  q64: ["Filter coffee"], q64a: "2", q64b: "6–9 PM",
+  q65: ["None"],
+  q67: ["Family gatherings", "Religious or community events"],
+  q67a: ["Overeat", "Manage reasonably well"],
+
+  // 10 — Success, dropout & coaching
+  q68: ["Weekend routine breaks", "Motivation reduces"],
+  q69: ["Return the next day", "Feel guilty but continue trying"],
+  q70: ["Gentle reminders", "Frequent check-ins"],
+  q71: ["Rice causes weight gain"], q71a: "Moderate",
+  q72: "Two options per meal", q72a: "Katori, cup or spoon",
+  q73: ["Cravings", "Family routine"],
+  q74: "3 focused changes",
+  q75: "7",
+
+  // 11 — Dietitian professional assessment
+  ds1: "Desk-based, rice-and-sambar pattern typical of a South Indian household — protein is low and carb-heavy (idli/dosa/rice at every meal). Raise protein within the same cuisine rather than switching him to roti and paneer.",
+  q76: ["Low protein intake", "Hidden calorie intake", "Sedentary lifestyle"],
+  q77: ["Increase protein", "Improve meal regularity"],
+  q78: "Filter coffee; rice at lunch and dinner; South Indian home food",
+  q79: ["Client fears rice"],
+  q80: "Fat loss with muscle preservation",
+  q81: "Fat-loss phase",
+  q82a: "76", q82b: "72", q82c: "Initial target should differ from final target",
+  q83: ["Current weight and height context", "Sustainability concern"],
+  q83a: "Moderate — reassess after 2 weeks",
+  q84: "Reduce fat while preserving muscle",
+  q84a: "No numerical target", q84b: "Preserve", q84c: "Reduce",
+  q85: ["Waist"], q85a: "Waist 38 → 35 in over 12 weeks",
+  q86: ["Improve training consistency"],
+  q87a: "2 weeks", q87b: "2 weeks", q87c: "8–12 weeks", q87d: "6–9 months",
+  q87e: "Client timeline appears realistic",
+  q88: ["Waist", "Energy", "Diet adherence", "Weight"],
+  q89: "Mild energy deficit",
+  q90: "Moderate", q90a: "Low",
+  q91: ["Protein quantity", "Meal regularity"],
+  q92: "Low", q92a: ["Total quantity", "Breakfast"],
+  q92b: ["Increase total protein", "Improve breakfast protein"],
+  q92c: "Optional convenience",
+  q93: ["Improve quality", "Reduce excessive portions"],
+  q94: ["Reduce visible oil in cooking"],
+  q95: ["Increase vegetables", "Gradual fibre increase"],
+  q96: ["Increase total fluids"],
+  q97: ["Improve protein intake"],
+  q98: ["No coordination required"],
+  q99: ["Rice or roti avoidance"], q99a: "Address gradually",
+  q100: "Two options per meal",
+  q101: "7",
+
+  // 12 — Client strategy discussion
+};
+
+// ---------------------------------------------------------------------------
+// Test client 5 — Aadi Test: 27M EGGETARIAN who does not eat eggs on Tuesdays
 // and Saturdays. Exercises the day-of-week rules (q38a–c) on an EGG-only
 // restriction — Rahul's case removes non-veg and eggs together, so an
 // egg-only rule on an eggetarian (whose entire non-plant protein IS eggs) is
@@ -804,6 +996,197 @@ export const AADI: Answers = {
   q99: ["Protein misconception"], q99a: "Clarify gradually",
   q100: "Flexible food exchange",
   q101: "8",
+
+  // 12 — Client strategy discussion
+};
+
+// ---------------------------------------------------------------------------
+// Test client 6 — Sakshi Test: 27F non-vegetarian, 62 kg / 157.5 cm (5'2"),
+// measured protein intake ~24-25 g/day (0.4 g/kg) — a severe-deficit case.
+// Non-veg in preference but eats meat only 2 days/week, so the gap is not a
+// dietary restriction to design around, just very little protein on the
+// plate at any meal. Exercises the week-1 walk-up from a much lower floor
+// than the other fixtures (Priya starts at ~43 g, Sakshi at ~25 g).
+// ---------------------------------------------------------------------------
+export const SAKSHI: Answers = {
+  q76_category: "First-timer — never dieted with structure before",
+  name: "Sakshi Test",
+  clientCode: "TEST-006",
+  gender: "Female",
+  phone: "+91 90000 00006",
+  email: "sakshi.test@example.com",
+
+  // 1 — Goal & deeper motivation
+  q1: ["Low energy", "Recent weight gain"],
+  q2: "Fat loss",
+  q3: ["Improve daily energy", "Improve relationship with food"],
+  q4: ["Improve confidence", "Improve health markers"],
+  q5: ["Target weight"],
+  q5_weight: "56",
+  q6: ["Leaner appearance"],
+  q8: "7",
+  gr_dietitian: "Goal correctly understood",
+  gr_client: "Correctly understood",
+
+  // 2 — Body & transformation history
+  q9_age: "27", q9_height: "157.5", q9_height_unit: "ft", q9_weight: "62",
+  q9_weight_1y: "58", q9_weight_high: "63", q9_weight_low: "52", q9_weight_comfort: "56",
+  q10: ["Gradual weight gain"], q10a: "4", q10b: "6–12 months",
+  q11: ["Sedentary lifestyle", "Irregular meals", "Poor sleep"],
+  q12: ["Meal skipping"],
+  q12a: "No clear result",
+  q12b: ["Excessive hunger", "Food became repetitive"],
+  q13: "No",
+  q14: ["Weight-loss plateau"], q14a: "3–6 months",
+  q15: ["No data"], q15_assess: "Baseline measurement required",
+  q16: ["Regular meals", "Home-cooked food", "Frequent check-ins"],
+  q16a: "1) Regular meals 2) Home-cooked food 3) Frequent check-ins",
+
+  // 3 — Medical & clinical safety
+  q17: ["No known condition"],
+  q18: ["None"],
+  q19: "No",
+  q20: ["No recent reports"],
+  q21: ["None"],
+  q22: ["No instruction"],
+  cr1: ["No major clinical limitation identified"],
+
+  // 4 — Digestion & tolerance
+  q23: "Mostly comfortable",
+  q24: ["No frequent symptom"],
+  q25: "Once daily",
+  q27: ["No known allergy or intolerance"],
+
+  // 5 — Actual food day (measured: this is what pins the ~24 g/day baseline)
+  q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Poha\",\"items\":[{\"food\":\"Poha\",\"qty\":\"1 plate\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":250,\"protein_g\":4,\"carbs_g\":55,\"fat_g\":7}},{\"id\":\"breakfast2\",\"label\":\"Bread and jam\",\"items\":[{\"food\":\"Bread\",\"qty\":\"2 slices\"},{\"food\":\"Jam\",\"qty\":\"1 tbsp\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":220,\"protein_g\":3,\"carbs_g\":40,\"fat_g\":5}}]",
+  "q112_midmorning_variants":
+    "[{\"id\":\"midmorning1\",\"label\":\"Nothing / tea only\",\"items\":[],\"daysPerWeek\":7,\"measured\":{\"calories\":40,\"protein_g\":1,\"carbs_g\":5,\"fat_g\":1}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Rice and sabzi\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1 cup\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":350,\"protein_g\":5,\"carbs_g\":70,\"fat_g\":8}},{\"id\":\"lunch2\",\"label\":\"Rice, sabzi and egg curry\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1 cup\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"},{\"food\":\"Egg curry\",\"qty\":\"1 egg\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":390,\"protein_g\":10,\"carbs_g\":65,\"fat_g\":12}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Tea and biscuits\",\"items\":[{\"food\":\"Biscuits\",\"qty\":\"2\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":120,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":3}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Roti and sabzi\",\"items\":[{\"food\":\"Roti\",\"qty\":\"2\"},{\"food\":\"Sabzi\",\"qty\":\"1 katori\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":280,\"protein_g\":5,\"carbs_g\":45,\"fat_g\":8}},{\"id\":\"dinner2\",\"label\":\"Chicken curry and roti\",\"items\":[{\"food\":\"Chicken curry\",\"qty\":\"1 katori\"},{\"food\":\"Roti\",\"qty\":\"2\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":310,\"protein_g\":14,\"carbs_g\":30,\"fat_g\":15}}]",
+  q28_breakfast_time: "08:30",
+  q28_breakfast_food: "Poha 1 plate, most mornings",
+  q28_breakfast_drinks: ["Tea with sugar × 1"],
+  q109: "08:30 poha or bread with jam, most mornings. 11:00 nothing, just tea. 13:30 lunch — rice and a vegetable sabzi, home cooked, most days; egg curry twice a week. 17:30 tea with 2 biscuits, daily. 20:30 dinner — roti and sabzi, chicken curry twice a week, home cooked.",
+  q28_breakfast_prep: ["Mixed preparation"],
+  q28_breakfast_source: "Home",
+  q28_breakfast_extras: ["Oil"],
+  q28_midmorning_food: "Nothing",
+  q28_lunch_time: "13:30",
+  q28_lunch_food: "Rice + sabzi (egg curry twice a week)",
+  q28_lunch_source: "Home",
+  q28_evening_food: "Tea + 2 biscuits",
+  q28_evening_drinks: ["Tea with sugar × 1"],
+  q28_dinner_time: "20:30",
+  q28_dinner_food: "Roti + sabzi (chicken curry twice a week)",
+  q28_dinner_source: "Home",
+  q29: "Weekdays are similar",
+  q30: ["Skipped meals", "More sweets"],
+  q31: "Once weekly", q31a: ["Delivery"],
+  q31b: "Biryani, momos",
+  q32: ["Tea", "Biscuits"],
+  q32a: "Tea ×2/day with sugar; biscuits with evening tea",
+
+  // 6 — Preferences & feasibility
+  q33: "Non-vegetarian",
+  q34: ["North Indian", "Mixed or international"],
+  q35: "Egg curry, chicken curry, rice, biryani",
+  q36: "Karela", q36a: "Will not eat",
+  q37: ["Tea", "Rice"],
+  q38: ["No restriction"],
+  q39: ["Self"], q39a: "Some",
+  q40: ["Full kitchen", "Refrigerator"],
+  q41: ["Cook daily", "Simple cooking only"],
+  q42: "Flexible", q42a: ["No major limitation"],
+
+  // 7 — Training, protein & recovery
+  q43: ["No current training", "Walking"],
+  q44a: "2", q44b: "20–30 minutes", q44c: "Evening",
+  q44d: "Complete beginner", q44e: "Light", q44f: "Fat loss",
+  q45: ["No major problem"],
+  q46: ["Recover well"],
+  q47: ["Nothing"],
+  q48: ["Water"],
+  q49: ["Nothing for several hours"],
+  // Frequencies match the Q28 food day above: egg curry and chicken curry
+  // only twice a week each — this is what makes 24-25 g/day a measurement,
+  // not a guess.
+  q50: ["Eggs", "Chicken"],
+  q50p_eggs_freq: "1–2 days a week",
+  q50p_chicken_freq: "1–2 days a week",
+  q50a: "1", q50b: ["Lack of knowledge", "Cooking"],
+  q51: ["None"],
+  q52: ["None"],
+  q53: ["No limitation"], q53b: "Not required",
+
+  // 8 — Routine & behaviour
+  q54: "Homemaker", q54a: "Not applicable", q54b: "Flexible",
+  q54c: "Mostly seated", q106: "2,000–3,000", q112: "2500",
+  q55: ["Evening"], q55a: ["Habit", "Boredom"],
+  q56: "Low protein, low energy pattern",
+  q57: ["Low"],
+  q58: ["Sweets or mithai", "Skipped meals leading to overeating"], q58a: ["Habit", "Lack of knowledge"],
+  q59: ["Eat more"],
+  q60: ["None"],
+
+  // 9 — Lifestyle
+  q61: "6–7 hours", q61a: "6", q61b: "Sometimes", q61c: ["Frequent waking"],
+  q62: "5", q62a: ["Family"], q62b: ["Food intake"],
+  q63: "1–2 litres", q63a: ["Forgets"], q63b: "Sometimes",
+  q64: ["Tea"], q64a: "2", q64b: "6–9 PM",
+  q65: ["None"],
+  q67: ["Family gatherings"],
+  q67a: ["Overeat", "Manage reasonably well"],
+
+  // 10 — Success, dropout & coaching
+  q68: ["Motivation reduces", "Skips meals when busy"],
+  q69: ["Feel guilty but continue trying"],
+  q70: ["Gentle reminders", "Frequent check-ins"],
+  q71: ["Skipping meals helps fat loss"], q71a: "Moderate",
+  q72: "Two options per meal", q72a: "Katori, cup or spoon",
+  q73: ["Habit", "Lack of knowledge"],
+  q74: "3 focused changes",
+  q75: "6",
+
+  // 11 — Dietitian professional assessment
+  ds1: "Homemaker eating almost no protein at any meal — measured intake is ~24-25 g/day (0.4 g/kg), well below even a sedentary floor. Non-veg by preference but meat appears only twice a week, so this is a plate-composition gap, not a restriction to negotiate around. Protein is the single priority before anything else.",
+  q76: ["Low protein intake", "Skipped meals", "Hidden calorie intake", "Poor sleep"],
+  q77: ["Increase protein", "Improve meal regularity"],
+  q78: "Tea; rice at lunch; home-cooked food",
+  q79: ["No unnecessary restriction identified"],
+  q80: "Fat loss",
+  q81: "Fat-loss phase",
+  q82a: "62", q82b: "58", q82c: "Initial target should differ from final target",
+  q83: ["Current weight and height context", "Sustainability concern"],
+  q83a: "Moderate — reassess after 2 weeks",
+  q84: "Reduce fat while preserving muscle",
+  q84a: "No numerical target", q84b: "Increase", q84c: "Reduce",
+  q85: ["Waist"], q85a: "Waist reduction over 12 weeks",
+  q86: ["Improve training consistency"],
+  q87a: "2 weeks", q87b: "2 weeks", q87c: "8–12 weeks", q87d: "6–9 months",
+  q87e: "Client timeline appears realistic",
+  q88: ["Energy", "Diet adherence", "Weight"],
+  q89: "Mild energy deficit",
+  q90: "Low", q90a: "Low",
+  q91: ["Protein quantity", "Meal regularity"],
+  q92: "Very low",
+  q92a: ["Total quantity", "Breakfast", "Lunch"],
+  q92b: ["Increase total protein", "Improve breakfast protein"],
+  q92c: "Optional convenience",
+  q93: ["Increase total protein", "Improve distribution"],
+  q94: ["Reduce sweets"],
+  q95: ["Increase vegetables"],
+  q96: ["Increase total fluids"],
+  q97: ["Improve protein intake"],
+  q98: ["No coordination required"],
+  q99: ["Meal-timing misconception"], q99a: "Address gradually",
+  q100: "Two options per meal",
+  q101: "6",
 
   // 12 — Client strategy discussion
 };

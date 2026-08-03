@@ -6,12 +6,12 @@
 // Any existing draft is backed up to test-output/ before being replaced.
 //
 // Run: npx -y tsx scripts/seed-ui-test-draft.ts [dietitian-email] [client]
-//   client: priya (default) | rahul | sneha | aadi
+//   client: priya (default) | rahul | sneha | aadi | anna | sakshi
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { PRIYA, RAHUL, SNEHA, AADI } from "./test-clients";
+import { PRIYA, RAHUL, SNEHA, AADI, ANNA, SAKSHI } from "./test-clients";
 
 const envPath = path.join(__dirname, "..", ".env.local");
 for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
@@ -20,7 +20,14 @@ for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
 }
 
 const EMAIL = (process.argv[2] || "sahaj.verma@fitelo.co").toLowerCase();
-const CLIENTS = { priya: PRIYA, rahul: RAHUL, sneha: SNEHA, aadi: AADI } as const;
+const CLIENTS = {
+  priya: PRIYA,
+  rahul: RAHUL,
+  sneha: SNEHA,
+  aadi: AADI,
+  anna: ANNA,
+  sakshi: SAKSHI,
+} as const;
 const WHICH = (process.argv[3] || "priya").toLowerCase() as keyof typeof CLIENTS;
 if (!CLIENTS[WHICH]) {
   console.error(`Unknown client "${WHICH}". Choose one of: ${Object.keys(CLIENTS).join(", ")}`);
