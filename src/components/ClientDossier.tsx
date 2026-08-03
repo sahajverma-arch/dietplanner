@@ -117,6 +117,7 @@ export default function ClientDossier({
         score={score.score}
         band={score.band}
         answersCount={recordSize(record)}
+        onRefresh={() => router.refresh()}
       />
 
       <KpiStrip energy={energy} intake={intake} target={target} roadmap={roadmap} />
@@ -177,12 +178,14 @@ function Hero({
   score,
   band,
   answersCount,
+  onRefresh,
 }: {
   name: string;
   answers: Answers;
   score: number;
   band: string;
   answersCount: number;
+  onRefresh: () => void;
 }) {
   const facts = [
     val(answers, "q9_age") ? `${val(answers, "q9_age")} yrs` : "",
@@ -229,12 +232,22 @@ function Hero({
               Counselling {score}/100 · {band}
             </span>
             <span className="text-xs text-zinc-500">{answersCount} answers recorded</span>
-            <Link
-              href="/counselling/new"
-              className="text-xs font-medium text-zinc-400 underline-offset-4 hover:text-brand hover:underline"
-            >
-              ← Back to edit the counselling
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link
+                href="/counselling/new"
+                className="text-xs font-medium text-zinc-400 underline-offset-4 hover:text-brand hover:underline"
+              >
+                ← Back to edit the counselling
+              </Link>
+              <button
+                type="button"
+                onClick={onRefresh}
+                title="Reload this summary with the latest saved answers"
+                className="text-xs font-medium text-zinc-400 underline-offset-4 hover:text-brand hover:underline"
+              >
+                ↻ Refresh
+              </button>
+            </div>
           </div>
         </div>
 
