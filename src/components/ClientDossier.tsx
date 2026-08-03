@@ -11,8 +11,12 @@ import { variantIntake, macrosOf, variantLabel } from "@/lib/counselling/meal-va
 import { missingRequired, val, list, type Answers } from "@/lib/counselling/questions";
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
-import { roadmapAtGoal, roadmapFor, roadmapNeeds } from "@/lib/counselling/roadmap-input";
-import { weekTargets } from "@/lib/roadmap";
+import {
+  displayProteinTarget,
+  roadmapAtGoal,
+  roadmapFor,
+  roadmapNeeds,
+} from "@/lib/counselling/roadmap-input";
 import FitnessScore from "./FitnessScore";
 import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
@@ -80,6 +84,13 @@ export default function ClientDossier({
   const roadmap = useMemo(() => roadmapFor(answers), [answers]);
   const atGoal = useMemo(() => roadmapAtGoal(answers, roadmap), [answers, roadmap]);
   const roadmapMissing = useMemo(() => (roadmap ? [] : roadmapNeeds(answers)), [roadmap, answers]);
+  // The one number every protein display on this page must agree on — the
+  // roadmap's week-1 figure when a roadmap exists, the measured-intake
+  // heuristic otherwise.
+  const displayTarget = useMemo(
+    () => displayProteinTarget(roadmap, intake, target),
+    [roadmap, intake, target]
+  );
 
   const name = val(answers, "name").trim() || "This client";
   const first = name.split(/\s+/)[0];
@@ -120,7 +131,7 @@ export default function ClientDossier({
         onRefresh={() => router.refresh()}
       />
 
-      <KpiStrip energy={energy} intake={intake} target={target} roadmap={roadmap} />
+      <KpiStrip energy={energy} intake={intake} target={displayTarget} roadmap={roadmap} />
 
       {escalations.length > 0 && <Escalations flags={escalations} />}
 
@@ -138,7 +149,7 @@ export default function ClientDossier({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <NowVsAim first={first} energy={energy} intake={intake} target={target} />
+          <NowVsAim first={first} energy={energy} intake={intake} target={displayTarget} />
           <WeekOfEating week={week} intake={intake} />
         </div>
         <div className="space-y-4">
@@ -308,19 +319,17 @@ function KpiStrip({
   target: ReturnType<typeof proteinTarget>;
   roadmap: ReturnType<typeof roadmapFor>;
 }) {
-  // The roadmap is what the plan is actually built to, so it is what this tile
-  // must show. Leaving the measured-intake progression here put two different
-  // protein targets on the same screen — 57 in the tile, 79 in the roadmap
-  // directly below it — with nothing saying which one the client would get.
+  // `target` is `displayProteinTarget()`'s output — the roadmap's week-1
+  // figure whenever a roadmap exists, so this tile can never disagree with
+  // the other protein displays on this page again. (It used to compute this
+  // independently, which is exactly how two different protein targets ended
+  // up on the same screen — 57 in the tile, 79 in the roadmap directly below
+  // it — with nothing saying which one the client would get.)
   //
-  // The tile says WEEK-1, so it has to be week 1. Once protein started ramping,
-  // reading macros.protein_g here showed the DESTINATION under a week-1 label —
-  // 79 g in the tile against P55 in the week 1 block immediately below, which is
-  // the same two-numbers problem in the opposite direction. The destination
-  // moves to the subtitle, where it belongs as the thing being walked toward.
-  const week1 = roadmap ? weekTargets(roadmap, 1) : null;
-  const proteinTargetG = week1 ? week1.protein_g : roadmap ? roadmap.macros.protein_g : target.targetG;
-  const ramping = roadmap !== null && week1 !== null && week1.protein_g !== roadmap.macros.protein_g;
+  // The tile says WEEK-1, so it has to be week 1, not the destination the
+  // client is ramping toward — that belongs in the subtitle below instead.
+  const proteinTargetG = target.targetG || null;
+  const ramping = roadmap !== null && target.basis === "progression";
   const proteinBasis = roadmap
     ? ramping
       ? `step 1 of ${roadmap.proteinPath.length} → ${roadmap.macros.protein_g} g`

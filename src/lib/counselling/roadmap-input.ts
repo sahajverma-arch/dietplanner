@@ -12,10 +12,16 @@
 
 import { energyEstimate } from "./energy";
 import { roadmapCategory, ROADMAP_WEEKS_ON_PLAN_ID, ROADMAP_WEEKS_STAGNANT_ID, val, type Answers } from "./questions";
-import { estimateProteinIntake, medicalProteinCap } from "../protein-intake";
+import {
+  estimateProteinIntake,
+  medicalProteinCap,
+  type ProteinIntakeEstimate,
+  type ProteinTarget,
+} from "../protein-intake";
 import {
   buildRoadmap,
   roadmapMissing,
+  weekTargets,
   type Category,
   type Roadmap,
   type RoadmapInput,
@@ -120,4 +126,49 @@ export function roadmapAtGoal(a: Answers, base?: Roadmap | null): Roadmap | null
   const from = base ?? roadmapFor(a);
   if (!from || from.weightToLoseKg <= 0) return null;
   return roadmapFor(a, { weightKg: from.targetWeightKg, category: 4 });
+}
+
+/**
+ * The protein target actually shown to the dietitian — the roadmap's week-1
+ * rung when a roadmap exists and intake has been measured (the number
+ * generate-plan actually builds the diet to), the measured-intake heuristic
+ * otherwise (no category recorded yet, or nothing measured). Centralised so
+ * "which number is right" is answered once, not independently by every
+ * screen that shows it — two screens disagreeing on this is exactly the bug
+ * this replaces.
+ *
+ * `estimate.measured` gates the roadmap path deliberately: with nothing
+ * measured yet, the roadmap's ladder just hands back the full destination for
+ * week 1 (no ramp), losing the heuristic's more useful "record the frequency
+ * first" message — so an unmeasured client keeps seeing that regardless of
+ * whether a category has been picked.
+ */
+export function displayProteinTarget(
+  roadmap: Roadmap | null,
+  estimate: ProteinIntakeEstimate,
+  heuristic: ProteinTarget
+): ProteinTarget {
+  if (!roadmap || !estimate.measured) return heuristic;
+
+  const week1 = weekTargets(roadmap, 1);
+  const ramping = week1.protein_g !== roadmap.macros.protein_g;
+  const held = roadmap.warnings.find((w) => w.id === "protein-held");
+  const basisLabel =
+    `${roadmap.category.proteinPerKg} g/kg × ${roadmap.dosingWeightKg} kg` +
+    (roadmap.usedAdjustedWeight ? " adjusted" : "");
+
+  return {
+    targetG: week1.protein_g,
+    goalG: roadmap.macros.protein_g,
+    // Not meaningful for the roadmap path — carried through unchanged
+    // because no renderer today reads it.
+    bandG: heuristic.bandG,
+    weeksToGoal: Math.max(0, roadmap.proteinPath.length - 1),
+    basis: held ? "medical-cap" : ramping ? "progression" : "goal-reached",
+    explanation: held
+      ? held.detail
+      : ramping
+        ? `Current intake ${estimate.gramsPerDay} g/day. This week: ${week1.protein_g} g/day — step 1 of ${roadmap.proteinPath.length} toward the ${roadmap.macros.protein_g} g/day requirement (${basisLabel}).`
+        : `Current intake ${estimate.gramsPerDay} g/day already meets the ${roadmap.macros.protein_g} g/day requirement (${basisLabel}).`,
+  };
 }

@@ -927,10 +927,16 @@ export function aiProfile(a: Answers): Block {
     pt_handover: val(a, "q53b"),
   }));
 
-  // The measured current intake and the target it implies. This is the only
-  // protein target the plan may use: left to itself the model picks one and
-  // then quietly lowers it when the plan turns out hard to hit (observed
-  // 80 -> 62 g and 140 -> 125 g across generation runs).
+  // The measured current intake and the target it implies. Sent as context so
+  // the model's written strategy has a number to reason from — left to
+  // itself it picks one and then quietly lowers it when the plan turns out
+  // hard to hit (observed 80 -> 62 g and 140 -> 125 g across generation
+  // runs). It is NOT the final word once a category is recorded: nim.ts
+  // computes the roadmap (the category-based Diet Engine) separately and
+  // overwrites the model's protein macro with the roadmap's figure
+  // regardless of what is written here. This heuristic is authoritative only
+  // in the no-roadmap fallback (no category recorded yet, or a clinical
+  // stop).
   const proteinEstimate = estimateProteinIntake(a);
   const target = proteinTarget(a, proteinEstimate);
 

@@ -22,6 +22,7 @@ import FitnessScore from "./FitnessScore";
 import IntakeOverride from "./IntakeOverride";
 import RoadmapButton from "./RoadmapButton";
 import { INTAKE_OVERRIDE_ID, variantFoodOptions } from "@/lib/counselling/meal-variants";
+import { displayProteinTarget, roadmapFor } from "@/lib/counselling/roadmap-input";
 import {
   decodeStaplePick,
   encodeStaplePick,
@@ -484,7 +485,14 @@ export function ProteinIntakePanel({
   onOverride?: (encoded: string) => void;
 }) {
   const estimate = useMemo(() => estimateProteinIntake(answers), [answers]);
-  const target = useMemo(() => proteinTarget(answers, estimate), [answers, estimate]);
+  const roadmap = useMemo(() => roadmapFor(answers), [answers]);
+  // The roadmap (category-based Diet Engine) is what generate-plan actually
+  // builds the diet to once a category is recorded — prefer it here so this
+  // panel never shows a different week-1 target than the review page does.
+  const target = useMemo(
+    () => displayProteinTarget(roadmap, estimate, proteinTarget(answers, estimate)),
+    [roadmap, estimate, answers]
+  );
 
   // Nothing selected yet — stay out of the dietitian's way.
   if (!estimate.measured && estimate.unrecorded.length === 0) return null;
