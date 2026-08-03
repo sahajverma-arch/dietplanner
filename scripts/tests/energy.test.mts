@@ -27,24 +27,25 @@ check(
   (energyEstimate({ ...male, gender: "Female" }).bmr ?? 0) === 1780 - 166
 );
 
-// TDEE = BMR x activity, plus training averaged across the week, plus TEF —
-// TEF priced at 10% of BMR specifically, independent of activity/training.
+// TDEE = (BMR x activity, plus training averaged across the week), grossed
+// up by a further 10% for TEF — priced off THAT total, so TEF scales with
+// activity/training the same way the rest of TDEE does.
 const seated = energyEstimate({ ...male, q54c: "Mostly seated" });
 check(
-  "sedentary TDEE is BMR x1.2 plus 10% of BMR for TEF",
-  seated.tdee === Math.round(1780 * 1.2 + 1780 * TEF_SHARE),
+  "sedentary TDEE is (BMR x1.2) plus 10% TEF on top of that",
+  seated.tdee === Math.round(1780 * 1.2 * (1 + TEF_SHARE)),
   String(seated.tdee)
 );
 check(
-  "TEF is exactly 10% of BMR, not of the activity-adjusted total",
-  seated.tefKcal === Math.round(1780 * TEF_SHARE),
-  `${seated.tefKcal} vs 10% of BMR 1780`
+  "TEF is exactly 10% of the activity-adjusted total, not of BMR alone",
+  seated.tefKcal === Math.round(1780 * 1.2 * TEF_SHARE),
+  `${seated.tefKcal} vs 10% of ${1780 * 1.2}`
 );
 const active = energyEstimate({ ...male, q54c: "Highly physical" });
 check("activity level raises TDEE", (active.tdee ?? 0) > (seated.tdee ?? 0), `${seated.tdee} -> ${active.tdee}`);
 check(
-  "...but TEF itself does not move with activity level",
-  active.tefKcal === seated.tefKcal,
+  "...and TEF itself scales with activity level, since it's priced off the total",
+  (active.tefKcal ?? 0) > (seated.tefKcal ?? 0),
   `${active.tefKcal} vs ${seated.tefKcal}`
 );
 // Training kcal/session = (MET - 1) x weight x duration hours, not a flat
@@ -52,8 +53,8 @@ check(
 // (0.875 h): (5 - 1) x 80 x 0.875 = 280 kcal/session.
 const trains = energyEstimate({ ...male, q54c: "Mostly seated", q44a: "7", q44e: "Moderate", q44b: "45–60 minutes" });
 check(
-  "training adds on top, by intensity x duration x weight",
-  trains.tdee === Math.round(1780 * 1.2 + 280 + 1780 * TEF_SHARE),
+  "training adds on top, by intensity x duration x weight, before TEF grosses it up",
+  trains.tdee === Math.round((1780 * 1.2 + 280) * (1 + TEF_SHARE)),
   String(trains.tdee)
 );
 check(

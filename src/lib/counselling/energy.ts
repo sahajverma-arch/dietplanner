@@ -73,10 +73,11 @@ const DURATION_H_DEFAULT = DURATION_H["30–45 minutes"];
  * eaten, so a flat 10% is the standard shorthand absent a meal-by-meal macro
  * breakdown to compute it exactly.
  *
- * Costed as 10% of BMR specifically, not of the NEAT- and training-adjusted
- * total: resting energy is what mostly goes toward food processing on an
- * ordinary day, and pricing TEF off BMR keeps it independent of how active a
- * client is, the way the physiological cost of digestion actually is.
+ * Costed as 10% of the NEAT- and training-adjusted total (BMR x activity,
+ * plus training) — the "TDEE calculated" figure before TEF is added — not of
+ * BMR alone. Added on top of that figure, not solved as a share of the final
+ * number: TEF = 10% x (BMR x activity + training), then TDEE = that total
+ * plus TEF.
  */
 export const TEF_SHARE = 0.1;
 
@@ -98,7 +99,7 @@ export interface EnergyEstimate {
   bmr: number | null;
   /** BMR x everyday movement, plus training averaged over the week, plus TEF. */
   tdee: number | null;
-  /** The thermic-effect-of-food slice folded into `tdee` above — 10% of BMR. */
+  /** The thermic-effect-of-food slice folded into `tdee` above — 10% of the activity+training total. */
   tefKcal: number | null;
   /** BMI, or null without height and weight. */
   bmi: number | null;
@@ -155,7 +156,7 @@ export function energyEstimate(a: Answers): EnergyEstimate {
   const trainingDays = Number.isFinite(days) ? Math.min(7, Math.max(0, days)) : 0;
   const perSession = kcalPerSession(weight, val(a, "q44e"), val(a, "q44b"));
   const activityAndTraining = bmr * activityFactor + (trainingDays * perSession) / 7;
-  const tefKcal = bmr * TEF_SHARE;
+  const tefKcal = activityAndTraining * TEF_SHARE;
   const tdee = activityAndTraining + tefKcal;
 
   return {
