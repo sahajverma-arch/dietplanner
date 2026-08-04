@@ -29,15 +29,20 @@ export default function IntakeOverride({
   const [open, setOpen] = useState(false);
 
   // Seeded from the measurement, so correcting one number does not require
-  // retyping the other three.
-  const current = {
-    calories: estimate.kcalPerDay,
+  // retyping the other three. Calories is never typed directly — it is
+  // always protein/carbs/fat run back through Atwater, so the total can
+  // never drift from the macros that make it up.
+  const macros = {
     protein_g: estimate.gramsPerDay,
     carbs_g: estimate.carbsPerDay,
     fat_g: estimate.fatPerDay,
   };
-  const setField = (field: keyof typeof current, raw: string) =>
-    onChange(JSON.stringify({ ...current, [field]: Math.max(0, Number(raw) || 0) }));
+  const calories = Math.round(macros.protein_g * 4 + macros.carbs_g * 4 + macros.fat_g * 9);
+  const setField = (field: keyof typeof macros, raw: string) => {
+    const next = { ...macros, [field]: Math.max(0, Number(raw) || 0) };
+    const nextCalories = Math.round(next.protein_g * 4 + next.carbs_g * 4 + next.fat_g * 9);
+    onChange(JSON.stringify({ ...next, calories: nextCalories }));
+  };
 
   return (
     <div className="mt-3 border-t border-zinc-800 pt-2.5">
@@ -62,7 +67,6 @@ export default function IntakeOverride({
             {(
               [
                 ["protein_g", "Protein g/day"],
-                ["calories", "kcal/day"],
                 ["carbs_g", "Carbs g/day"],
                 ["fat_g", "Fat g/day"],
               ] as const
@@ -73,11 +77,15 @@ export default function IntakeOverride({
                   className="input py-1 text-sm"
                   type="number"
                   min={0}
-                  value={current[field]}
+                  value={macros[field]}
                   onChange={(e) => setField(field, e.target.value)}
                 />
               </label>
             ))}
+            <div className="block">
+              <span className="text-[10px] uppercase tracking-wide text-zinc-500">kcal/day</span>
+              <div className="input flex items-center py-1 text-sm text-zinc-400">{calories}</div>
+            </div>
           </div>
           {active && (
             <button
@@ -89,8 +97,10 @@ export default function IntakeOverride({
             </button>
           )}
           <p className="mt-2 text-[11px] leading-relaxed text-zinc-600">
-            The week-1 protein target is calculated from this number, and the diet plan is built to
-            that target — so a correction here changes the plan.
+            Calories is not editable directly — it is always protein, carbs and fat run back through
+            4/4/9 kcal per gram, so the total can never drift from what it is made of. The week-1
+            protein target is calculated from these numbers, and the diet plan is built to that target
+            — so a correction here changes the plan.
           </p>
         </>
       )}
