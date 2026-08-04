@@ -182,22 +182,7 @@ async function main() {
           prescribed, so changing TDEE does not move the predicted finish date.
         </Text>
 
-        <Text style={s.h2}>3b · The universal intake-vs-TDEE/BMR rule (ours — checked before any category below)</Text>
-        <Fx>
-          current ≥ TDEE, or unmeasured  →  category&rsquo;s own strategy below, unchanged{"\n"}
-          BMR ≤ current &lt; TDEE  →  hold = current, weeks 1–{R.RECOMPOSE_HOLD_WEEKS}{"\n"}
-          current &lt; BMR  →  hold = BMR (immediate, not ramped), weeks 1–{R.RECOMPOSE_HOLD_WEEKS}{"\n"}
-          both hold cases: protein still climbs the ladder (§6), carbohydrate absorbs the difference —
-          NO deficit until the hold window ends. What follows it is not yet designed; the phase holds
-          flat past week {R.RECOMPOSE_HOLD_WEEKS} until that lands (§7&rsquo;s fallback).
-        </Fx>
-        <Text style={s.small}>
-          Category 2&rsquo;s own adaptation test (below) still runs FIRST and outranks this — a
-          deficit-history signal beats a snapshot reading. Only the under-eating snapshot itself moved
-          out of that test and into this rule, for every category including 2.
-        </Text>
-
-        <Text style={s.h2}>4 · Calories, by category — once at or above TDEE</Text>
+        <Text style={s.h2}>4 · Calories, by category (§6)</Text>
         <View style={s.row}>
           <Head w="6%">Cat</Head><Head w="17%">Client</Head><Head w="9%">Protein</Head><Head w="68%">Calorie strategy</Head>
         </View>
@@ -208,21 +193,22 @@ async function main() {
             <Cell w="9%" alt={i % 2 === 1} bold>{c.proteinPerKg} g/kg</Cell>
             <Cell w="68%" alt={i % 2 === 1}>
               {c.id === 1
-                ? `TDEE × (1 − ${R.DEFICIT_FIRST_TIMER}). If current intake exceeds the target by > ${R.TRANSITION_TRIGGER_KCAL} kcal, weeks 1–${R.TRANSITION_WEEKS} run at the midpoint of the two, full target from week ${R.TRANSITION_WEEKS + 1}.`
+                ? `TDEE × (1 − ${R.DEFICIT_FIRST_TIMER}). Current already ≤ target: target still applies, flagged rather than silent (§10.6). Current exceeds target by > ${R.TRANSITION_TRIGGER_KCAL} kcal: weeks 1–${R.TRANSITION_WEEKS} run at the midpoint of the two, full target from week ${R.TRANSITION_WEEKS + 1}.`
                 : c.id === 2
-                  ? `Deficit-history tests below fire first. Neither firing, current at/above TDEE → hold at TDEE × (1 − ${pct(R.DEFICIT_FULL)}) and audit 14 days of weighed logging.`
+                  ? `Three adaptation tests below (§6.4) fire first — any one adapted → diet break. None firing → hold at TDEE × (1 − ${pct(R.DEFICIT_FULL)}) and audit 14 days of weighed logging.`
                   : c.id === 3
-                    ? `Ramps ${R.RESTART_RAMP.map((d) => `−${pct(d)}`).join(" → ")} across weeks 1–${R.RESTART_RAMP.length}, then holds. Progression gated on behaviour (6 of 7 days logged), never on the scale.`
-                    : `Eat at TDEE. (The reverse diet this category used to run for an under-eating client now happens in §3b instead.)`}
+                    ? `Ramps ${R.RESTART_RAMP.map((d) => `−${pct(d)}`).join(" → ")} across weeks 1–${R.RESTART_RAMP.length}, then holds — regardless of where current intake sits. Progression gated on behaviour (6 of 7 days logged), never on the scale.`
+                    : `At/above TDEE or unmeasured: eat at TDEE. ${R.REVERSE_DIET_TRIGGER_KCAL}+ kcal under TDEE: reverse-diet up ${R.REVERSE_DIET_STEP_KCAL} kcal/week into carbohydrate, protein held at the maintenance band. Under that: no protocol, eat to appetite.`}
             </Cell>
           </View>
         ))}
         <Fx>
           BMR CLAMP — no target ever goes below BMR. Clamped targets raise a warning.{"\n"}
-          Category 2 deficit-history adaptation, EITHER is enough (outranks §3b when it fires):{"\n"}
-          {"  "}(a) deficit &gt; {pct(R.ADAPT_DEFICIT_DEPTH)} held &gt; {R.ADAPT_DEFICIT_WEEKS} weeks{"\n"}
-          {"  "}(b) weight flat ≥ {R.ADAPT_STAGNANT_WEEKS} weeks while eating ≤ {pct(R.ADAPT_STAGNANT_INTAKE_SHARE)} of TDEE{"\n"}
-          Either firing → diet break at TDEE for {R.DIET_BREAK_DAYS} (extra energy to carbohydrate,
+          Category 2 adaptation (§6.4), ANY ONE of three is enough:{"\n"}
+          {"  "}(a) current intake already &lt; BMR — real adaptation or under-reporting, same action either way{"\n"}
+          {"  "}(b) deficit &gt; {pct(R.ADAPT_DEFICIT_DEPTH)} held &gt; {R.ADAPT_DEFICIT_WEEKS} weeks{"\n"}
+          {"  "}(c) weight flat ≥ {R.ADAPT_STAGNANT_WEEKS} weeks while eating ≤ {pct(R.ADAPT_STAGNANT_INTAKE_SHARE)} of TDEE{"\n"}
+          Any firing → diet break at TDEE for {R.DIET_BREAK_DAYS} (extra energy to carbohydrate,
           {" "}{R.DIET_BREAK_STEPS}), then re-enter at −{pct(R.DEFICIT_FULL)}.
         </Fx>
 
@@ -297,7 +283,8 @@ async function main() {
           ["underweight", "STOP", `BMI < ${R.BMI_NORMAL_LOW}. No weight-loss plan is issued; route to a senior dietitian.`],
           ["tdee-below-bmr", "STOP", "TDEE < BMR — physiologically impossible, so the activity multiplier is wrong."],
           ["bmr-floor", "warn", "A computed target fell below BMR and was clamped to it."],
-          ["chronic-under-eating", "warn", "Reported intake is below BMR — real adaptation or substantial under-reporting either way; §3b raises the target to BMR automatically."],
+          ["chronic-under-eating", "warn", "Reported intake is below BMR — real adaptation or substantial under-reporting either way. What happens to the target is each category's own strategy (§4); for Category 2 it's one of the three adaptation tests."],
+          ["already-below-target", "warn", "Category 1 only: current intake is already at or below the computed deficit target. The target still applies — flagged for review rather than applied silently (§10.6)."],
           ["carb-floor", "warn", `Carbohydrate fell below the ICMR-NIN ${R.CARB_FLOOR_G} g/day minimum.`],
           ["fat-floor", "warn", `Fat set by the ${R.FAT_FLOOR_PER_KG} g/kg hormone floor rather than the ${pct(R.FAT_SHARE)} share.`],
           ["protein-held", "warn", "A kidney/liver condition or recorded protein limit — protein held, ramp disabled."],
@@ -321,8 +308,8 @@ async function main() {
           ["Timeline", `${ex.timeline!.fastestWeeks}–${ex.timeline!.slowestWeeks} weeks`],
           [
             "Calories",
-            ex.current && ex.current.kcal > 0 && ex.current.kcal < ex.tdee
-              ? `current ${ex.current.kcal} kcal < TDEE ${ex.tdee} → §3b holds at ${ex.targetKcal} kcal (weeks 1–${R.RECOMPOSE_HOLD_WEEKS})`
+            ex.warnings.some((w) => w.id === "already-below-target")
+              ? `current ${ex.current!.kcal} kcal already ≤ target → target still applies, flagged (§10.6): TDEE ${ex.tdee} × (1 − ${R.DEFICIT_FIRST_TIMER}) = ${ex.targetKcal} kcal`
               : `TDEE ${ex.tdee} × (1 − ${R.DEFICIT_FIRST_TIMER}) = ${ex.targetKcal} kcal`,
           ],
           ["Dosing weight", `${ex.dosingWeightKg} kg${ex.usedAdjustedWeight ? " (adjusted — BMI ≥ 25)" : " (actual)"}`],

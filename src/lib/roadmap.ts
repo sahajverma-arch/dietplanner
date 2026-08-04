@@ -119,13 +119,18 @@ export const ADAPT_STAGNANT_INTAKE_SHARE = 0.85;
 export const DIET_BREAK_DAYS = "10–14 days";
 export const DIET_BREAK_STEPS = "1,500–2,000 extra steps a day";
 /**
- * Weeks held flat — protein climbing the ladder, carbohydrate giving up the
- * room — before any calorie deficit begins, for a client whose measured
- * intake is at or below TDEE. What the client moves to after this window is
- * a separate, not-yet-designed decision; the phase holds flat past this
- * point until that follow-up lands (see weekTargets()'s existing fallback).
+ * Category 4's reverse diet (§6.6). A gap to TDEE under this sits inside
+ * normal daily variation and needs no protocol, just permission to eat to
+ * appetite.
  */
-export const RECOMPOSE_HOLD_WEEKS = 4;
+export const REVERSE_DIET_TRIGGER_KCAL = 300;
+/**
+ * The weekly increment once a reverse diet is running — roughly 5% of TDEE,
+ * chosen to sit below the noise floor of the scale so the client never sees
+ * a frightening number. Goes to carbohydrate; protein holds at the
+ * maintenance band.
+ */
+export const REVERSE_DIET_STEP_KCAL = 125;
 
 // --- Step 4 constants -------------------------------------------------------
 
@@ -515,12 +520,14 @@ function calorieStrategy(
 
   // Raised for every category, not just Category 2: a first-timer or a
   // re-starter can arrive already eating below their resting requirement
-  // without anyone having classified them as plateaued.
+  // without anyone having classified them as plateaued. This is a flag —
+  // what happens to the target from here is each category's own strategy
+  // below, which reads currentKcal and bmr itself.
   if (currentKcal !== null && currentKcal > 0 && currentKcal < bmr) {
     warnings.push({
       id: "chronic-under-eating",
       label: "Reported intake is below BMR",
-      detail: `${currentKcal} kcal against a BMR of ${bmr} — week 1 is raised to BMR rather than cut further (see below). Still worth a check: this can be real adaptation or under-reported intake either way.`,
+      detail: `${currentKcal} kcal against a BMR of ${bmr}. This can be real adaptation or under-reported intake — either way, worth a check before the plan is trusted.`,
       stop: false,
     });
   }
@@ -537,13 +544,12 @@ function calorieStrategy(
     return bmr;
   };
 
-  // Category 2's own deficit-HISTORY signals — a deficit held too long, or
-  // weight stagnant despite one — outrank the snapshot-based rule below:
-  // they diagnose something today's single kcal reading cannot. Under-eating
-  // itself is no longer one of these signals; it's handled by that rule.
-  let adaptation: Roadmap["adaptation"] = undefined;
   if (category === 2) {
-    adaptation = adaptationVerdict(input, tdee);
+    // Three tests decide adapted vs not (§6.4): intake already below BMR,
+    // a deep deficit held too long, or weight stagnant despite one. Any one
+    // is enough — each diagnoses something a single kcal reading alone
+    // cannot.
+    const adaptation = adaptationVerdict(input, bmr, tdee);
     if (adaptation.adapted) {
       const reentry = clamp(tdee * (1 - DEFICIT_FULL), "Re-entry deficit");
       return {
@@ -567,57 +573,9 @@ function calorieStrategy(
         ],
       };
     }
-  }
-
-  // The universal rule: where the client eats now, against TDEE and BMR,
-  // decides the ramp-in for every category. At or above TDEE (or nothing
-  // measured), each category's own strategy below is unchanged. Below it,
-  // the plate recomposes first — protein climbing the existing ladder,
-  // carbohydrate giving up the room — before any deficit is asked for at
-  // all. What a client here moves to after week RECOMPOSE_HOLD_WEEKS is a
-  // separate, not-yet-designed decision; the phase holds flat until then
-  // (weekTargets()'s existing fallback already holds any last phase past
-  // its own toWeek, which is what makes that safe to leave open for now).
-  if (currentKcal !== null && currentKcal > 0 && currentKcal < tdee) {
-    const raised = currentKcal < bmr;
-    const holdKcal = round(raised ? bmr : currentKcal);
-    return {
-      targetKcal: holdKcal,
-      adaptation,
-      phases: [
-        {
-          label: raised
-            ? `Weeks 1–${RECOMPOSE_HOLD_WEEKS} — raised to BMR, hold and recompose`
-            : `Weeks 1–${RECOMPOSE_HOLD_WEEKS} — hold and recompose`,
-          fromWeek: 1,
-          toWeek: RECOMPOSE_HOLD_WEEKS,
-          kcal: holdKcal,
-          note: raised
-            ? `${currentKcal} kcal was below the ${bmr} kcal resting requirement, so week 1 starts at BMR rather than a deficit. Held there while protein climbs the ladder and carbohydrate gives up the room — no cut until this stabilises.`
-            : `Held at the measured ${currentKcal} kcal — no deficit yet. Protein climbs the ladder and carbohydrate gives up the room, so the plate recomposes before it shrinks.`,
-        },
-      ],
-    };
-  }
-
-  // Below here, currentKcal is at or above TDEE, or unmeasured — each
-  // category's own strategy, otherwise unchanged.
-
-  if (category === 4) {
-    // Maintenance, reached only when eating at or above TDEE now — the
-    // reverse diet this category used to run for an under-eating client
-    // happens upstream instead, in the universal rule above.
-    const target = clamp(tdee, "Maintenance");
-    return {
-      targetKcal: target,
-      phases: [{ label: "Ongoing", fromWeek: 1, toWeek: null, kcal: target, note: "Maintenance at TDEE." }],
-    };
-  }
-
-  if (category === 2) {
-    // Not adapted, and eating at or above TDEE: the deficit is not as deep
-    // as the numbers claim, and cutting on top of bad data creates a real
-    // deficit far larger than intended.
+    // Not adapted: the deficit is not as deep as the numbers claim, and
+    // cutting on top of bad data creates a real deficit far larger than
+    // intended. Fix the measurement before touching the prescription.
     const held = clamp(tdee * (1 - DEFICIT_FULL), "Held target");
     return {
       targetKcal: held,
@@ -637,7 +595,9 @@ function calorieStrategy(
   if (category === 3) {
     // The client never resumes the old plan, because the old plan already
     // failed once. Each step is ~5% of TDEE, below the threshold at which a
-    // change in intake is consciously felt.
+    // change in intake is consciously felt. Runs the same regardless of
+    // where current intake sits relative to TDEE — the ramp itself is the
+    // response to a re-starter, nothing pre-empts it.
     const phases: CaloriePhase[] = RESTART_RAMP.map((deficit, i) => ({
       label: i === RESTART_RAMP.length - 1 ? `Week ${i + 1} onward` : `Week ${i + 1}`,
       fromWeek: i + 1,
@@ -651,12 +611,66 @@ function calorieStrategy(
     return { targetKcal: phases[phases.length - 1].kcal, phases };
   }
 
+  if (category === 4) {
+    // Reverse diet (§6.6): once eating sits 300 kcal or more below TDEE, add
+    // it back roughly 125 kcal/week rather than jumping straight to
+    // maintenance, which would land as a real surplus and fast regain.
+    const gapToTdee = currentKcal !== null && currentKcal > 0 ? tdee - currentKcal : 0;
+    if (gapToTdee >= REVERSE_DIET_TRIGGER_KCAL) {
+      const weeks = Math.ceil(gapToTdee / REVERSE_DIET_STEP_KCAL);
+      const phases: CaloriePhase[] = [];
+      for (let i = 0; i < weeks; i++) {
+        const last = i === weeks - 1;
+        phases.push({
+          label: last ? `Week ${i + 1} onward` : `Week ${i + 1}`,
+          fromWeek: i + 1,
+          toWeek: last ? null : i + 1,
+          kcal: last ? round(tdee) : round(currentKcal! + REVERSE_DIET_STEP_KCAL * (i + 1)),
+          note: `+${REVERSE_DIET_STEP_KCAL} kcal into carbohydrate; protein holds at the maintenance band. Small enough to sit below the noise floor of the scale, so the client never sees a frightening number.`,
+        });
+      }
+      return { targetKcal: round(tdee), phases };
+    }
+    // Inside normal daily variation, nothing measured, or already at/above
+    // TDEE: no protocol needed.
+    const target = clamp(tdee, "Maintenance");
+    return {
+      targetKcal: target,
+      phases: [
+        {
+          label: "Ongoing",
+          fromWeek: 1,
+          toWeek: null,
+          kcal: target,
+          note:
+            gapToTdee > 0
+              ? "The gap to TDEE is inside normal daily variation — no protocol needed, just permission to eat to appetite."
+              : "Maintenance at TDEE.",
+        },
+      ],
+    };
+  }
+
   // Category 1.
   const target = clamp(tdee * (1 - DEFICIT_FIRST_TIMER), "First-timer target");
-  // Reached only when currentKcal is at/above TDEE or unmeasured (the
-  // universal rule above claims everything below TDEE), so gap is always
-  // >= 0 here — never the "already eats below target" case that used to be
-  // flagged; that reading now goes through the recompose phase instead.
+
+  if (currentKcal !== null && currentKcal > 0 && currentKcal <= target) {
+    // §10.6: the transition rule only fires on a positive gap, so a client
+    // already at or below the computed target would otherwise land on the
+    // default branch below with no explanation for why their number just
+    // went up. The target still applies — pinning it to whatever the client
+    // happened to report would decouple it from TDEE, so it stops tracking
+    // the deficit at all (the same drift the BMR clamp and every other
+    // category's formula avoid by staying a function of TDEE). What §10.6
+    // asks for is disclosure, not a different number: flagged, not silent.
+    warnings.push({
+      id: "already-below-target",
+      label: "Current intake is already at or below the computed target",
+      detail: `${currentKcal} kcal is already at or under the ${target} kcal deficit target. The target still applies — check whether this is a genuinely low intake or under-reporting before trusting the report.`,
+      stop: false,
+    });
+  }
+
   const gap = currentKcal !== null && currentKcal > 0 ? currentKcal - target : 0;
 
   if (gap > TRANSITION_TRIGGER_KCAL) {
@@ -701,19 +715,26 @@ function calorieStrategy(
 /**
  * Category 2's diagnosis: genuinely adapted, or is reported intake drifting?
  *
- * Under-eating relative to BMR is handled upstream now, by the universal
- * intake-vs-TDEE/BMR rule in calorieStrategy() — before this ever runs — so
- * what's left here are the two signals that come from DEFICIT HISTORY rather
- * than a single snapshot reading: a deficit held too long, or weight
- * stagnant despite one. Either on its own outranks the snapshot-based rule,
- * because history is exactly what a snapshot cannot see.
+ * Three tests (§6.4), any one of which is enough: intake already below BMR
+ * (real adaptation or substantial under-reporting — the safe action is the
+ * same either way, so guessing which is not required), a deficit held too
+ * deep for too long, or weight stagnant despite one. The second and third
+ * come from DEFICIT HISTORY rather than a single snapshot reading — exactly
+ * what a day's kcal figure cannot show on its own.
  */
 function adaptationVerdict(
   input: RoadmapInput,
+  bmr: number,
   tdee: number
 ): { adapted: boolean; reasons: string[]; action: string } {
   const reasons: string[] = [];
   const { currentKcal, weeksOnCurrentPlan, weeksStagnant } = input;
+
+  if (currentKcal !== null && currentKcal > 0 && currentKcal < bmr) {
+    reasons.push(
+      `${currentKcal} kcal is already below the ${bmr} kcal resting requirement. Whether this is real adaptation or under-reported intake, the safe action is the same: stop cutting.`
+    );
+  }
 
   const deficitShare = currentKcal !== null && currentKcal > 0 ? 1 - currentKcal / tdee : 0;
   if (deficitShare > ADAPT_DEFICIT_DEPTH && (weeksOnCurrentPlan ?? 0) > ADAPT_DEFICIT_WEEKS) {

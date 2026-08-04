@@ -152,7 +152,7 @@ const Footer = ({ page, version }: { page: string; version: string }) => (
 );
 
 async function main() {
-  const { buildRoadmap, weekTargets, proteinLadder, settleWeek, CATEGORIES, ENGINE_VERSION, RECOMPOSE_HOLD_WEEKS } =
+  const { buildRoadmap, weekTargets, proteinLadder, settleWeek, CATEGORIES, ENGINE_VERSION } =
     await import("../src/lib/roadmap");
   const { roadmapFor } = await import("../src/lib/counselling/roadmap-input");
   const { estimateProteinIntake } = await import("../src/lib/protein-intake");
@@ -163,6 +163,7 @@ async function main() {
   const priya = roadmapFor(answers)!;
   const intake = estimateProteinIntake(answers);
   const energy = energyEstimate(answers);
+  const priyaAlreadyBelow = priya.warnings.find((w) => w.id === "already-below-target");
 
   // The companion's own worked example, so the document can be checked against
   // the published figures rather than only against our own client.
@@ -178,25 +179,20 @@ async function main() {
     category: 1,
   })!;
 
-  // Each row below now applies only once a client is eating AT OR ABOVE
-  // TDEE — anything under it is intercepted first by the universal
-  // intake-vs-TDEE/BMR rule described just after this table (ours, not in
-  // the companion). That rule replaced the transition/adaptation/reverse-diet
-  // mechanics each category used to run on its own for an under-eating start.
   const CAT_ROWS = [
     {
       n: "1",
       name: "First-timer",
       problem: "Habit formation",
-      calories: "At or above TDEE: TDEE − 17.5% (midpoint of the 15–20% band). If current intake exceeds the target by more than 400 kcal, weeks 1–2 run at the midpoint of the two and the full target starts week 3.",
+      calories: "TDEE − 17.5% (midpoint of the 15–20% band). If current intake exceeds the target by more than 400 kcal, weeks 1–2 run at the midpoint of the two and the full target starts week 3. Already at or below the target: the target still applies, but flagged rather than a silent, unexplained increase (§10.6).",
       protein: "1.35 g/kg",
-      sec: "§6.1, §6.2, §7.2",
+      sec: "§6.1, §6.2, §7.2, §10.6",
     },
     {
       n: "2",
       name: "Plateaued",
       problem: "Diagnosis — adapted, or logging drift?",
-      calories: "Two deficit-HISTORY tests (a deep deficit held 8+ weeks, or weight stagnant 3+ weeks while under-eating) outrank the universal rule when either fires: diet break at TDEE for 10–14 days (extra energy to carbohydrate, +1,500–2,000 steps), then re-enter at −20%. If neither fires and current is at or above TDEE: hold the target and audit 14 days of weighed logging.",
+      calories: "Three tests decide adapted vs not: intake already below BMR, a deep deficit held 8+ weeks, or weight stagnant 3+ weeks while under-eating. Any one fires a diet break at TDEE for 10–14 days (extra energy to carbohydrate, +1,500–2,000 steps), then re-enter at −20%. None firing: hold the target and audit 14 days of weighed logging.",
       protein: "1.9 g/kg",
       sec: "§6.4, §7.2",
     },
@@ -204,7 +200,7 @@ async function main() {
       n: "3",
       name: "Re-starter",
       problem: "Rebuilding confidence",
-      calories: "At or above TDEE: ramps −10% → −15% → −20% across weeks 1–3, then holds. Each step is ~5% of TDEE, below the level at which a change is consciously felt. Progression is gated on behaviour (6 of 7 days logged), never on the scale.",
+      calories: "Ramps −10% → −15% → −20% across weeks 1–3, then holds — regardless of where current intake sits, because the ramp itself is the response to a re-starter. Each step is ~5% of TDEE, below the level at which a change is consciously felt. Progression is gated on behaviour (6 of 7 days logged), never on the scale.",
       protein: "1.9 g/kg",
       sec: "§6.5, §7.2",
     },
@@ -212,7 +208,7 @@ async function main() {
       n: "4",
       name: "Maintenance",
       problem: "Not regaining",
-      calories: "At or above TDEE: eat at TDEE. An under-eating maintenance client no longer reverse-diets on their own — the universal rule below now covers that start instead.",
+      calories: "At or above TDEE, or nothing measured: eat at TDEE. 300 kcal or more under TDEE: reverse-diet back up ~125 kcal/week, mostly into carbohydrate with protein held at the maintenance band. Under 300 kcal: no protocol, just permission to eat to appetite.",
       protein: "1.5 g/kg",
       sec: "§6.6, §7.2",
     },
@@ -223,7 +219,7 @@ async function main() {
     ["Age, sex", "Q1, client details", "BMR (Mifflin-St Jeor) — the floor no target may go below"],
     ["Everyday activity", "Q54c", "The NEAT multiplier: ×1.2 seated → ×1.7 highly physical"],
     ["Training days a week, intensity, duration", "Q44a, Q44e, Q44b", "kcal/session = (MET − 1) × weight × hours, added to TDEE averaged over 7 days"],
-    ["The whole food day", "Meal options × days a week, staples, drinks", "Measured current intake — drives the universal intake-vs-TDEE/BMR rule (page 1), the transition trigger, and both of Category 2's deficit-history adaptation tests"],
+    ["The whole food day", "Meal options × days a week, staples, drinks", "Measured current intake — drives Category 1's transition trigger, all three of Category 2's adaptation tests, and Category 4's reverse-diet trigger"],
     ["Client category", "Dietitian assessment", "Calorie strategy and protein band. The one judgement the engine cannot make."],
     ["Weeks on deficit / stagnant", "Dietitian assessment (Category 2 only)", "Adaptation tests 2 and 3"],
   ];
@@ -312,37 +308,6 @@ async function main() {
             </Cell>
           </View>
         ))}
-
-        <Text style={s.h3}>
-          Before any of that: where the client eats now, against TDEE and BMR (ours — the companion
-          is silent)
-        </Text>
-        <Text style={s.p}>
-          Every category above used to run its own, inconsistent reaction to a client who arrives
-          already under-eating — a transition phase, an adaptation test with a diet break to TDEE, a
-          reverse diet, or nothing at all. That&rsquo;s replaced with one rule, checked first, for
-          every category:
-        </Text>
-        <View style={s.callout}>
-          <Text>
-            At or above TDEE (or nothing measured): unchanged, each category&rsquo;s own strategy
-            above runs exactly as written. Between BMR and TDEE: hold flat at the client&rsquo;s
-            measured intake for {RECOMPOSE_HOLD_WEEKS} weeks — no deficit yet, protein climbs the
-            existing ladder and carbohydrate gives up the room. Below BMR: raised straight to BMR in
-            week 1 (not ramped), then the same hold.
-          </Text>
-        </View>
-        <Text style={s.p}>
-          Category 2&rsquo;s adaptation test still runs first and still outranks this: a deep deficit
-          held 8+ weeks, or weight stagnant 3+ weeks while under-eating, is a signal from DEFICIT
-          HISTORY that a single kcal reading cannot see, so it still sends that client to a diet break
-          at TDEE regardless of where today&rsquo;s intake sits. Only the under-eating reading itself
-          moved out of that test — it&rsquo;s the universal rule&rsquo;s job now.
-        </Text>
-        <Text style={[s.p, s.small]}>
-          What a client moves to after the hold window is a separate design question, deliberately
-          left open for now — the phase holds flat past it until that follow-up work lands.
-        </Text>
 
         <Text style={s.h3}>Why the protein bands differ (§7.2)</Text>
         <Text style={s.p}>
@@ -459,9 +424,10 @@ async function main() {
           <Text style={{ fontFamily: "Helvetica-Bold" }}>TDEE below BMR</Text> — physiologically
           impossible, so the activity level was mis-entered; rejected rather than computed from.{" "}
           <Text style={{ fontFamily: "Helvetica-Bold" }}>Chronic under-eating</Text> — reported
-          intake below BMR is flagged (real adaptation or substantial under-reporting either way),
-          and the universal rule on page 1 raises the target straight to BMR rather than cutting
-          further.{" "}
+          intake below BMR is flagged for every category (real adaptation or substantial
+          under-reporting either way); what happens to the target from there is each category&rsquo;s
+          own strategy on page 1 — for Category 2 specifically it is one of the three adaptation
+          tests.{" "}
           <Text style={{ fontFamily: "Helvetica-Bold" }}>Hormone floor</Text> — fat never below
           0.7 g/kg. A hard stop suppresses the prescription entirely; the plan then falls back to
           the measured-intake progression rather than computing from numbers known to be wrong.
@@ -479,10 +445,9 @@ async function main() {
           <Text style={{ fontFamily: "Helvetica-Bold" }}>§10.2</Text> A 100 g carbohydrate floor
           check, because carbohydrate is the residual and can be squeezed by a high protein band at
           a low calorie target.{"  "}
-          <Text style={{ fontFamily: "Helvetica-Bold" }}>§10.6</Text> A client already eating below
-          the computed target is not silently told to eat more — superseded by the universal
-          intake-vs-TDEE/BMR rule (page 1), which now holds or raises to BMR instead of a warning.
-          {"  "}
+          <Text style={{ fontFamily: "Helvetica-Bold" }}>§10.6</Text> A first-timer already eating at
+          or below the computed target still gets that target — it is flagged for review rather than
+          applied silently.{"  "}
           <Text style={{ fontFamily: "Helvetica-Bold" }}>§10.7</Text> The constants version is
           stamped on every roadmap.{"  "}
           <Text style={{ fontFamily: "Helvetica-Bold" }}>§10.8</Text> A 5% interim milestone, since
@@ -529,22 +494,17 @@ async function main() {
           BMR {energy.bmr} × {energy.activityFactor} activity + {energy.trainingDays} training days
           = TDEE {priya.tdee}
         </Text>
-        {intake.kcalPerDay > 0 && intake.kcalPerDay < priya.tdee ? (
+        {priyaAlreadyBelow ? (
           <>
             <Text style={s.code}>
-              current {intake.kcalPerDay} kcal is below TDEE {priya.tdee} — the universal
-              intake-vs-TDEE/BMR rule (page 1) takes over before Category 1&rsquo;s own formula runs
+              current {intake.kcalPerDay} kcal already sits at or under the computed deficit target
+              (§10.6)
             </Text>
             <Text style={s.code}>
-              target = {priya.targetKcal} kcal, held flat weeks 1–{RECOMPOSE_HOLD_WEEKS}
+              target = {priya.tdee} × (1 − 0.175) = {priya.targetKcal} kcal — still applies, flagged
+              rather than silent
             </Text>
-            <Text style={[s.p, s.small]}>
-              She measures at {intake.kcalPerDay} kcal now, below her {priya.tdee} kcal TDEE and{" "}
-              {intake.kcalPerDay >= (energy.bmr ?? 0) ? "at or above" : "below"} her{" "}
-              {energy.bmr} kcal BMR, so the universal rule intercepts: {intake.kcalPerDay} kcal is
-              held flat while protein climbs the ladder and carbohydrate gives up the room, instead
-              of Category 1&rsquo;s own 17.5% deficit formula computing an immediate cut.
-            </Text>
+            <Text style={[s.p, s.small]}>{priyaAlreadyBelow.detail}</Text>
           </>
         ) : (
           <>
@@ -552,7 +512,7 @@ async function main() {
               target = {priya.tdee} × (1 − 0.175) = {priya.targetKcal} kcal
             </Text>
             <Text style={[s.p, s.small]}>
-              She eats {intake.kcalPerDay} kcal now, at or above TDEE, so Category 1&rsquo;s own
+              She eats {intake.kcalPerDay} kcal now, above that target, so Category 1&rsquo;s own
               formula runs as written: the gap from current intake to the target is{" "}
               {Math.abs(intake.kcalPerDay - priya.targetKcal) > 400
                 ? "over 400 kcal, so a two-week transition applies first"
@@ -640,12 +600,12 @@ async function main() {
           })}
         </View>
         <Text style={[s.p, s.small, { marginTop: 4 }]}>
-          Flat kcal, because {intake.kcalPerDay > 0 && intake.kcalPerDay < priya.tdee
-            ? "she's in the universal rule's hold-and-recompose window"
+          Flat kcal, because {priyaAlreadyBelow
+            ? "her intake is already at or below the target, so there's no gap to transition across (flagged for review, §10.6)"
             : "no transition phase applies to her"} — only protein and carbohydrate move week to
-          week. A Category 3 re-starter at or above TDEE would instead step down each week, and a
-          first-timer at or above TDEE whose intake exceeded the target by more than 400 kcal would
-          run two weeks at the midpoint first.
+          week. A Category 3 re-starter would instead step down each week regardless, and a
+          first-timer whose intake exceeded the target by more than 400 kcal would run two weeks at
+          the midpoint first.
         </Text>
 
         <Text style={s.h3}>The same engine on the companion&apos;s published example</Text>
