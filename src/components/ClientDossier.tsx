@@ -131,7 +131,7 @@ export default function ClientDossier({
         onRefresh={() => router.refresh()}
       />
 
-      <KpiStrip energy={energy} intake={intake} target={displayTarget} roadmap={roadmap} />
+      <KpiStrip energy={energy} intake={intake} />
 
       {escalations.length > 0 && <Escalations flags={escalations} />}
 
@@ -311,33 +311,13 @@ function Quote({ heading, items }: { heading: string; items: string[] }) {
 function KpiStrip({
   energy,
   intake,
-  target,
-  roadmap,
 }: {
   energy: ReturnType<typeof energyEstimate>;
   intake: ReturnType<typeof estimateProteinIntake>;
-  target: ReturnType<typeof proteinTarget>;
-  roadmap: ReturnType<typeof roadmapFor>;
 }) {
-  // `target` is `displayProteinTarget()`'s output — the roadmap's week-1
-  // figure whenever a roadmap exists, so this tile can never disagree with
-  // the other protein displays on this page again. (It used to compute this
-  // independently, which is exactly how two different protein targets ended
-  // up on the same screen — 57 in the tile, 79 in the roadmap directly below
-  // it — with nothing saying which one the client would get.)
-  //
-  // The tile says WEEK-1, so it has to be week 1, not the destination the
-  // client is ramping toward — that belongs in the subtitle below instead.
-  const proteinTargetG = target.targetG || null;
-  const ramping = roadmap !== null && target.basis === "progression";
-  const proteinBasis = roadmap
-    ? ramping
-      ? `step 1 of ${roadmap.proteinPath.length} → ${roadmap.macros.protein_g} g`
-      : `${roadmap.category.proteinPerKg} g/kg × ${roadmap.dosingWeightKg} kg${roadmap.usedAdjustedWeight ? " adj" : ""}`
-    : intake.gramsPerKg
-      ? `now ${intake.gramsPerDay} g · ${intake.gramsPerKg} g/kg`
-      : "g/day aim";
-  // Single values with no comparison to make — stat tiles, not a chart.
+  // Single values with no comparison to make — stat tiles, not a chart. The
+  // week-1 target is a comparison (now vs aim), so it lives in the dumbbell
+  // chart below instead of here.
   return (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
       <Stat
@@ -366,9 +346,13 @@ function KpiStrip({
         sub={intake.kcalPerDay > 0 ? "kcal/day measured" : "record the meals"}
       />
       <Stat
-        label="Week-1 protein"
-        value={proteinTargetG ? String(proteinTargetG) : "—"}
-        sub={proteinBasis}
+        label="Protein now"
+        value={intake.gramsPerDay > 0 ? String(intake.gramsPerDay) : "—"}
+        sub={
+          intake.gramsPerDay > 0
+            ? `${intake.gramsPerKg} g/kg measured`
+            : "record the meals"
+        }
         accent
       />
     </div>
