@@ -134,7 +134,7 @@ function proteinTrace(
 
 async function main() {
   const R = await import("../src/lib/roadmap");
-  const { energyEstimate, INTENSITY_MET, DURATION_H } = await import("../src/lib/counselling/energy");
+  const { energyEstimate, INTENSITY_MET, DURATION_H, TEF_SHARE } = await import("../src/lib/counselling/energy");
   const { roadmapFor, roadmapAtGoal } = await import("../src/lib/counselling/roadmap-input");
   const { PRIYA, RAHUL, SNEHA, AADI } = await import("./test-clients");
 
@@ -199,6 +199,7 @@ async function main() {
           // how it plays out week by week.
           const currentKcal = ex.current?.kcal ?? null;
           const bmr = energy.bmr!;
+          const activityAndTraining = energy.tdee! - energy.tefKcal!;
           const historyAdapted = cat.id === 2 && !!ex.adaptation?.adapted;
           const target1 = Math.round(tdee * (1 - R.DEFICIT_FIRST_TIMER));
           const alreadyBelowTarget =
@@ -307,8 +308,13 @@ async function main() {
               />
               <Calc
                 given={`BMR ${energy.bmr} kcal · activity "${activityLabel}" = ×${energy.activityFactor} · training ${trainingDays} d/wk × ${energy.kcalPerSession} kcal/session`}
-                formula="TDEE = BMR × NEAT + (training days × kcal/session) ÷ 7"
-                calc={`= ${energy.bmr} × ${energy.activityFactor} + (${trainingDays} × ${energy.kcalPerSession}) ÷ 7 = ${energy.tdee} kcal`}
+                formula="activity + training = BMR × NEAT + (training days × kcal/session) ÷ 7"
+                calc={`= ${energy.bmr} × ${energy.activityFactor} + (${trainingDays} × ${energy.kcalPerSession}) ÷ 7 = ${activityAndTraining} kcal`}
+              />
+              <Calc
+                given={`activity + training ${activityAndTraining} kcal · TEF share ${TEF_SHARE}`}
+                formula="TDEE = (activity + training) × (1 + TEF share)   (TEF: energy cost of digesting what's eaten)"
+                calc={`= ${activityAndTraining} × (1 + ${TEF_SHARE}) = ${energy.tdee} kcal`}
               />
 
               <Text style={s.h2}>2 · BMI, target weight, timeline</Text>

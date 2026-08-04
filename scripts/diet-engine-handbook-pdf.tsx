@@ -84,7 +84,7 @@ const Footer = ({ page, version }: { page: string; version: string }) => (
 
 async function main() {
   const R = await import("../src/lib/roadmap");
-  const { NEAT_FACTOR, INTENSITY_MET, DURATION_H } = await import("../src/lib/counselling/energy");
+  const { NEAT_FACTOR, INTENSITY_MET, DURATION_H, TEF_SHARE } = await import("../src/lib/counselling/energy");
   const { roadmapFor, roadmapAtGoal } = await import("../src/lib/counselling/roadmap-input");
   const { PRIYA } = await import("./test-clients");
 
@@ -136,7 +136,8 @@ async function main() {
         <Fx>
           BMR = 10·weight + 6.25·height − 5·age + (male ? +5 : −161){"\n"}
           kcal/session = (MET − 1) × weight × hours{"\n"}
-          TDEE = BMR × NEAT + (training days × kcal/session) ÷ 7
+          activity + training = BMR × NEAT + (training days × kcal/session) ÷ 7{"\n"}
+          TDEE = (activity + training) × (1 + {pct(TEF_SHARE)})
         </Fx>
         <Text style={s.small}>
           NEAT by q54c: {Object.entries(NEAT_FACTOR).map(([k, v]) => `${k} ×${v}`).join(" · ")}. Low
@@ -149,6 +150,12 @@ async function main() {
           (q44b): {Object.entries(DURATION_H).map(([k, v]) => `${k} ${v}h`).join(" · ")}. The −1 nets out the
           resting hour the session occupies, since BMR already covers it — the gross MET figure would bill
           that hour twice.
+        </Text>
+        <Text style={s.small}>
+          TEF ({pct(TEF_SHARE)}, thermic effect of food): digesting and metabolising what&rsquo;s eaten is
+          itself energy work — roughly a tenth of everything eaten on an ordinary mixed plate. Priced as{" "}
+          {pct(TEF_SHARE)} of the activity-and-training total above (not of BMR alone) and added on top, not
+          solved as a share of the final number.
         </Text>
 
         <Text style={s.h2}>2 · BMI band and target weight</Text>
