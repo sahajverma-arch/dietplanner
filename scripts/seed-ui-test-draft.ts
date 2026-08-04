@@ -60,6 +60,7 @@ async function main() {
     .select("data, updated_at")
     .eq("dietitian_id", profile.id)
     .eq("kind", "first_counselling")
+    .eq("appointment_id", "")
     .maybeSingle();
   if (existing) {
     const outDir = path.join(__dirname, "..", "test-output");
@@ -76,10 +77,11 @@ async function main() {
     {
       dietitian_id: profile.id,
       kind: "first_counselling",
+      appointment_id: "",
       data: { answers, appointmentId: null },
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "dietitian_id,kind" }
+    { onConflict: "dietitian_id,kind,appointment_id" }
   );
   if (upsertError) throw new Error(upsertError.message);
 
