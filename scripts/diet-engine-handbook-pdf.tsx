@@ -204,7 +204,7 @@ async function main() {
                 : c.id === 2
                   ? `Three adaptation tests below (§6.4) fire first — any one adapted → diet break. None firing → hold at TDEE × (1 − ${pct(R.DEFICIT_FULL)}) and audit 14 days of weighed logging.`
                   : c.id === 3
-                    ? `Ramps ${R.RESTART_RAMP.map((d) => `−${pct(d)}`).join(" → ")} across weeks 1–${R.RESTART_RAMP.length}, then holds — regardless of where current intake sits. Progression gated on behaviour (6 of 7 days logged), never on the scale.`
+                    ? `Ramps ${R.RESTART_RAMP.map((d, i) => `−${pct(d)} (${R.RESTART_RAMP_WEEKS[i][1] === null ? `week ${R.RESTART_RAMP_WEEKS[i][0]}+` : R.RESTART_RAMP_WEEKS[i][0] === R.RESTART_RAMP_WEEKS[i][1] ? `wk ${R.RESTART_RAMP_WEEKS[i][0]}` : `wks ${R.RESTART_RAMP_WEEKS[i][0]}–${R.RESTART_RAMP_WEEKS[i][1]}`})`).join(" → ")}, then holds — regardless of where current intake sits. Progression gated on behaviour (6 of 7 days logged), never on the scale.`
                     : `At/above TDEE or unmeasured: eat at TDEE. ${R.REVERSE_DIET_TRIGGER_KCAL}+ kcal under TDEE: reverse-diet up ${R.REVERSE_DIET_STEP_KCAL} kcal/week into carbohydrate, protein held at the maintenance band. Under that: no protocol, eat to appetite.`}
             </Cell>
           </View>

@@ -105,6 +105,16 @@ export const DEFICIT_FIRST_TIMER = 0.175;
 export const DEFICIT_FULL = 0.2;
 export const RESTART_RAMP = [0.1, 0.15, 0.2];
 /**
+ * Week ranges for each RESTART_RAMP step (§6.5 of the standards companion):
+ * the middle step holds for two weeks so the client has three full weeks of
+ * demonstrated compliance before the full 20% deficit arrives in week 4.
+ */
+export const RESTART_RAMP_WEEKS: Array<[number, number | null]> = [
+  [1, 1],
+  [2, 3],
+  [4, null],
+];
+/**
  * Free-living intake varies by ±300-400 kcal without anyone noticing. A gap
  * smaller than that is inside the noise and needs no transition phase; a gap
  * larger than it is what registers as deprivation.
@@ -598,16 +608,26 @@ function calorieStrategy(
     // change in intake is consciously felt. Runs the same regardless of
     // where current intake sits relative to TDEE — the ramp itself is the
     // response to a re-starter, nothing pre-empts it.
-    const phases: CaloriePhase[] = RESTART_RAMP.map((deficit, i) => ({
-      label: i === RESTART_RAMP.length - 1 ? `Week ${i + 1} onward` : `Week ${i + 1}`,
-      fromWeek: i + 1,
-      toWeek: i === RESTART_RAMP.length - 1 ? null : i + 1,
-      kcal: clamp(tdee * (1 - deficit), `Ramp step ${i + 1}`),
-      note:
-        i === 0
-          ? "A real but nearly painless deficit. Its purpose is data and rhythm, not loss."
-          : `Progression is gated on behaviour — 6 of 7 days logged — never on the scale, which is contaminated by water, salt and cycle.`,
-    }));
+    //
+    const phases: CaloriePhase[] = RESTART_RAMP.map((deficit, i) => {
+      const [fromWeek, toWeek] = RESTART_RAMP_WEEKS[i];
+      const label =
+        toWeek === null
+          ? `Week ${fromWeek} onward`
+          : fromWeek === toWeek
+            ? `Week ${fromWeek}`
+            : `Weeks ${fromWeek}–${toWeek}`;
+      return {
+        label,
+        fromWeek,
+        toWeek,
+        kcal: clamp(tdee * (1 - deficit), `Ramp step ${i + 1}`),
+        note:
+          i === 0
+            ? "A real but nearly painless deficit. Its purpose is data and rhythm, not loss."
+            : `Progression is gated on behaviour — 6 of 7 days logged — never on the scale, which is contaminated by water, salt and cycle.`,
+      };
+    });
     return { targetKcal: phases[phases.length - 1].kcal, phases };
   }
 
