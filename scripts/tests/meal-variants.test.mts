@@ -16,7 +16,11 @@ import {
   uncoveredDays,
   type MealVariant,
 } from "../../src/lib/counselling/meal-variants";
-import { estimateProteinIntake } from "../../src/lib/protein-intake";
+import {
+  estimateProteinIntake,
+  beverageQuestionId,
+  encodeStaplePick,
+} from "../../src/lib/protein-intake";
 import type { Answers } from "../../src/lib/counselling/questions";
 
 let failed = 0;
@@ -97,6 +101,53 @@ const overridden = variantIntake(wholeDayOverride);
 check(
   "overriding the whole day wins over the per-meal sum",
   overridden.perDay.protein_g === 77 && overridden.overridden
+);
+
+// Regression: IntakeOverride.tsx seeds its next edit from the recomputed
+// estimate, so a drink double-counted on top of an override would compound
+// on every subsequent edit — the panel visibly drifting upward as a
+// dietitian types, for no reason they could see.
+const withDrink: Answers = {
+  ...breakfast,
+  [beverageQuestionId("breakfast")]: [encodeStaplePick("Tea with sugar", 2)], // +3.6 g protein, +140 kcal
+};
+const beforeOverride = estimateProteinIntake({ ...withDrink, q9_weight: "70" });
+check(
+  "a drink is counted once before any override",
+  beforeOverride.gramsPerDay === 18.6,
+  `${beforeOverride.gramsPerDay} g`
+);
+const firstEdit: Answers = {
+  ...withDrink,
+  q9_weight: "70",
+  [INTAKE_OVERRIDE_ID]: JSON.stringify({
+    calories: beforeOverride.kcalPerDay,
+    protein_g: 20, // the dietitian's one correction
+    carbs_g: beforeOverride.carbsPerDay,
+    fat_g: beforeOverride.fatPerDay,
+  }),
+};
+const afterFirstEdit = estimateProteinIntake(firstEdit);
+check(
+  "overriding one field does not add the drink again on top of it",
+  afterFirstEdit.gramsPerDay === 20,
+  `${afterFirstEdit.gramsPerDay} g`
+);
+// Simulate IntakeOverride reseeding a SECOND edit from the just-recomputed
+// estimate, exactly as the component does — this is what used to compound.
+const secondEdit: Answers = {
+  ...firstEdit,
+  [INTAKE_OVERRIDE_ID]: JSON.stringify({
+    calories: afterFirstEdit.kcalPerDay,
+    protein_g: afterFirstEdit.gramsPerDay, // untouched this round
+    carbs_g: afterFirstEdit.carbsPerDay,
+    fat_g: 55, // the dietitian corrects a different field this time
+  }),
+};
+check(
+  "a second, unrelated edit does not drift the first field either",
+  estimateProteinIntake(secondEdit).gramsPerDay === 20,
+  `${estimateProteinIntake(secondEdit).gramsPerDay} g`
 );
 
 // --- 4. Nothing may throw on a half-written or corrupt draft ----------------

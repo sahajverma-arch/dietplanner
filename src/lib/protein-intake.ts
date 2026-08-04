@@ -528,11 +528,25 @@ export function estimateProteinIntake(a: Answers): ProteinIntakeEstimate {
   );
 
   if (variants.recorded) {
-    // The meals as measured, plus what was drunk alongside them.
-    const protein_g = round1(variants.perDay.protein_g + drinks.protein);
-    const carbs_g = round1(variants.perDay.carbs_g + drinks.carbs);
-    const fat_g = round1(variants.perDay.fat_g + drinks.fat);
-    const calories = Math.round(variants.perDay.calories + drinks.kcal);
+    // The meals as measured, plus what was drunk alongside them — UNLESS the
+    // dietitian overrode the whole day outright. That override is seeded from
+    // (and displayed as) a total that already includes the drinks, so it is
+    // already everything; adding drinks again would double-count them, and
+    // since IntakeOverride reseeds its next edit from this same recomputed
+    // total, the double-count would compound further on every subsequent
+    // edit — the number visibly drifting upward each time anything is typed.
+    const protein_g = variants.overridden
+      ? round1(variants.perDay.protein_g)
+      : round1(variants.perDay.protein_g + drinks.protein);
+    const carbs_g = variants.overridden
+      ? round1(variants.perDay.carbs_g)
+      : round1(variants.perDay.carbs_g + drinks.carbs);
+    const fat_g = variants.overridden
+      ? round1(variants.perDay.fat_g)
+      : round1(variants.perDay.fat_g + drinks.fat);
+    const calories = variants.overridden
+      ? Math.round(variants.perDay.calories)
+      : Math.round(variants.perDay.calories + drinks.kcal);
     const weight = bodyWeightKg(a);
     const macroKcal = 4 * protein_g + 4 * carbs_g + 9 * fat_g;
     const share = (kcal: number) => (macroKcal > 0 ? Math.round((kcal / macroKcal) * 100) : 0);
