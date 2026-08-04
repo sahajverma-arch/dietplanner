@@ -110,36 +110,98 @@ check(
   `${restarter.phases[0].kcal} -> ${restarter.phases[2].kcal}`
 );
 
-// Category 2: the three adaptation tests.
+// Category 2: the two adaptation signals that survive from deficit HISTORY
+// (under-eating itself moved to the universal rule below).
 const notAdapted = buildRoadmap({ ...WORKED, category: 2, currentKcal: 2100, weeksStagnant: 1 })!;
-check("no adaptation test firing means audit the logging", !notAdapted.adaptation!.adapted);
-check("...and the target does not move", notAdapted.phases.length === 1);
-const belowBmr = buildRoadmap({ ...WORKED, category: 2, currentKcal: 1500 })!;
-check("eating below BMR reads as adapted", belowBmr.adaptation!.adapted);
+check("no history signal firing means the universal rule decides instead", !notAdapted.adaptation!.adapted);
+check(
+  "...held flat at the measured intake, not a computed deficit",
+  notAdapted.phases.length === 1 && notAdapted.phases[0].kcal === 2100,
+  `${notAdapted.phases[0].kcal} kcal`
+);
 const stagnant = buildRoadmap({ ...WORKED, category: 2, currentKcal: 1900, weeksStagnant: 3 })!;
-check("3 weeks stagnant at ≤85% of TDEE reads as adapted", stagnant.adaptation!.adapted);
+check("3 weeks stagnant at ≤85% of TDEE still reads as adapted", stagnant.adaptation!.adapted);
 check(
   "2 weeks stagnant does not — that is still noise",
   !buildRoadmap({ ...WORKED, category: 2, currentKcal: 1900, weeksStagnant: 2 })!.adaptation!.adapted
 );
 const longDeficit = buildRoadmap({ ...WORKED, category: 2, currentKcal: 1600, weeksOnCurrentPlan: 10, bmr: 1500 })!;
-check("a steep deficit held past 8 weeks reads as adapted", longDeficit.adaptation!.adapted);
+check("a steep deficit held past 8 weeks still reads as adapted", longDeficit.adaptation!.adapted);
 check(
   "...but the same depth for 6 weeks does not",
   !buildRoadmap({ ...WORKED, category: 2, currentKcal: 1600, weeksOnCurrentPlan: 6, bmr: 1500 })!.adaptation!.adapted
 );
-check("an adapted client gets a diet break first", belowBmr.phases[0].label.startsWith("Diet break"));
-check("...at TDEE", belowBmr.phases[0].kcal === 2300, String(belowBmr.phases[0].kcal));
-check("...then re-enters at 20%", belowBmr.phases[1].kcal === 1840, String(belowBmr.phases[1].kcal));
+check("a history-adapted client still gets a diet break first", stagnant.phases[0].label.startsWith("Diet break"));
+check("...at TDEE", stagnant.phases[0].kcal === 2300, String(stagnant.phases[0].kcal));
+check("...then re-enters at 20%", stagnant.phases[1].kcal === 1840, String(stagnant.phases[1].kcal));
 
-// Category 4: maintenance, which sometimes means eating more.
-const reverse = buildRoadmap({ ...WORKED, category: 4, currentKcal: 1700 })!;
-check("a 600 kcal gap reverse-diets in five steps", reverse.phases.length === 5, `${reverse.phases.length} weeks`);
-check("...at 125 kcal a week", reverse.phases[0].kcal === 1825, String(reverse.phases[0].kcal));
-check("...ending at TDEE", reverse.phases[4].kcal === 2300, String(reverse.phases[4].kcal));
+// Under-eating relative to BMR is no longer an adaptation-test signal on its
+// own — the universal rule below handles it, for category 2 same as anyone.
+const belowBmr = buildRoadmap({ ...WORKED, category: 2, currentKcal: 1500 })!;
+check("eating below BMR no longer reads as 'adapted' by itself", !belowBmr.adaptation!.adapted);
 check(
-  "a gap under 300 kcal needs no protocol",
-  buildRoadmap({ ...WORKED, category: 4, currentKcal: 2100 })!.phases.length === 1
+  "...instead it's raised straight to BMR and held there",
+  belowBmr.phases.length === 1 && belowBmr.phases[0].kcal === 1800 && belowBmr.targetKcal === 1800,
+  `${belowBmr.phases[0].kcal} kcal`
+);
+check("...and the phase says so", belowBmr.phases[0].label.includes("raised to BMR"));
+
+// Category 4: maintenance. The old reverse-diet is gone — an under-eating
+// client is caught by the universal rule before category 4's own branch runs.
+const maintUnderBmr = buildRoadmap({ ...WORKED, category: 4, currentKcal: 1700 })!;
+check(
+  "a category-4 client under BMR is raised to BMR too, not reverse-dieted",
+  maintUnderBmr.phases.length === 1 && maintUnderBmr.phases[0].kcal === 1800,
+  `${maintUnderBmr.phases[0].kcal} kcal`
+);
+const maintBetween = buildRoadmap({ ...WORKED, category: 4, currentKcal: 2100 })!;
+check(
+  "...and between BMR and TDEE it holds at the measured intake",
+  maintBetween.phases.length === 1 && maintBetween.phases[0].kcal === 2100,
+  `${maintBetween.phases[0].kcal} kcal`
+);
+const maintAtTdee = buildRoadmap({ ...WORKED, category: 4 })!;
+check(
+  "...and at or above TDEE, maintenance just holds at TDEE — one phase",
+  maintAtTdee.phases.length === 1 && maintAtTdee.phases[0].label === "Ongoing" && maintAtTdee.targetKcal === 2300,
+  `${maintAtTdee.targetKcal} kcal`
+);
+
+// --- The universal intake-vs-TDEE/BMR rule ----------------------------------
+// Applies before any category's own strategy, whenever intake is measured
+// and below TDEE (category 2's history signals above still take priority).
+const holding = buildRoadmap({ ...WORKED, currentKcal: 2000, currentProteinG: 20 })!;
+check(
+  "between BMR and TDEE: hold flat at the measured intake for 4 weeks",
+  holding.phases.length === 1 &&
+    holding.phases[0].kcal === 2000 &&
+    holding.phases[0].fromWeek === 1 &&
+    holding.phases[0].toWeek === 4,
+  `${holding.phases[0].kcal} kcal, weeks ${holding.phases[0].fromWeek}-${holding.phases[0].toWeek}`
+);
+check("...the target used for fat/carbs is the hold level, not an undesigned deficit", holding.targetKcal === 2000);
+check(
+  "...still shows past week 4, via the same fallback every roadmap uses to hold its last phase",
+  weekTargets(holding, 6).kcal === 2000
+);
+check(
+  "...protein still climbs the ladder and carbohydrate still gives way, kcal held flat",
+  weekTargets(holding, 2).protein_g > weekTargets(holding, 1).protein_g &&
+    weekTargets(holding, 2).kcal === weekTargets(holding, 1).kcal &&
+    weekTargets(holding, 1).carbs_g > weekTargets(holding, 2).carbs_g,
+  `wk1 P${weekTargets(holding, 1).protein_g}/C${weekTargets(holding, 1).carbs_g} -> wk2 P${weekTargets(holding, 2).protein_g}/C${weekTargets(holding, 2).carbs_g}`
+);
+
+const raisedToBmr = buildRoadmap({ ...WORKED, category: 3, currentKcal: 1000 })!;
+check(
+  "under BMR: raised to BMR immediately, not ramped up to it",
+  raisedToBmr.phases.length === 1 && raisedToBmr.phases[0].kcal === 1800 && raisedToBmr.phases[0].fromWeek === 1,
+  `${raisedToBmr.phases[0].kcal} kcal`
+);
+check("...applies to every category, not just the ones with their own under-eating logic before", raisedToBmr.phases[0].label.includes("raised to BMR"));
+check(
+  "at or above TDEE, categories run their own strategy exactly as before",
+  restarter.phases.length === 3 && restarter.phases[0].kcal === 2070 && restarter.phases[2].kcal === 1840
 );
 
 // --- Step 4: macros ----------------------------------------------------------
@@ -186,10 +248,8 @@ check(
   buildRoadmap({ ...WORKED, currentKcal: 1500 })!.warnings.some((w) => w.id === "chronic-under-eating")
 );
 check(
-  "a first-timer already below target is not silently told to eat more",
-  buildRoadmap({ ...WORKED, currentKcal: 1850, bmr: 1500 })!.warnings.some(
-    (w) => w.id === "already-below-target"
-  )
+  "a first-timer already below the old target now recomposes at that intake, not a silent 'eat more'",
+  buildRoadmap({ ...WORKED, currentKcal: 1850, bmr: 1500 })!.phases[0].kcal === 1850
 );
 
 // --- Inputs ------------------------------------------------------------------

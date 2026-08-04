@@ -194,10 +194,30 @@ async function main() {
           const cat = ex.category;
           const tdee = ex.tdee;
 
-          // The one calorie-strategy formula that differs by category — the
-          // phases table right after it shows how that plays out week by week.
+          // The universal intake-vs-TDEE/BMR rule runs before any category's
+          // own strategy — except category 2's own deficit-history signals
+          // (deep deficit, weight stagnation), which still take priority
+          // when they fire. The phases table right after shows how whichever
+          // one wins plays out week by week.
+          const currentKcal = ex.current?.kcal ?? null;
+          const bmr = energy.bmr!;
+          const historyAdapted = cat.id === 2 && !!ex.adaptation?.adapted;
+
           let headline: { given: string; formula: string; calc: string };
-          if (cat.id === 1) {
+          if (!historyAdapted && currentKcal !== null && currentKcal > 0 && currentKcal < tdee) {
+            const raised = currentKcal < bmr;
+            headline = raised
+              ? {
+                  given: `current = ${currentKcal} kcal · BMR = ${bmr} kcal (current is below it)`,
+                  formula: `weeks 1–${R.RECOMPOSE_HOLD_WEEKS} = BMR — raised immediately, not ramped up to it`,
+                  calc: `= ${bmr} kcal, held flat while protein climbs the ladder and carbohydrate gives up the room`,
+                }
+              : {
+                  given: `current = ${currentKcal} kcal · TDEE = ${tdee} kcal (current is below it, at/above BMR ${bmr})`,
+                  formula: `weeks 1–${R.RECOMPOSE_HOLD_WEEKS} = current intake — held flat, no deficit yet`,
+                  calc: `= ${currentKcal} kcal, held flat while protein climbs the ladder and carbohydrate gives up the room`,
+                };
+          } else if (cat.id === 1) {
             const target = Math.round(tdee * (1 - R.DEFICIT_FIRST_TIMER));
             headline = {
               given: `TDEE = ${tdee} kcal`,
@@ -205,16 +225,15 @@ async function main() {
               calc: `= ${tdee} × ${1 - R.DEFICIT_FIRST_TIMER} = ${target} kcal`,
             };
           } else if (cat.id === 2) {
-            const adapted = !!ex.adaptation?.adapted;
             const reentry = Math.round(tdee * (1 - R.DEFICIT_FULL));
-            headline = adapted
+            headline = historyAdapted
               ? {
-                  given: `TDEE = ${tdee} kcal · adaptation test = ADAPTED`,
+                  given: `TDEE = ${tdee} kcal · deficit-history test = ADAPTED`,
                   formula: `diet break = TDEE, ${R.DIET_BREAK_DAYS} · then re-entry = TDEE × (1 - ${R.DEFICIT_FULL})`,
                   calc: `diet break = ${tdee} kcal · re-entry = ${tdee} × ${1 - R.DEFICIT_FULL} = ${reentry} kcal`,
                 }
               : {
-                  given: `TDEE = ${tdee} kcal · adaptation test = NOT ADAPTED`,
+                  given: `TDEE = ${tdee} kcal · deficit-history test = NOT ADAPTED, current is at/above TDEE`,
                   formula: `held = TDEE × (1 - ${R.DEFICIT_FULL}), unchanged for 14 days`,
                   calc: `= ${tdee} × ${1 - R.DEFICIT_FULL} = ${reentry} kcal`,
                 };
@@ -226,20 +245,15 @@ async function main() {
               calc: `= ${tdee}×${1 - R.RESTART_RAMP[0]} -> ${tdee}×${1 - R.RESTART_RAMP[1]} -> ${tdee}×${1 - R.RESTART_RAMP[2]} = ${steps.join(" -> ")} kcal`,
             };
           } else {
-            const currentKcal = ex.current?.kcal ?? null;
-            const gap = currentKcal ? tdee - currentKcal : 0;
-            headline =
-              gap > R.REVERSE_TRIGGER_KCAL
-                ? {
-                    given: `TDEE = ${tdee} kcal · current = ${currentKcal} kcal · gap = ${gap} kcal (over the ${R.REVERSE_TRIGGER_KCAL} kcal trigger)`,
-                    formula: `reverse diet = current + ${R.REVERSE_STEP_KCAL} kcal/week, until TDEE`,
-                    calc: `= ${currentKcal} + ${R.REVERSE_STEP_KCAL}×n, capped at ${tdee} kcal — see phases below`,
-                  }
-                : {
-                    given: `TDEE = ${tdee} kcal`,
-                    formula: `target = TDEE`,
-                    calc: `= ${tdee} kcal`,
-                  };
+            // Category 4, reached only when current is at/above TDEE (or
+            // unmeasured) — the reverse diet this used to run for an
+            // under-eating client now happens upstream, in the universal
+            // rule above.
+            headline = {
+              given: `TDEE = ${tdee} kcal`,
+              formula: `target = TDEE`,
+              calc: `= ${tdee} kcal`,
+            };
           }
 
           return (
@@ -324,7 +338,12 @@ async function main() {
                 <Text style={s.small}>Already at or under target weight — no loss timeline to project.</Text>
               )}
 
-              <Text style={s.h2}>3 · Calorie strategy — this category&rsquo;s formula</Text>
+              <Text style={s.h2}>
+                3 · Calorie strategy —{" "}
+                {!historyAdapted && currentKcal !== null && currentKcal > 0 && currentKcal < tdee
+                  ? "the universal intake-vs-TDEE/BMR rule"
+                  : "this category’s formula"}
+              </Text>
               <Calc given={headline.given} formula={headline.formula} calc={headline.calc} />
               <Text style={s.h3}>How that plays out week by week</Text>
               <View style={s.row}>
