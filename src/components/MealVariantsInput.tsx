@@ -137,9 +137,15 @@ function VariantCard({
   // this fires while the dietitian is still typing a food name.
   const signature = JSON.stringify(filled.map((i) => [i.food.trim(), i.qty.trim()]));
   const lastPriced = useRef<string>("");
+  // Tracks the signature as of the latest render, read from inside the async
+  // request below — a plain closure would instead see whatever `signature`
+  // was when that request started.
+  const latestSignature = useRef(signature);
+  latestSignature.current = signature;
   const price = useCallback(async () => {
-    if (filled.length === 0 || signature === lastPriced.current) return;
-    lastPriced.current = signature;
+    const mySignature = signature;
+    if (filled.length === 0 || mySignature === lastPriced.current) return;
+    lastPriced.current = mySignature;
     setPricing(true);
     setError(null);
     try {
@@ -152,14 +158,20 @@ function VariantCard({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "Could not price that");
+      // The items may have changed again while this request was in flight
+      // (e.g. Roti swapped for Rice) — applying a slower, now-stale response
+      // would silently revert those items back to what they were.
+      if (latestSignature.current !== mySignature) return;
       onChange({ measured: json.macros as VariantMacros, unpriced: json.unpriced as string[] });
     } catch (e) {
       // Pricing failing must never block the consultation — the dietitian can
       // still type the numbers in.
-      setError(e instanceof Error ? e.message : "Could not price that");
-      lastPriced.current = "";
+      if (latestSignature.current === mySignature) {
+        setError(e instanceof Error ? e.message : "Could not price that");
+        lastPriced.current = "";
+      }
     }
-    setPricing(false);
+    if (latestSignature.current === mySignature) setPricing(false);
     // onChange identity changes every render; re-running on it would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
