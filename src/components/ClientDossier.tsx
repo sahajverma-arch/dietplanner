@@ -355,6 +355,16 @@ function KpiStrip({
         }
         accent
       />
+      <Stat
+        label="Carbs now"
+        value={intake.carbsPerDay > 0 ? String(intake.carbsPerDay) : "—"}
+        sub={intake.carbsPerDay > 0 ? "g/day measured" : "record the meals"}
+      />
+      <Stat
+        label="Fat now"
+        value={intake.fatPerDay > 0 ? String(intake.fatPerDay) : "—"}
+        sub={intake.fatPerDay > 0 ? "g/day measured" : "record the meals"}
+      />
     </div>
   );
 }
