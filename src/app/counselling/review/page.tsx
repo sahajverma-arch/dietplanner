@@ -14,12 +14,18 @@ import type { Answers } from "@/lib/counselling/questions";
  */
 export const dynamic = "force-dynamic";
 
-export default async function CounsellingReviewPage() {
+export default async function CounsellingReviewPage({
+  searchParams,
+}: {
+  searchParams?: { appointment?: string };
+}) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  const appointmentId = searchParams?.appointment ?? null;
 
   const [{ data: draft }, { data: me }] = await Promise.all([
     supabase
@@ -27,6 +33,7 @@ export default async function CounsellingReviewPage() {
       .select("data")
       .eq("dietitian_id", user.id)
       .eq("kind", "first_counselling")
+      .eq("appointment_id", appointmentId ?? "")
       .maybeSingle(),
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
   ]);
@@ -38,13 +45,15 @@ export default async function CounsellingReviewPage() {
 
   // Nothing to summarise — send them back to the form rather than showing an
   // empty page of dashes.
-  if (!saved?.answers || Object.keys(saved.answers).length === 0) redirect("/counselling/new");
+  if (!saved?.answers || Object.keys(saved.answers).length === 0) {
+    redirect(appointmentId ? `/counselling/new?appointment=${appointmentId}` : "/counselling/new");
+  }
 
   return (
     <div className="min-h-screen">
       <AppHeader email={user.email ?? ""} isAdmin={me?.role === "admin"} />
       <main className="mx-auto max-w-6xl px-4 py-6">
-        <ClientDossier answers={saved.answers} appointmentId={saved.appointmentId ?? null} />
+        <ClientDossier answers={saved.answers} appointmentId={appointmentId} />
       </main>
     </div>
   );

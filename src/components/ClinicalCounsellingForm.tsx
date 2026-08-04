@@ -90,10 +90,11 @@ export default function ClinicalCounsellingForm({
         {
           dietitian_id: dietitianId,
           kind: "first_counselling",
+          appointment_id: appointmentId ?? "",
           data: { answers, appointmentId },
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "dietitian_id,kind" }
+        { onConflict: "dietitian_id,kind,appointment_id" }
       );
       if (error) {
         setSaveState("error");
@@ -136,10 +137,11 @@ export default function ClinicalCounsellingForm({
       {
         dietitian_id: dietitianId,
         kind: "first_counselling",
+        appointment_id: appointmentId ?? "",
         data: { answers, appointmentId },
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "dietitian_id,kind" }
+      { onConflict: "dietitian_id,kind,appointment_id" }
     );
     if (saveError) {
       setSaveState("error");
@@ -148,7 +150,11 @@ export default function ClinicalCounsellingForm({
       return;
     }
     setSaveState("saved");
-    router.push("/counselling/review");
+    router.push(
+      appointmentId
+        ? `/counselling/review?appointment=${encodeURIComponent(appointmentId)}`
+        : "/counselling/review"
+    );
   }
 
   const stages = useMemo(() => {

@@ -25,6 +25,7 @@ export default async function NewCounsellingPage({
       .select("data")
       .eq("dietitian_id", user.id)
       .eq("kind", "first_counselling")
+      .eq("appointment_id", appointmentId ?? "")
       .maybeSingle(),
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
     appointmentId
@@ -36,13 +37,12 @@ export default async function NewCounsellingPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  // A draft only belongs to this counselling when it was started from the same
-  // appointment (or from none) — otherwise a half-finished session for another
-  // client would bleed into this one.
+  // The query above is already scoped to this exact appointment (form_drafts
+  // is keyed on dietitian_id + kind + appointment_id), so whatever comes back
+  // belongs to this counselling and nothing else.
   const saved = (draft?.data ?? null) as { answers?: Answers; appointmentId?: string | null } | null;
-  const draftMatches = saved?.answers && (saved.appointmentId ?? null) === appointmentId;
 
-  let initialAnswers: Answers | null = draftMatches ? (saved!.answers as Answers) : null;
+  let initialAnswers: Answers | null = saved?.answers ?? null;
 
   // Seed what the ops sheet already knows about this client.
   if (!initialAnswers && appointment) {
@@ -58,6 +58,7 @@ export default async function NewCounsellingPage({
       <AppHeader email={user.email ?? ""} isAdmin={me?.role === "admin"} />
       <main className="mx-auto max-w-6xl px-4 py-8">
         <ClinicalCounsellingForm
+          key={appointmentId ?? "new"}
           dietitianId={user.id}
           initialAnswers={initialAnswers}
           appointmentId={appointmentId}

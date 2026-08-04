@@ -369,7 +369,8 @@ async function start(
       .from("form_drafts")
       .delete()
       .eq("dietitian_id", user.id)
-      .eq("kind", "first_counselling");
+      .eq("kind", "first_counselling")
+      .eq("appointment_id", body.appointmentId ?? "");
   }
 
   return NextResponse.json({
