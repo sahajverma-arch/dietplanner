@@ -21,6 +21,7 @@ import { weekTargets, type Roadmap } from "@/lib/roadmap";
 import FitnessScore from "./FitnessScore";
 import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
+import ReviewPdfButton from "./ReviewPdfButton";
 
 /**
  * The client summary the dietitian opens at the end of the consultation.
@@ -265,6 +266,7 @@ function Hero({
               >
                 ↻ Refresh
               </button>
+              <ReviewPdfButton answers={answers} />
             </div>
           </div>
         </div>
