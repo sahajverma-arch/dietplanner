@@ -45,9 +45,7 @@ import ReviewPdfButton from "./ReviewPdfButton";
 // one place a theme switch cannot be handled by utilities alone: light mode
 // re-steps these to darker marks that hold up on white, and re-points the
 // overlap ring to white so it still matches what is underneath it.
-const NOW = "var(--chart-now)";
 const PLAN = "var(--chart-plan)";
-const RING = "var(--chart-ring)";
 const MUTED = "var(--chart-muted)";
 
 // Protein / carbohydrate / fat, the same three the finished plan uses, so a
@@ -490,15 +488,22 @@ function NowVsAim({
   );
 }
 
+// Now-vs-aim is its own colour pair, deliberately not PLAN/MUTED above (the
+// "current vs current plan" convention used elsewhere on this page, e.g. the
+// Body weight bars) — here "now" is explicitly the brand yellow and the aim
+// is green, per how this section reads.
+const EATS_NOW_BAR = "#FFED00";
+const WEEK1_AIM_BAR = "#10b981";
+
 function Legend() {
   return (
     <span className="flex items-center gap-3 text-[11px] text-zinc-400">
       <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full" style={{ background: NOW }} />
+        <span className="h-2 w-2 rounded-full" style={{ background: EATS_NOW_BAR }} />
         eats now
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full" style={{ background: PLAN }} />
+        <span className="h-2 w-2 rounded-full" style={{ background: WEEK1_AIM_BAR }} />
         week-1 aim
       </span>
     </span>
@@ -506,9 +511,9 @@ function Legend() {
 }
 
 /**
- * One before → after pair. The connecting line carries the size of the change,
- * the two dots carry the values, and both ends are labelled — so it reads
- * without relying on the colours at all.
+ * One now-vs-aim pair, as two bars rather than a line — a yellow bar for what
+ * they eat now, a green bar for week 1's target, each sized to its own value
+ * so the gap reads as two lengths, not just a delta number.
  */
 function Dumbbell({
   label,
@@ -523,7 +528,6 @@ function Dumbbell({
 }) {
   const max = Math.max(now, plan) * 1.15;
   const pct = (v: number) => Math.max(2, (v / max) * 100);
-  const [lo, hi] = now <= plan ? [now, plan] : [plan, now];
   const delta = Math.round(plan - now);
 
   return (
@@ -534,31 +538,24 @@ function Dumbbell({
           {delta === 0 ? "no change" : `${delta > 0 ? "+" : "−"}${Math.abs(delta)} ${unit}`}
         </span>
       </div>
-      <div className="relative mt-2 h-6">
-        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-zinc-800" />
-        <div
-          className="absolute top-1/2 h-0.5 -translate-y-1/2 rounded-full"
-          style={{ left: `${pct(lo)}%`, width: `${pct(hi) - pct(lo)}%`, background: PLAN }}
-        />
+      <div className="mt-2 space-y-1.5">
         {[
-          { v: now, c: NOW },
-          { v: plan, c: PLAN },
-        ].map(({ v, c }) => (
-          <span
-            key={c}
-            className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full"
-            // 2px surface ring so the dots stay legible where they overlap.
-            style={{ left: `${pct(v)}%`, background: c, boxShadow: `0 0 0 2px ${RING}` }}
-          />
+          { tag: "eats now", v: now, c: EATS_NOW_BAR },
+          { tag: "week-1 aim", v: plan, c: WEEK1_AIM_BAR },
+        ].map(({ tag, v, c }) => (
+          <div key={tag} className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-[10px] text-zinc-500">{tag}</span>
+            <div className="h-3 flex-1 overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${pct(v)}%`, background: c }}
+              />
+            </div>
+            <span className="w-16 shrink-0 text-right text-[11px] tabular-nums" style={{ color: c }}>
+              {v} {unit}
+            </span>
+          </div>
         ))}
-      </div>
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums">
-        <span style={{ color: NOW }}>
-          {now} {unit}
-        </span>
-        <span style={{ color: PLAN }}>
-          {plan} {unit}
-        </span>
       </div>
     </div>
   );
