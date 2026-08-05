@@ -6,12 +6,12 @@
 // Any existing draft is backed up to test-output/ before being replaced.
 //
 // Run: npx -y tsx scripts/seed-ui-test-draft.ts [dietitian-email] [client]
-//   client: priya (default) | rahul | sneha | aadi | anna | sakshi
+//   client: priya (default) | rahul | sneha | aadi | anna | sakshi | kavya
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import { PRIYA, RAHUL, SNEHA, AADI, ANNA, SAKSHI } from "./test-clients";
+import { PRIYA, RAHUL, SNEHA, AADI, ANNA, SAKSHI, KAVYA } from "./test-clients";
 
 const envPath = path.join(__dirname, "..", ".env.local");
 for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
@@ -27,6 +27,7 @@ const CLIENTS = {
   aadi: AADI,
   anna: ANNA,
   sakshi: SAKSHI,
+  kavya: KAVYA,
 } as const;
 const WHICH = (process.argv[3] || "priya").toLowerCase() as keyof typeof CLIENTS;
 if (!CLIENTS[WHICH]) {

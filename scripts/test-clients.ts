@@ -1190,3 +1190,197 @@ export const SAKSHI: Answers = {
 
   // 12 — Client strategy discussion
 };
+
+// ---------------------------------------------------------------------------
+// Test client 7 — Kavya Test: 29F, Kerala-style South Indian NON-VEGETARIAN —
+// fish, prawn and egg at nearly every meal (meen curry, prawn curry, egg
+// roast/curry, puttu, appam), rice-heavy plate. Exercises cuisine-aware
+// NON-VEG South Indian food matching: raising her protein should pull
+// Kerala-style fish/prawn/egg dishes rather than defaulting to the North
+// Indian chicken-tikka/paneer pattern the other non-veg fixtures (Rahul,
+// Sakshi) produce. Anna covers South Indian VEGETARIAN; this is its non-veg
+// counterpart.
+// ---------------------------------------------------------------------------
+export const KAVYA: Answers = {
+  q76_category: "First-timer — never dieted with structure before",
+  name: "Kavya Test",
+  clientCode: "TEST-007",
+  gender: "Female",
+  phone: "+91 90000 00007",
+  email: "kavya.test@example.com",
+
+  // 1 — Goal & deeper motivation
+  q1: ["Recent weight gain", "Low energy"],
+  q2: "Fat loss with muscle preservation",
+  q3: ["Improve daily energy", "Improve fitness"],
+  q4: ["Feel physically fitter", "Improve confidence"],
+  q5: ["Target weight"],
+  q5_weight: "60",
+  q6: ["Leaner appearance"],
+  q8: "7",
+  gr_dietitian: "Goal correctly understood",
+  gr_client: "Correctly understood",
+
+  // 2 — Body & transformation history
+  q9_age: "29", q9_height: "160", q9_weight: "68",
+  q9_weight_1y: "63", q9_weight_high: "70", q9_weight_low: "55", q9_weight_comfort: "60",
+  q10: ["Gradual weight gain"], q10a: "5", q10b: "1–2 years",
+  q11: ["Desk job", "Sedentary lifestyle", "Frequent outside food"],
+  q12: ["Self-designed diet"],
+  q12a: "No clear result",
+  q12b: ["Food became repetitive", "Family food mismatch"],
+  q13: "No",
+  q14: ["Weight-loss plateau"], q14a: "3–6 months",
+  q15: ["No data"], q15_assess: "Baseline measurement required",
+  q16: ["Regular meals", "Home-cooked food", "Frequent check-ins"],
+  q16a: "1) Regular meals 2) Home-cooked food 3) Frequent check-ins",
+
+  // 3 — Medical & clinical safety
+  q17: ["No known condition"],
+  q18: ["None"],
+  q19: "No",
+  q20: ["No recent reports"],
+  q21: ["None"],
+  q22: ["No instruction"],
+  cr1: ["No major clinical limitation identified"],
+
+  // 4 — Digestion & tolerance
+  q23: "Mostly comfortable",
+  q24: ["Bloating"], q24a: "1–2 times per week", q24b: ["After lunch"], q24c: "3",
+  q25: "Once daily",
+  q27: ["No known allergy or intolerance"],
+
+  // 5 — Actual food day
+  q28: ["Breakfast", "Mid-Morning", "Lunch", "Evening", "Dinner"],
+  "q112_breakfast_variants":
+    "[{\"id\":\"breakfast1\",\"label\":\"Puttu and egg curry\",\"items\":[{\"food\":\"Puttu\",\"qty\":\"1 plate\"},{\"food\":\"Egg curry\",\"qty\":\"1 egg\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":320,\"protein_g\":10,\"carbs_g\":45,\"fat_g\":10}},{\"id\":\"breakfast2\",\"label\":\"Appam and egg roast\",\"items\":[{\"food\":\"Appam\",\"qty\":\"2\"},{\"food\":\"Egg roast\",\"qty\":\"1 egg\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":300,\"protein_g\":9,\"carbs_g\":40,\"fat_g\":11}}]",
+  "q112_midmorning_variants":
+    "[{\"id\":\"midmorning1\",\"label\":\"Filter coffee and banana\",\"items\":[{\"food\":\"Filter coffee\",\"qty\":\"1 cup\"},{\"food\":\"Banana\",\"qty\":\"1\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":150,\"protein_g\":3,\"carbs_g\":30,\"fat_g\":2}}]",
+  "q112_lunch_variants":
+    "[{\"id\":\"lunch1\",\"label\":\"Rice, fish curry and avial\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1.5 cups\"},{\"food\":\"Fish curry\",\"qty\":\"1 katori\"},{\"food\":\"Avial\",\"qty\":\"1 katori\"},{\"food\":\"Rasam\",\"qty\":\"1 cup\"}],\"daysPerWeek\":5,\"measured\":{\"calories\":620,\"protein_g\":22,\"carbs_g\":85,\"fat_g\":18}},{\"id\":\"lunch2\",\"label\":\"Rice, egg curry and sambar\",\"items\":[{\"food\":\"Rice\",\"qty\":\"1.5 cups\"},{\"food\":\"Egg curry\",\"qty\":\"1 egg\"},{\"food\":\"Sambar\",\"qty\":\"1 katori\"}],\"daysPerWeek\":2,\"measured\":{\"calories\":560,\"protein_g\":15,\"carbs_g\":90,\"fat_g\":12}}]",
+  "q112_evening_variants":
+    "[{\"id\":\"evening1\",\"label\":\"Filter coffee and banana chips\",\"items\":[{\"food\":\"Filter coffee\",\"qty\":\"1 cup\"},{\"food\":\"Banana chips\",\"qty\":\"1 handful\"}],\"daysPerWeek\":7,\"measured\":{\"calories\":180,\"protein_g\":2,\"carbs_g\":20,\"fat_g\":10}}]",
+  "q112_dinner_variants":
+    "[{\"id\":\"dinner1\",\"label\":\"Appam and prawn curry\",\"items\":[{\"food\":\"Appam\",\"qty\":\"2\"},{\"food\":\"Prawn curry\",\"qty\":\"1 katori\"}],\"daysPerWeek\":3,\"measured\":{\"calories\":420,\"protein_g\":18,\"carbs_g\":50,\"fat_g\":14}},{\"id\":\"dinner2\",\"label\":\"Chapati and fish curry\",\"items\":[{\"food\":\"Chapati\",\"qty\":\"2\"},{\"food\":\"Fish curry\",\"qty\":\"1 katori\"}],\"daysPerWeek\":4,\"measured\":{\"calories\":400,\"protein_g\":19,\"carbs_g\":42,\"fat_g\":15}}]",
+  q28_breakfast_time: "08:00",
+  q28_breakfast_food: "Puttu with egg curry, most mornings",
+  q28_breakfast_drinks: ["Filter coffee × 1"],
+  q109: "08:00 puttu with egg curry, 5 mornings a week, appam with egg roast the other 2. 10:30 filter coffee and a banana. 13:00 lunch — rice with fish curry and avial most days, egg curry and sambar twice a week, home cooked, daily. 17:30 filter coffee with banana chips. 20:00 dinner — appam with prawn curry three nights, chapati with fish curry the rest, home cooked.",
+  q28_breakfast_prep: ["Steamed"],
+  q28_breakfast_source: "Home",
+  q28_breakfast_extras: ["Coconut oil"],
+  q28_midmorning_food: "Filter coffee + 1 banana",
+  q28_lunch_time: "13:00",
+  q28_lunch_food: "Rice + fish curry + avial (egg curry + sambar twice a week)",
+  q28_lunch_source: "Home",
+  q28_evening_food: "Filter coffee + banana chips",
+  q28_evening_drinks: ["Filter coffee × 1"],
+  q28_dinner_time: "20:00",
+  q28_dinner_food: "Appam + prawn curry (chapati + fish curry on other nights)",
+  q28_dinner_source: "Home",
+  q29: "Weekdays are similar",
+  q30: ["Restaurant food", "More sweets"],
+  q31: "Once weekly", q31a: ["Restaurant"],
+  q31b: "Kerala parotta, chicken fry, fish moilee",
+  q32: ["Filter coffee", "Banana chips", "Sweets or mithai"],
+  q32a: "Filter coffee ×2/day; banana chips most evenings",
+
+  // 6 — Preferences & feasibility
+  q33: "Non-vegetarian",
+  q34: ["South Indian", "Kerala-style"],
+  q35: "Fish curry, prawn curry, appam, puttu, egg roast, Kerala parotta",
+  q36: "Raw mango", q36a: "Will not eat",
+  q37: ["Filter coffee", "Rice", "Fish curry"],
+  q38: ["No restriction"],
+  q39: ["Self", "Parent or family"], q39a: "Good",
+  q40: ["Full kitchen", "Refrigerator", "Microwave"],
+  q41: ["Cook daily", "Simple cooking only"],
+  q42: "Moderate household-food budget", q42a: ["No major limitation"],
+
+  // 7 — Training, protein & recovery
+  q43: ["Walking"],
+  q44a: "3", q44b: "30–45 minutes", q44c: "Morning",
+  q44d: "Complete beginner", q44e: "Light", q44f: "Fat loss",
+  q45: ["No major problem"],
+  q46: ["Recover well"],
+  q47: ["Water only"],
+  q48: ["Water"],
+  q49: ["Small meal"], q49a: "30–60 minutes",
+  // Frequencies match the Q28 food day above: fish curry at lunch most days,
+  // egg curry/roast at breakfast, prawn curry at dinner, dal/sambar occasional.
+  q50: ["Fish", "Eggs", "Seafood", "Dal", "Curd"],
+  q50p_fish_freq: "5–6 days a week",
+  q50p_eggs_freq: "3–4 days a week",
+  q50p_seafood_freq: "1–2 days a week",
+  q50p_dal_freq: "1–2 days a week",
+  q50p_curd_freq: "1–2 days a week",
+  q50a: "2", q50b: ["Cost", "Availability"],
+  q51: ["None"],
+  q52: ["None"],
+  q53: ["No limitation"], q53b: "Not required",
+
+  // 8 — Routine & behaviour
+  q54: "Desk-based", q54a: "Day", q54b: "Fixed",
+  q54c: "Mostly seated", q106: "3,000–5,000", q112: "4000",
+  q55: ["Evening"], q55a: ["Cravings", "Habit"],
+  q56: "Moderate evening hunger",
+  q57: ["Good"],
+  q58: ["Fried foods", "Sweets or mithai"], q58a: ["Habit", "Boredom"],
+  q59: ["Eat more"],
+  q60: ["None"],
+
+  // 9 — Lifestyle
+  q61: "6–7 hours", q61a: "6", q61b: "Sometimes", q61c: ["Late screen time"],
+  q62: "5", q62a: ["Work"], q62b: ["Food intake"],
+  q63: "1.5–2 litres", q63a: ["None"], q63b: "Never",
+  q64: ["Filter coffee"], q64a: "2", q64b: "6–9 PM",
+  q65: ["None"],
+  q67: ["Family gatherings", "Religious or community events"],
+  q67a: ["Overeat", "Manage reasonably well"],
+
+  // 10 — Success, dropout & coaching
+  q68: ["Weekend routine breaks", "Motivation reduces"],
+  q69: ["Return the next day", "Feel guilty but continue trying"],
+  q70: ["Gentle reminders", "Frequent check-ins"],
+  q71: ["Rice causes weight gain"], q71a: "Moderate",
+  q72: "Two options per meal", q72a: "Katori, cup or spoon",
+  q73: ["Cravings", "Family routine"],
+  q74: "3 focused changes",
+  q75: "7",
+
+  // 11 — Dietitian professional assessment
+  ds1: "Desk-based, Kerala-style non-vegetarian pattern — fish and egg at nearly every meal, rice-heavy plate. Protein is present but carb-heavy (puttu/appam/rice at every meal). Raise protein within the same cuisine — more fish, egg and prawn — rather than switching her to roti and paneer.",
+  q76: ["Low protein intake", "Hidden calorie intake", "Sedentary lifestyle"],
+  q77: ["Increase protein", "Improve meal regularity"],
+  q78: "Filter coffee; rice at lunch and dinner; Kerala-style home food",
+  q79: ["Client fears rice"],
+  q80: "Fat loss with muscle preservation",
+  q81: "Fat-loss phase",
+  q82a: "68", q82b: "62", q82c: "Initial target should differ from final target",
+  q83: ["Current weight and height context", "Sustainability concern"],
+  q83a: "Moderate — reassess after 2 weeks",
+  q84: "Reduce fat while preserving muscle",
+  q84a: "No numerical target", q84b: "Preserve", q84c: "Reduce",
+  q85: ["Waist"], q85a: "Waist reduction over 12 weeks",
+  q86: ["Improve training consistency"],
+  q87a: "2 weeks", q87b: "2 weeks", q87c: "8–12 weeks", q87d: "6–9 months",
+  q87e: "Client timeline appears realistic",
+  q88: ["Waist", "Energy", "Diet adherence", "Weight"],
+  q89: "Mild energy deficit",
+  q90: "Moderate", q90a: "Low",
+  q91: ["Protein quantity", "Meal regularity"],
+  q92: "Moderate", q92a: ["Total quantity", "Breakfast"],
+  q92b: ["Increase total protein", "Improve breakfast protein"],
+  q92c: "Optional convenience",
+  q93: ["Improve quality", "Reduce excessive portions"],
+  q94: ["Reduce coconut oil in cooking"],
+  q95: ["Increase vegetables", "Gradual fibre increase"],
+  q96: ["Increase total fluids"],
+  q97: ["Improve protein intake"],
+  q98: ["No coordination required"],
+  q99: ["Rice or roti avoidance"], q99a: "Address gradually",
+  q100: "Two options per meal",
+  q101: "7",
+
+  // 12 — Client strategy discussion
+};
