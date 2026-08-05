@@ -1,4 +1,11 @@
-import { settleWeek, weekTargets, type Roadmap } from "@/lib/roadmap";
+import {
+  PROTEIN_STEP_CAP_G,
+  PROTEIN_STEP_ROUND_G,
+  PROTEIN_STEP_SHARE,
+  settleWeek,
+  weekTargets,
+  type Roadmap,
+} from "@/lib/roadmap";
 import RoadmapGoalBlock from "./RoadmapGoalBlock";
 
 /** The horizon the summary shows. A month is what a client can picture. */
@@ -174,7 +181,10 @@ export default function RoadmapPanel({
                   </span>
                 </p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
-                  Climbs a quarter of the remaining gap each week, capped at 20 g, so the first
+                  Each week closes {Math.round(PROTEIN_STEP_SHARE * 100)}% of what&apos;s left
+                  toward the requirement, capped at {PROTEIN_STEP_CAP_G} g and rounded to the
+                  nearest {PROTEIN_STEP_ROUND_G} g — step = MIN(gap ×{" "}
+                  {Math.round(PROTEIN_STEP_SHARE * 100)}%, {PROTEIN_STEP_CAP_G} g) — so the first
                   change is the easy one
                   {roadmap.proteinPath.length > WEEKS.length
                     ? ` — keeps rising to ${macros.protein_g} g/day by week ${roadmap.proteinPath.length}.`
