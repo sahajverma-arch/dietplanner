@@ -1348,7 +1348,17 @@ function prescriptionBlock(ctx: PlanContext): string {
  * The plan's strategy and daily targets, with no days. Small and quick — the
  * days are then generated against these numbers, a batch per step.
  */
-export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOverview> {
+export async function generatePlanOverview(
+  ctx: PlanContext,
+  /**
+   * Overrides DEFAULT_ATTEMPTS. /api/plan-step passes 1 here — it has a hard
+   * 60s host ceiling and its own outer retry across fresh requests, so an
+   * in-process retry loop just spends that budget on a second attempt that
+   * still has to fit the same window. generateDietPlan (unbounded, self-
+   * hosted) leaves this unset and keeps the full default.
+   */
+  maxAttempts = DEFAULT_ATTEMPTS
+): Promise<PlanOverview> {
   const { intake, week, previousPlan } = ctx;
   const { reviewNote, revisionNote, weeklyNote } = planPromptParts(ctx);
 
@@ -1378,7 +1388,10 @@ export async function generatePlanOverview(ctx: PlanContext): Promise<PlanOvervi
   const overview = await generateValidated(
     messages,
     OverviewSchema,
-    "the strategy and daily targets, with no days"
+    "the strategy and daily targets, with no days",
+    undefined,
+    undefined,
+    maxAttempts
   );
 
   // The engine computes; the model writes. Calories and macros are arithmetic
@@ -1574,7 +1587,9 @@ export async function generatePlanDays(
   ctx: PlanContext,
   overview: PlanOverview,
   names: string[],
-  alreadyPlanned: DietPlan["days"]
+  alreadyPlanned: DietPlan["days"],
+  /** See generatePlanOverview — same override, same reason. */
+  maxAttempts?: number
 ): Promise<DietPlan["days"]> {
   const { intake, week } = ctx;
   const { reviewNote, revisionNote, weeklyNote, checkDays } = planPromptParts(ctx);
@@ -1622,7 +1637,7 @@ export async function generatePlanDays(
       ...qualityIssues(p.days, overview.daily_calories),
       ...varietyIssues(pickDays(p.days, names), alreadyPlanned),
     ],
-    ctx.revision ? CORRECTION_ATTEMPTS : DEFAULT_ATTEMPTS
+    maxAttempts ?? (ctx.revision ? CORRECTION_ATTEMPTS : DEFAULT_ATTEMPTS)
   );
   return pickDays(result.days, names);
 }

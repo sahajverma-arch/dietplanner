@@ -510,7 +510,11 @@ async function step(supabase: Supa, planId: string) {
 
   // ---- overview: the plan's strategy and daily targets
   if (stage === "overview") {
-    const overview = await generatePlanOverview(ctx);
+    // One attempt — see the maxDuration comment at the top of this file. This
+    // route's own outer retry (the browser calling `step` again) gets a
+    // fresh 60s budget per try, which is where retrying belongs under a hard
+    // host ceiling; generateValidated's in-process retry loop does not.
+    const overview = await generatePlanOverview(ctx, 1);
     const next: Generation = { ...gen, overview, days: [] };
     await advance("days:0", { generation: next });
     return reply("days:0", next);
@@ -525,7 +529,9 @@ async function step(supabase: Supa, planId: string) {
     if (!names || !gen.overview) {
       return NextResponse.json({ error: "This generation lost its place — start it again" }, { status: 422 });
     }
-    const built = await generatePlanDays(ctx, gen.overview, names, gen.days);
+    // One attempt here too — a correction round would otherwise ask for
+    // CORRECTION_ATTEMPTS (6) sequential model calls from inside one 60s step.
+    const built = await generatePlanDays(ctx, gen.overview, names, gen.days, 1);
     const days = [...gen.days, ...built];
     const nextIndex = index + 1;
     const next: Generation = { ...gen, days };
