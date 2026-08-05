@@ -814,9 +814,19 @@ function BodyJourney({
       </div>
 
       {healthy && (
-        <p className="mt-2.5 text-[11px] text-zinc-500">
-          Shaded band = healthy weight for {height} cm ({healthy.low.toFixed(0)}–
-          {healthy.high.toFixed(0)} kg), on ICMR / WHO Asia-Pacific cut-offs.
+        <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm"
+            style={{
+              background: "var(--band-healthy)",
+              border: "1px solid var(--band-healthy-edge)",
+            }}
+          />
+          <span>
+            = healthy weight for {height} cm ({healthy.low.toFixed(0)}–
+            {healthy.high.toFixed(0)} kg), on ICMR / WHO Asia-Pacific cut-offs.
+          </span>
         </p>
       )}
 
