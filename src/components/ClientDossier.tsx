@@ -17,6 +17,7 @@ import {
   roadmapFor,
   roadmapNeeds,
 } from "@/lib/counselling/roadmap-input";
+import { weekTargets, type Roadmap } from "@/lib/roadmap";
 import FitnessScore from "./FitnessScore";
 import RoadmapPanel from "./RoadmapPanel";
 import PlanProgressBar from "./PlanProgressBar";
@@ -149,7 +150,13 @@ export default function ClientDossier({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          <NowVsAim first={first} energy={energy} intake={intake} target={displayTarget} />
+          <NowVsAim
+            first={first}
+            energy={energy}
+            intake={intake}
+            target={displayTarget}
+            roadmap={roadmap}
+          />
           <WeekOfEating week={week} intake={intake} />
         </div>
         <div className="space-y-4">
@@ -427,15 +434,23 @@ function NowVsAim({
   energy,
   intake,
   target,
+  roadmap,
 }: {
   first: string;
   energy: ReturnType<typeof energyEstimate>;
   intake: ReturnType<typeof estimateProteinIntake>;
   target: ReturnType<typeof proteinTarget>;
+  roadmap: Roadmap | null;
 }) {
+  // The roadmap's actual week-1 calorie phase when one exists — the deficit
+  // already applied, exactly what the plan will prescribe — not the raw
+  // maintenance estimate. Falls back to TDEE only while the roadmap can't be
+  // built yet (a category not picked, say), so the row still shows something.
+  const energyPlan = roadmap ? weekTargets(roadmap, 1).kcal : energy.tdee;
+
   const rows: { label: string; now: number; plan: number; unit: string }[] = [];
-  if (intake.kcalPerDay > 0 && energy.tdee)
-    rows.push({ label: "Energy", now: intake.kcalPerDay, plan: energy.tdee, unit: "kcal" });
+  if (intake.kcalPerDay > 0 && energyPlan)
+    rows.push({ label: "Energy", now: intake.kcalPerDay, plan: energyPlan, unit: "kcal" });
   if (intake.gramsPerDay > 0 && target.targetG > 0)
     rows.push({ label: "Protein", now: intake.gramsPerDay, plan: target.targetG, unit: "g" });
 
@@ -454,12 +469,14 @@ function NowVsAim({
       </div>
       <p className="mt-4 text-[11px] leading-relaxed text-zinc-500">
         {target.explanation}
-        {energy.tdee && intake.kcalPerDay > 0 && (
+        {energyPlan && intake.kcalPerDay > 0 && (
           <>
             {" "}
-            The energy mark is the estimated daily need, not a deficit — {first} currently reports{" "}
-            {intake.kcalPerDay} kcal against it
-            {intake.kcalPerDay < energy.tdee * 0.8 &&
+            {roadmap
+              ? `The energy mark is week 1's calorie target (against an estimated TDEE of ${energy.tdee} kcal)`
+              : "The energy mark is the estimated daily need, not a deficit"}{" "}
+            — {first} currently reports {intake.kcalPerDay} kcal against it
+            {intake.kcalPerDay < energyPlan * 0.8 &&
               ", a gap worth questioning with the client before it is trusted"}
             .
           </>
