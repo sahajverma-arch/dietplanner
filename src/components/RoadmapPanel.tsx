@@ -158,6 +158,31 @@ export default function RoadmapPanel({
               </li>
             );
           })}
+          {/* Calories are one phase for most categories, but protein has its
+              own route regardless — the ladder keeps climbing under a flat
+              calorie phase, which the phases list alone never shows. */}
+          {roadmap.proteinPath.length > 1 && (
+            <li className="flex gap-3">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-[10px] font-bold tabular-nums text-zinc-300">
+                {roadmap.phases.length + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs">
+                  <span className="font-semibold text-zinc-200">Protein</span>
+                  <span className="ml-2 tabular-nums text-brand">
+                    {WEEKS.map((w) => weekTargets(roadmap, w).protein_g).join(" → ")} g
+                  </span>
+                </p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-zinc-500">
+                  Climbs a quarter of the remaining gap each week, capped at 20 g, so the first
+                  change is the easy one
+                  {roadmap.proteinPath.length > WEEKS.length
+                    ? ` — keeps rising to ${macros.protein_g} g/day by week ${roadmap.proteinPath.length}.`
+                    : ` — reaches the ${macros.protein_g} g/day requirement within these four weeks.`}
+                </p>
+              </div>
+            </li>
+          )}
         </ol>
         <RoadmapGoalBlock roadmap={roadmap} atGoal={atGoal} />
       </div>
