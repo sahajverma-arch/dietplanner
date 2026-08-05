@@ -209,8 +209,8 @@ function Hero({
   const facts = [
     val(answers, "q9_age") ? `${val(answers, "q9_age")} yrs` : "",
     val(answers, "gender"),
-    val(answers, "q9_height") ? `${val(answers, "q9_height")} cm` : "",
-    val(answers, "q9_weight") ? `${val(answers, "q9_weight")} kg` : "",
+    val(answers, "q9_height") ? `Height ${val(answers, "q9_height")} cm` : "",
+    val(answers, "q9_weight") ? `Weight ${val(answers, "q9_weight")} kg` : "",
     val(answers, "q1_occupation") || val(answers, "q54"),
     [val(answers, "q34b"), val(answers, "q34a")].filter(Boolean).join(", "),
     val(answers, "clientCode") ? `Code ${val(answers, "clientCode")}` : "",
