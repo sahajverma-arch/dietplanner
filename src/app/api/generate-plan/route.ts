@@ -21,6 +21,7 @@ import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
+import { regionalizePlan } from "@/lib/regional-names";
 
 export const runtime = "nodejs";
 // The UI only calls this route for "approve", which renders a PDF in ~2s. The
@@ -512,8 +513,23 @@ async function handleDraftReview(
     const start = row.starts_on ? new Date(row.starts_on) : null;
     const fallbackStart = new Date();
     fallbackStart.setDate(fallbackStart.getDate() + 1);
+
+    // Regional naming ("Fulka (Roti)") is a PDF-only display step — the
+    // stored draft (`draft`, used above for "revise" and for grounding on any
+    // future regeneration) stays in plain canonical English. Never fatal:
+    // an unseeded/unreachable glossary just prints the plan un-renamed.
+    let pdfPlan = draft;
+    try {
+      pdfPlan = await regionalizePlan(supabase, draft, parseCuisines(intake.cuisines));
+    } catch (regionalError) {
+      console.warn(
+        "regional naming skipped:",
+        regionalError instanceof Error ? regionalError.message : regionalError
+      );
+    }
+
     const pdfBuffer = await renderPlanPdf({
-      plan: draft,
+      plan: pdfPlan,
       clientName: client.full_name,
       weekNumber: row.week_number,
       dietitianName: user.email ?? "Your dietitian",
@@ -525,6 +541,7 @@ async function handleDraftReview(
       startDateIso: (start ?? fallbackStart).toISOString(),
       dietType: intake.dietType || "",
       conditions: Array.isArray(intake.conditions) ? intake.conditions : [],
+      cuisines: intake.cuisines,
     });
 
     const pdfPath = `${user.id}/${row.client_id}/week-${row.week_number}-${Date.now()}.pdf`;

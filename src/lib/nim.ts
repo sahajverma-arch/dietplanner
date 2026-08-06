@@ -12,7 +12,19 @@ import { PORTION_GUIDE, PROTEIN_REFERENCE } from "./nutrition";
 // Type-only elsewhere in this file's dependents; these are the shared protein
 // ceiling and per-meal split, so the prompt and the corrective pass quote the
 // same figures.
-import { perMainMeal, perSnack, proteinCeiling } from "./day-targets";
+import {
+  perMainMeal,
+  perSnack,
+  proteinCeiling,
+  dayProtein,
+  PROTEIN_LOW_TOLERANCE_G,
+  PROTEIN_HIGH_FRACTION,
+} from "./day-targets";
+import { val, list } from "./counselling/questions";
+// Value import for the same reason as nutrition.ts above: the model must be
+// pointed at foods the exchange list actually prices, not describe a budget
+// it then has to guess quantities for.
+import { exchangePlanFor, describeExchangePlan } from "./exchange-plan";
 
 // ---------------------------------------------------------------------------
 // Strict plan schema — everything the model returns is validated against this.
@@ -453,7 +465,7 @@ Hard rules:
 7. NAME THE ACTUAL DISH — never a bare category. "Sabzi", "Curry", "Salad", "Fruit", "Snack" and "Chutney" on their own are not foods the client can cook or shop for, and they cannot be costed accurately: a lauki sabzi and an aloo sabzi differ several-fold. Write "Bhindi sabzi", "Cucumber tomato salad", "Guava". Keep names short and specific, and use realistic household measures. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
   ).join(", ")}. A quantity that reads small will BE small once verified — write the portion this client actually needs to eat.
-8. The PRESCRIPTION block in the user message is the single authority on "daily_calories" and "macros". Copy its figures into "macros" exactly and build every day to them. They are a TARGET TO LAND ON, not a floor to beat: a day that overshoots the protein figure has missed it just as surely as one that falls short, and overshooting is the restrictive jump the progression exists to avoid. Do not substitute your own figures, do not round them, and do not raise protein because the client's food pattern could carry more — where a week's protein figure looks low against the client's bodyweight, that is deliberate and it is this week's step, not an error to correct. Where no PRESCRIPTION block is present, set the numbers from clinical need — body composition, goal, training and medical profile — and not from what is easy to reach with their current foods. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
+8. The PRESCRIPTION block in the user message is the single authority on "daily_calories" and "macros". Copy its figures into "macros" exactly and build every day to them. They are a TARGET TO LAND ON, not a floor to beat: a day that overshoots the protein figure has missed it just as surely as one that falls short, and overshooting is the restrictive jump the progression exists to avoid. Do not substitute your own figures, do not round them, and do not raise protein because the client's food pattern could carry more — where a week's protein figure looks low against the client's bodyweight, that is deliberate and it is this week's step, not an error to correct. Where no PRESCRIPTION block is present, set the numbers from clinical need — body composition, goal, training and medical profile — and not from what is easy to reach with their current foods. When an EXCHANGE BUDGET block is present, it is the authority on FOOD SELECTION the same way PRESCRIPTION is the authority on numbers: build each day's meals from those exchange counts (any specific food within the named group is fine — chase the client's preferences and cuisine within it) rather than composing quantities from scratch, so the two blocks land on the same day by construction instead of by luck. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
 9. ONE FOOD PER ITEM. Each entry in "items" is a single food with its own quantity — never a sentence describing a whole plate. Write {"food":"Roti","quantity":"2"}, {"food":"Paneer sabzi","quantity":"1 katori"}, {"food":"Curd","quantity":"1 katori"} — NOT {"food":"Whole wheat roti with paneer and vegetable curry"}. Each item is priced separately against the food database, so a multi-food item cannot be costed at all and the whole meal falls back to your own estimate.
 10. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
 
@@ -853,8 +865,73 @@ function vagueItemIssues(days: DietPlan["days"]): string[] {
 }
 
 /** Every soft quality check applied to a generated plan. */
-function qualityIssues(days: DietPlan["days"], target: number): string[] {
-  return [...calorieIssues(days, target), ...vagueItemIssues(days)];
+function qualityIssues(
+  days: DietPlan["days"],
+  target: number,
+  targetProteinG: number,
+  expectedOccasions: string[]
+): string[] {
+  return [
+    ...calorieIssues(days, target),
+    ...vagueItemIssues(days),
+    ...proteinConsistencyIssues(days, targetProteinG),
+    ...mealOccasionIssues(days, expectedOccasions),
+  ];
+}
+
+/**
+ * A day whose protein lands outside the same band reconcileNutrition later
+ * corrects for (day-targets.ts's PROTEIN_LOW_TOLERANCE_G / PROTEIN_HIGH_FRACTION)
+ * is flagged HERE too, before grounding — catching it at generation time
+ * costs one retry instead of waiting for a whole post-grounding reconcile
+ * round, and it is the reason a week can otherwise swing from a 58 g day to
+ * an 89 g day despite both individually "hitting close enough".
+ */
+function proteinConsistencyIssues(days: DietPlan["days"], targetProteinG: number): string[] {
+  if (!Number.isFinite(targetProteinG) || targetProteinG <= 0) return [];
+  const lowP = targetProteinG - PROTEIN_LOW_TOLERANCE_G;
+  const highP = targetProteinG * PROTEIN_HIGH_FRACTION;
+  const out: string[] = [];
+  for (const day of days) {
+    const protein = dayProtein(day);
+    if (protein > 0 && protein < lowP) {
+      out.push(
+        `${day.day}'s protein totals ~${Math.round(protein)}g, well under the ${Math.round(targetProteinG)}g daily target — every day should land close to this same figure, not swing between high- and low-protein days.`
+      );
+    } else if (protein > highP) {
+      out.push(
+        `${day.day}'s protein totals ~${Math.round(protein)}g, well over the ${Math.round(targetProteinG)}g daily target — every day should land close to this same figure, not swing between high- and low-protein days.`
+      );
+    }
+  }
+  return out;
+}
+
+/**
+ * A day dropping one of the client's own stated meal occasions (e.g. Dinner)
+ * in favour of an extra snack passes calorieIssues fine if the day's total
+ * happens to be near target at generation time — the miss only shows up
+ * later, after grounding recomputes real macros for whatever was actually
+ * written. Checked directly instead: every occasion the client told the
+ * counselling form they eat (q28) must appear, by name, every day.
+ */
+function mealOccasionIssues(days: DietPlan["days"], expectedOccasions: string[]): string[] {
+  if (expectedOccasions.length === 0) return [];
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  const out: string[] = [];
+  for (const day of days) {
+    const have = day.meals.map((m) => normalize(m.name));
+    const missing = expectedOccasions.filter((occasion) => {
+      const norm = normalize(occasion);
+      return !have.some((name) => name.includes(norm) || norm.includes(name));
+    });
+    if (missing.length) {
+      out.push(
+        `${day.day} is missing ${missing.join(", ")} — every day must include all of this client's meal occasions (${expectedOccasions.join(", ")}), not a substitute snack in its place.`
+      );
+    }
+  }
+  return out;
 }
 
 function calorieIssues(days: DietPlan["days"], target: number): string[] {
@@ -1345,6 +1422,56 @@ function prescriptionBlock(ctx: PlanContext): string {
 }
 
 /**
+ * The day's exchange budget — WHICH FOODS to build the day from, computed by
+ * the same roadmap prescription that sets the numbers above. Complements
+ * prescriptionBlock: that block is authoritative for the macro NUMBERS, this
+ * one is guidance for the food SELECTION that reaches them, precomputed so
+ * the model is not left guessing quantities into a target the way "roti, dal,
+ * curd, paneer" quietly overshoots protein on its own.
+ *
+ * Empty string wherever the roadmap can't be built or resolves to no
+ * exchanges (same guard as prescriptionBlock) — the model falls back to
+ * clinical judgement exactly as it always has when there is no engine output
+ * to hand it.
+ *
+ * Exported for the regression test, the same reason varietyIssues is.
+ */
+export function exchangeBlock(ctx: PlanContext): string {
+  const { intake, week } = ctx;
+  const roadmap = planRoadmap(intake, planWeightKg(ctx));
+  if (!roadmap) return "";
+  const t = weekTargets(roadmap, week);
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  // q33's "Jain" option is the only clean boolean signal for it today — Jain
+  // clients otherwise map to dietType "vegetarian" (see assessment.ts's
+  // DIET_TYPE table), which would silently lose the extra root-vegetable /
+  // egg exclusion the solver applies for jain=true.
+  const jain = answers ? val(answers, "q33") === "Jain" : false;
+  const proteinHeld = roadmap.warnings.some((w) => w.id === "protein-held");
+
+  const plan = exchangePlanFor(
+    {
+      kcal: t.kcal,
+      proteinG: t.protein_g,
+      carbsG: t.carbs_g,
+      fatG: t.fat_g,
+      // Fibre doesn't ramp week to week (no ladder for it yet), so the
+      // steady-state figure applies at every week.
+      fiberG: roadmap.macros.fibre_g,
+    },
+    { dietType: intake.dietType, jain, proteinHeld }
+  );
+  if (!plan.exchanges.length) return "";
+
+  return [
+    `\n\nEXCHANGE BUDGET — the day's food, pre-computed from the same clinical engine as the PRESCRIPTION above (DRAFT exchange list, still under nutrition-team review — treat as strong guidance, not the only foods the client may ever eat):`,
+    ...describeExchangePlan(plan).map((l) => `- ${l}`),
+    `Distribute these exchanges across the day's meals in an authentic regional combination. Do not add a concentrated protein food (paneer, dal, soya, curd, egg, chicken) that is not represented in an exchange above — that is exactly the double-counting rule 18 warns against. Vegetables, spices and everyday variety beyond this list are fine; the exchange counts are what the protein/fat/carb numbers above are actually built from.`,
+    `NAME EACH PROTEIN EXCHANGE AS ITS OWN ITEM, SPECIFICALLY: write "Moong dal", "Masoor dal", "Toor dal" or another named pulse from the list above — never a bare "Dal", which prices as a generic mixed-dal recipe at roughly a third of the protein an exchange assumes. Write "Paneer" or "Paneer, low-fat" as its own item — never folded into a composed dish name like "Paneer sabzi" or "Dal curry", which prices as a gravy-diluted recipe instead of the concentrated exchange amount. This applies to every protein exchange (pulses, soya, paneer/dairy, egg, poultry/fish/meat) — vegetables, cereals and spices may still be named as ordinary dishes.`,
+  ].join("\n");
+}
+
+/**
  * The plan's strategy and daily targets, with no days. Small and quick — the
  * days are then generated against these numbers, a batch per step.
  */
@@ -1377,6 +1504,7 @@ export async function generatePlanOverview(
       content:
         `Set the strategy and daily targets for the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
         prescriptionBlock(ctx) +
+        exchangeBlock(ctx) +
         (previousPlan
           ? `\n\nLast week's meals (keep what worked, introduce sensible variety):\n${compactDays(previousPlan.days)}`
           : "") +
@@ -1594,6 +1722,12 @@ export async function generatePlanDays(
   const { intake, week } = ctx;
   const { reviewNote, revisionNote, weeklyNote, checkDays } = planPromptParts(ctx);
 
+  // The client's own stated meal occasions (q28) — every day must include
+  // every one of these, not a substitute snack in its place. See
+  // mealOccasionIssues(). Absent for legacy flat intakes with no `answers`.
+  const answers = (intake as IntakeForm & { answers?: Answers }).answers;
+  const expectedOccasions = answers ? list(answers, "q28") : [];
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -1603,6 +1737,9 @@ export async function generatePlanDays(
         `"days" must contain EXACTLY ${names.length} entries named ${names
           .map((n) => `"${n}"`)
           .join(" and ")}. The other days of the week are requested separately.` +
+          (expectedOccasions.length
+            ? ` Each of these days must include every one of this client's own meal occasions: ${expectedOccasions.join(", ")} — never drop one of these in favour of an extra snack.`
+            : "") +
           // The first batch has no earlier days to vary against, and without
           // this the model returned Day 1 and Day 2 as the same menu with the
           // items reordered — the repetition the draft review exists to catch.
@@ -1618,6 +1755,7 @@ export async function generatePlanDays(
         `Create ${names.join(" and ")} of the Week ${week} diet plan for this client:\n${profileText(ctx)}` +
         revisionNote +
         `\n\nDaily target: ~${Math.round(overview.daily_calories)} kcal (protein ${Math.round(overview.macros.protein_g)}g, carbs ${Math.round(overview.macros.carbs_g)}g, fat ${Math.round(overview.macros.fat_g)}g). Each of these days must hit that target on its own.` +
+        exchangeBlock(ctx) +
         (alreadyPlanned.length
           ? `\n\nAlready planned this week — every one of these menus is taken, so use different main dishes and different protein sources:\n${compactDays(alreadyPlanned)}`
           : "") +
@@ -1634,7 +1772,7 @@ export async function generatePlanDays(
     // away — the dietitian reviews every draft, and no plan is better than a
     // repetitive one only in theory.
     (p) => [
-      ...qualityIssues(p.days, overview.daily_calories),
+      ...qualityIssues(p.days, overview.daily_calories, overview.macros.protein_g, expectedOccasions),
       ...varietyIssues(pickDays(p.days, names), alreadyPlanned),
     ],
     maxAttempts ?? (ctx.revision ? CORRECTION_ATTEMPTS : DEFAULT_ATTEMPTS)

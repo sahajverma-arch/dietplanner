@@ -10,6 +10,7 @@ import {
 } from "@react-pdf/renderer";
 import type { DietPlan } from "./nim";
 import { PORTION_GUIDE } from "./nutrition";
+import { EXCHANGE_GROUPS } from "./exchange-plan";
 import { LOGO_DATA_URI, LOGO_ASPECT } from "./logo";
 
 // ---- LEANR brand + macro palette -------------------------------------------
@@ -202,6 +203,8 @@ export interface PdfArgs {
   startDateIso: string;
   dietType: string;
   conditions: string[];
+  /** The counselling form's q34 answer ("South Indian, Kerala-style") — the region this plan's naming is drawn from. */
+  cuisines?: string;
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -412,6 +415,7 @@ function PlanDocument({
   startDateIso,
   dietType,
   conditions,
+  cuisines,
 }: PdfArgs) {
   const conditionText = conditions.length > 0 ? conditions.join(", ") : "None";
   // The header states what the plan actually PROVIDES (the delivered weekly
@@ -440,7 +444,9 @@ function PlanDocument({
               Week {weekNumber} · {dateRange(startDateIso)} · Prepared by {dietitianName}
             </Text>
             <Text style={styles.headerPlanLine}>
-              Diet: {titleCase(dietType || "—")}  |  Medical: {conditionText}
+              Diet: {titleCase(dietType || "—")}
+              {cuisines?.trim() ? `  |  Region: ${cuisines.trim()}` : ""}
+              {"  |  Medical: "}{conditionText}
             </Text>
           </View>
           <View style={styles.headerRight}>
@@ -503,8 +509,14 @@ function PlanDocument({
           <Text style={styles.portionNote}>
             Vessel weights assume cooked food filled level (for liquids 1 ml ~ 1 g); light or dry
             items such as nuts, makhana and salads count proportionally less. Dishes with a
-            measured serving weight use that instead. “Small” and “large” portions scale by
-            ×0.8 and ×1.3.
+            measured serving weight use that instead — see the exchange-list servings below for
+            the foods costed that way. “Small” and “large” portions scale by ×0.8 and ×1.3.
+          </Text>
+          <Text style={styles.portionText}>
+            <Text style={{ fontFamily: "Helvetica-Bold" }}>Exchange-list servings (used instead of the above where they apply):  </Text>
+            {Object.values(EXCHANGE_GROUPS)
+              .map((g) => `${g.label}: ${g.standardServing}`)
+              .join("   ·   ")}
           </Text>
           {plan.days.some((d) => d.meals.some((m) => m.alternates.length > 0)) && (
             <Text style={styles.portionNote}>

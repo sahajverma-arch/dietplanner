@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "seed:foods": "node scripts/seed-foods.mjs"
+    "seed:foods": "node scripts/seed-foods.mjs",
+    "seed:food-exchanges": "node scripts/seed-food-exchanges.mjs",
+    "seed:regional-terms": "node scripts/seed-regional-food-terms.mjs"
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.3.0",
