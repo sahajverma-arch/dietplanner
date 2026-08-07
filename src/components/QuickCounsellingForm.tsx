@@ -81,6 +81,7 @@ export default function QuickCounsellingForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(false);
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Seed the three intake numbers from a previously-saved override, if any.
   useEffect(() => {
@@ -111,19 +112,14 @@ export default function QuickCounsellingForm({
     });
 
   /**
-   * The submitted answers: what was actually asked here, the problem-food
-   * safety defaults, the current-intake override, and the quick-intake
-   * marker — then fillUnaskedRequired() satisfies everything else
-   * missingRequired() would otherwise block on.
+   * intakeProtein/Carbs/Fat live in their own state (not `answers`) so the
+   * number inputs stay simple controlled inputs — this is where they get
+   * merged into an answers object as the INTAKE_OVERRIDE_ID field. Used by
+   * both the autosave (so a macro edit is never lost before "Review" is
+   * clicked) and buildSubmission().
    */
-  function buildSubmission(): Answers {
-    const a: Answers = { ...answers, [QUICK_INTAKE_MARKER_ID]: "true" };
-
-    for (const food of list(a, "q27")) {
-      if (food === PROBLEM_NONE) continue;
-      a[problemTypeId(food)] = PROBLEM_ALLERGY;
-    }
-
+  function withIntakeOverride(base: Answers): Answers {
+    const a: Answers = { ...base };
     const p = Number(intakeProtein);
     const c = Number(intakeCarbs);
     const f = Number(intakeFat);
@@ -138,12 +134,32 @@ export default function QuickCounsellingForm({
         fat_g,
       });
     }
+    return a;
+  }
+
+  /**
+   * The submitted answers: what was actually asked here, the problem-food
+   * safety defaults, the current-intake override, and the quick-intake
+   * marker — then fillUnaskedRequired() satisfies everything else
+   * missingRequired() would otherwise block on.
+   */
+  function buildSubmission(): Answers {
+    const a: Answers = { ...withIntakeOverride(answers), [QUICK_INTAKE_MARKER_ID]: "true" };
+
+    for (const food of list(a, "q27")) {
+      if (food === PROBLEM_NONE) continue;
+      a[problemTypeId(food)] = PROBLEM_ALLERGY;
+    }
 
     return fillUnaskedRequired(a);
   }
 
   // Autosave the RAW answers (not the sentinel-filled version) — the draft
-  // reopens showing exactly what was typed, same as the full form.
+  // reopens showing exactly what was typed, same as the full form. The
+  // intake override is merged in here too: it's held in separate state
+  // (intakeProtein/Carbs/Fat) rather than `answers`, so without this it
+  // would only reach the saved draft when "Review & generate" is clicked —
+  // any reload or revisit before that would show blank macros on review.
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
@@ -156,7 +172,7 @@ export default function QuickCounsellingForm({
           dietitian_id: dietitianId,
           kind: QUICK_INTAKE_DRAFT_KIND,
           appointment_id: appointmentId ?? "",
-          data: { answers, appointmentId },
+          data: { answers: withIntakeOverride(answers), appointmentId },
           updated_at: new Date().toISOString(),
         },
         { onConflict: "dietitian_id,kind,appointment_id" }
@@ -168,6 +184,7 @@ export default function QuickCounsellingForm({
         setSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
       }
     }, 1200);
+    autosaveTimer.current = t;
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers, intakeProtein, intakeCarbs, intakeFat]);
@@ -187,6 +204,14 @@ export default function QuickCounsellingForm({
     }
     setError(null);
     setSubmitting(true);
+
+    // Cancel any pending debounced autosave: it saves the raw (non-sentinel-
+    // filled) answers and can lose the race with the save below, silently
+    // reverting the draft to an incomplete state right after submit.
+    if (autosaveTimer.current) {
+      clearTimeout(autosaveTimer.current);
+      autosaveTimer.current = null;
+    }
 
     const finalAnswers = buildSubmission();
     const { error: saveError } = await supabase.from("form_drafts").upsert(
