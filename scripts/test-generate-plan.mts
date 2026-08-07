@@ -102,6 +102,6 @@ const pdf = await renderPlanPdf({
   dietType: intake.dietType,
   conditions: intake.conditions,
 });
-const out = "C:/Users/vsaha/AppData/Local/Temp/claude/C--Users-vsaha-dietitian-platform/5196cb37-4629-48fe-aeca-57cb904e7a15/scratchpad/test-plan.pdf";
+const out = "C:/Users/vsaha/AppData/Local/Temp/claude/C--Users-vsaha-dietitian-platform/b7865347-7461-4dac-859a-aa8469d948cb/scratchpad/test-plan.pdf";
 writeFileSync(out, pdf);
 console.log("PDF written:", out, `(${Math.round(pdf.length / 1024)} KB)`);

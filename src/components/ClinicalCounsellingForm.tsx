@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   answered,
@@ -43,7 +42,6 @@ export default function ClinicalCounsellingForm({
   initialAnswers: Answers | null;
   appointmentId?: string | null;
 }) {
-  const router = useRouter();
   const supabase = createClient();
 
   const [answers, setAnswers] = useState<Answers>(initialAnswers ?? {});
@@ -150,11 +148,11 @@ export default function ClinicalCounsellingForm({
       return;
     }
     setSaveState("saved");
-    router.push(
-      appointmentId
-        ? `/counselling/review?appointment=${encodeURIComponent(appointmentId)}`
-        : "/counselling/review"
-    );
+    // Hard navigation, not router.push — see the identical comment in
+    // QuickCounsellingForm.handleReview() for why.
+    window.location.href = appointmentId
+      ? `/counselling/review?appointment=${encodeURIComponent(appointmentId)}`
+      : "/counselling/review";
   }
 
   const stages = useMemo(() => {

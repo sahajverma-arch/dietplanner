@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export default async function CounsellingReviewPage({
   searchParams,
 }: {
-  searchParams?: { appointment?: string };
+  searchParams?: { appointment?: string; form?: string };
 }) {
   const supabase = createClient();
   const {
@@ -34,6 +34,11 @@ export default async function CounsellingReviewPage({
   if (!user) redirect("/login");
 
   const appointmentId = searchParams?.appointment ?? null;
+  // Which form to bounce back to if no draft can be found below — set by
+  // QuickCounsellingForm's own navigation. Without this the fallback always
+  // pointed at the full 105-question form, even for a quick-intake dietitian.
+  const newFormPath =
+    searchParams?.form === "quick" ? "/counselling/quick-new" : "/counselling/new";
 
   const [{ data: drafts }, { data: me }] = await Promise.all([
     supabase
@@ -55,7 +60,7 @@ export default async function CounsellingReviewPage({
   // Nothing to summarise — send them back to the form rather than showing an
   // empty page of dashes.
   if (!saved?.answers || Object.keys(saved.answers).length === 0) {
-    redirect(appointmentId ? `/counselling/new?appointment=${appointmentId}` : "/counselling/new");
+    redirect(appointmentId ? `${newFormPath}?appointment=${appointmentId}` : newFormPath);
   }
 
   return (

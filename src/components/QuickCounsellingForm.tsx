@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Field } from "./ClinicalCounsellingForm";
 import {
@@ -71,7 +70,6 @@ export default function QuickCounsellingForm({
   initialAnswers: Answers | null;
   appointmentId?: string | null;
 }) {
-  const router = useRouter();
   const supabase = createClient();
 
   const [answers, setAnswers] = useState<Answers>(initialAnswers ?? {});
@@ -208,11 +206,18 @@ export default function QuickCounsellingForm({
       return;
     }
     setSaveState("saved");
-    router.push(
-      appointmentId
-        ? `/counselling/review?appointment=${encodeURIComponent(appointmentId)}`
-        : "/counselling/review"
-    );
+    // A hard navigation, not router.push: the review page is server-rendered
+    // and reads the draft fresh on every load, but Next's client-side router
+    // cache can replay an EARLIER visit to this same URL (e.g. an incomplete
+    // attempt that had no draft yet and got redirected) instead of asking the
+    // server again — which looks exactly like "submitting bounces me back to
+    // a blank new form". A full navigation has no such cache.
+    // form=quick tells the review page which form to bounce back to if it
+    // ever can't find a draft — without it, the fallback always points at the
+    // full 105-question form, even for a dietitian who was using this one.
+    window.location.href = appointmentId
+      ? `/counselling/review?appointment=${encodeURIComponent(appointmentId)}&form=quick`
+      : "/counselling/review?form=quick";
   }
 
   const saveLabel =
