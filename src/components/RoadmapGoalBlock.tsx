@@ -23,7 +23,58 @@ export default function RoadmapGoalBlock({
   roadmap: Roadmap;
   atGoal: Roadmap | null;
 }) {
-  if (!atGoal || !roadmap.timeline) return null;
+  if (!atGoal) return null;
+
+  // A Category 4 client's own roadmap already IS this projection — there is
+  // no lower "goal weight" a reverse diet is aiming at, so none of the
+  // "why did the number change" reconciliation below applies (nothing
+  // changes: same weight, same numbers). Shown as an arrival, not a forecast.
+  if (roadmap.category.id === 4) {
+    const g = atGoal.macros;
+    return (
+      <div className="mt-3 rounded-lg border border-brand/40 bg-brand/5 px-3 py-2.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+            At maintenance — current weight
+          </span>
+          <span className="text-[9px] font-semibold uppercase tracking-wide text-brand">
+            arrived, not projected
+          </span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-lg font-bold tabular-nums">{atGoal.weightKg}</span>
+            <span className="text-[11px] text-zinc-500">kg · current</span>
+          </span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-lg font-bold tabular-nums">{atGoal.targetKcal}</span>
+            <span className="text-[11px] text-zinc-500">kcal · eating to maintain</span>
+          </span>
+          <span className="flex flex-wrap gap-3 text-[11px] tabular-nums text-zinc-400">
+            <span>
+              <span className="text-zinc-500">P</span> {g.protein_g} g
+            </span>
+            <span>
+              <span className="text-zinc-500">C</span> {g.carbs_g} g
+            </span>
+            <span>
+              <span className="text-zinc-500">F</span> {g.fat_g} g
+            </span>
+            <span>
+              <span className="text-zinc-500">Fibre</span> {g.fibre_g} g
+            </span>
+          </span>
+        </div>
+        <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-500">
+          A reverse diet targets maintenance at the weight this client is already at, not a lower
+          "goal" weight — there is nothing left to project. This is the arrived-at prescription for{" "}
+          {atGoal.weightKg} kg.
+        </p>
+      </div>
+    );
+  }
+
+  if (!roadmap.timeline) return null;
 
   const { fastestWeeks, slowestWeeks } = roadmap.timeline;
   const g = atGoal.macros;

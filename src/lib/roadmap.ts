@@ -246,6 +246,8 @@ export interface Roadmap {
   category: CategoryMeta;
   bmi: number;
   band: string;
+  /** The client's own recorded weight — not a derived figure. */
+  weightKg: number;
   /** BMI 21.0 × height² — the middle of the range, not its top. */
   targetWeightKg: number;
   healthyRangeKg: { low: number; high: number };
@@ -501,6 +503,7 @@ export function buildRoadmap(input: RoadmapInput): Roadmap | null {
         : null,
     bmi: round1(bmi),
     band: bandName,
+    weightKg: round1(weightKg),
     targetWeightKg: round1(targetWeightKg),
     healthyRangeKg: { low: round1(healthyRangeKg.low), high: round1(healthyRangeKg.high) },
     weightToLoseKg,
@@ -687,6 +690,15 @@ function calorieStrategy(
       id: "already-below-target",
       label: "Current intake is already at or below the computed target",
       detail: `${currentKcal} kcal is already at or under the ${target} kcal deficit target. The target still applies — check whether this is a genuinely low intake or under-reporting before trusting the report.`,
+      stop: false,
+    });
+    // Mirrors Category 2's protocol for the same underlying problem — a
+    // reported number too low to trust at face value. Do not hand a
+    // first-timer "eat more and you'll lose weight" off an unverified log.
+    warnings.push({
+      id: "weighed-logging-gate",
+      label: "Run 14 days of weighed logging before trusting this number",
+      detail: `Do not present "eat more and you'll lose weight" to a first-timer as-is — run 14 days of weighed, not estimated, logging first (the same gate Category 2 runs when reported intake looks too low to trust). If verified intake really is close to ${currentKcal} kcal, revisit the energy inputs (activity multiplier, training answers) before prescribing an increase.`,
       stop: false,
     });
   }

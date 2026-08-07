@@ -89,6 +89,23 @@ check(
   `${smallGap.phases.length} phase(s)`
 );
 
+// Category 1, reported intake already at/below the computed target — the
+// diet-engine-worked-examples-v1.2 PDF's Priya case (1625 kcal reported
+// against a 1775 kcal target): a first-timer must not be told to eat more
+// off an unverified log, so a 14-day weighed-logging gate is flagged
+// alongside the existing "already below target" warning, mirroring
+// Category 2's protocol for the same underlying problem.
+const belowTarget = buildRoadmap({ ...WORKED, currentKcal: 1700 })!;
+check(
+  "reported intake already at/below target still gets a weighed-logging gate",
+  belowTarget.warnings.some((w) => w.id === "weighed-logging-gate"),
+  belowTarget.warnings.map((w) => w.id).join(", ")
+);
+check(
+  "...alongside the existing already-below-target warning, not instead of it",
+  belowTarget.warnings.some((w) => w.id === "already-below-target")
+);
+
 // The BMR floor.
 const tight = buildRoadmap({ ...WORKED, bmr: 2000, tdee: 2200, currentKcal: 2200 })!;
 check("no target ever falls below BMR", tight.targetKcal === 2000, `${tight.targetKcal} kcal`);

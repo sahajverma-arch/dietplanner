@@ -113,5 +113,26 @@ check(
 );
 console.log(`\n   ${found.slice(0, 3).join("\n   ")}`);
 
+// --- 7. The same dish across DIFFERENT occasions ----------------------------
+// A live quick-intake plan passed the per-occasion check entirely — Breakfast
+// never repeated Breakfast, Dinner never repeated Dinner — while "Roti,
+// Paneer, Guava, Olive oil" served as the literal breakfast on three days AND
+// the literal dinner on three other days. Half the occurrences were always on
+// the wrong side of the occasion split to ever reach MAX_MEAL_REPEATS.
+const PANEER_MEAL = ["Roti", "Paneer, low-fat", "Guava", "Olive oil"];
+const RICE_MEAL = ["Rice", "Paneer, low-fat", "Papaya", "Olive oil"];
+const swapped = [
+  day("Day 1", PANEER_MEAL, RICE_MEAL),
+  day("Day 2", RICE_MEAL, PANEER_MEAL),
+  day("Day 3", PANEER_MEAL, RICE_MEAL),
+  day("Day 4", RICE_MEAL, PANEER_MEAL),
+];
+const crossOccasion = varietyIssues(swapped, []);
+check(
+  "the same dish swapping between breakfast and dinner is caught, not just per-occasion repeats",
+  crossOccasion.some((i) => i.includes("even across different meal occasions")),
+  crossOccasion.join(" | ")
+);
+
 console.log(failed === 0 ? `\nall variety checks pass` : `\n${failed} FAILURES`);
 process.exitCode = failed === 0 ? 0 : 1;

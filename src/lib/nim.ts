@@ -484,7 +484,8 @@ LeanR Premium diet generation principles — the profile below is a full clinica
 20. RETENTION PHILOSOPHY: the first weekly diet is A BETTER VERSION OF THE CLIENT'S REAL DIET unless a clinical, body-composition or fitness-nutrition reason justifies a larger change. Keep roughly 50-70% of the client's familiar food pattern; improve existing meals before replacing them. Never automatically remove rice, roti, dairy, gluten, fruit, carbohydrates or tea; never automatically replace rice with quinoa or roti with millet roti; do not prescribe raw salad to everyone, paneer to every vegetarian, whey to every gym client, or any supplement without a meaningful reason.
 21. NO CRASH TACTICS, NO FALSE PROMISES: never use dehydration, extreme carbohydrate restriction, prolonged fasting, meal skipping, detox strategies or nutritionally inadequate intake. In "summary" and "guidelines", never guarantee a specific amount of weight, fat, inch or medical improvement — describe realistic first-week wins (hunger control, fewer cravings, meal consistency, workout energy) instead.
 22. FOOD ≠ NUTRITIONAL OBJECTIVE: when the client does not accept a food, keep the OBJECTIVE and use a practical alternative they accept (paneer refused → protein objective via dal/soy/tofu; raw salad refused → cooked vegetables for the fibre/variety objective). Follow "foods_ai_must_not_force", and treat every "ai_hard_constraints" entry in the profile as NON-NEGOTIABLE — second only to a doctor's instruction.
-23. THE FINAL TEST: the plan must feel like it was created after listening to this specific client for an hour — "this plan understands my body goal, my food, my training and my life" — never like a generic diet chart with the client's name added. If this exact plan could be given unchanged to ten other clients, it is not personalised enough.`;
+23. THE FINAL TEST: the plan must feel like it was created after listening to this specific client for an hour — "this plan understands my body goal, my food, my training and my life" — never like a generic diet chart with the client's name added. If this exact plan could be given unchanged to ten other clients, it is not personalised enough.
+24. EACH MEAL MUST BE A REAL PLATE, not exchange-group items assembled independently of each other. A non-vegetarian protein (fish, chicken, egg, mutton) is not paired with an unrelated standalone vegetable sabzi the way a vegetarian thali pairs roti with a sabzi — "Grilled fish" next to a separate "Bhindi sabzi" is not a combination anyone actually cooks or orders. Either fold the vegetable into the SAME dish as the protein (a fish curry that carries its own vegetables, a chicken and capsicum sabzi) or pair the protein with an accompaniment that genuinely goes with it in this client's cuisine — rice/roti, a light salad, raita, dal — never a heavy standalone sabzi sitting next to a dry-cooked non-vegetarian main as if it were its own separate course.`;
 }
 
 function profileText(ctx: PlanContext): string {
@@ -1668,6 +1669,32 @@ const MAX_MEAL_REPEATS = 2;
  * Exported for the regression test: this is the complaint the whole draft
  * review was built for, and it has now been got wrong twice.
  */
+type VarietyMeal = { day: string; meal: string; foods: Set<string>; fresh: boolean };
+
+/**
+ * Flags a meal once it matches MAX_MEAL_REPEATS earlier ones in the same
+ * pool, background staples set aside. Shared by the per-occasion pass (below)
+ * and the cross-occasion pass, which differ only in which meals go in one
+ * pool and how the message names the clash.
+ */
+function flagRepeats(
+  meals: VarietyMeal[],
+  describeClash: (meal: VarietyMeal, alike: { day: string; meal: string }[]) => string
+): string[] {
+  const issues: string[] = [];
+  const background = backgroundFoods(meals.map((m) => m.foods));
+  const seen: { day: string; meal: string; foods: Set<string> }[] = [];
+  for (const meal of meals) {
+    const distinct = distinguishingFoods(meal.foods, background);
+    const alike = seen.filter((p) => menuOverlap(p.foods, distinct) >= SAME_MENU_OVERLAP);
+    if (meal.fresh && alike.length >= MAX_MEAL_REPEATS) {
+      issues.push(describeClash(meal, alike));
+    }
+    seen.push({ day: meal.day, meal: meal.meal, foods: distinct });
+  }
+  return issues;
+}
+
 export function varietyIssues(
   fresh: DietPlan["days"],
   alreadyPlanned: DietPlan["days"]
@@ -1694,40 +1721,47 @@ export function varietyIssues(
   }
 
   // ---- the same meal, occasion by occasion, across the week
-  const occasions = new Map<
-    string,
-    { day: string; meal: string; foods: Set<string>; fresh: boolean }[]
-  >();
-  const collect = (day: DietPlan["days"][number], fresh: boolean) => {
+  const occasions = new Map<string, VarietyMeal[]>();
+  const allMeals: VarietyMeal[] = [];
+  const collect = (day: DietPlan["days"][number], isFresh: boolean) => {
     for (const meal of day.meals) {
       const foods = foodSet(meal);
       if (foods.size === 0) continue;
       const occasion = meal.name.trim().toLowerCase();
-      occasions.set(occasion, [
-        ...(occasions.get(occasion) ?? []),
-        { day: day.day, meal: meal.name, foods, fresh },
-      ]);
+      const entry: VarietyMeal = { day: day.day, meal: meal.name, foods, fresh: isFresh };
+      occasions.set(occasion, [...(occasions.get(occasion) ?? []), entry]);
+      allMeals.push(entry);
     }
   };
   for (const day of alreadyPlanned) collect(day, false);
   for (const day of fresh) collect(day, true);
 
   for (const [, meals] of Array.from(occasions)) {
-    const background = backgroundFoods(meals.map((m) => m.foods));
-    const seen: { day: string; foods: Set<string> }[] = [];
-    for (const meal of meals) {
-      const distinct = distinguishingFoods(meal.foods, background);
-      const alike = seen.filter((p) => menuOverlap(p.foods, distinct) >= SAME_MENU_OVERLAP);
-      if (meal.fresh && alike.length >= MAX_MEAL_REPEATS) {
-        issues.push(
+    issues.push(
+      ...flagRepeats(
+        meals,
+        (meal, alike) =>
           `${meal.day} ${meal.meal} repeats the same main dish as ${alike
             .map((p) => p.day)
             .join(" and ")} — this week already has it ${alike.length} times, so give this one a different main dish`
-        );
-      }
-      seen.push({ day: meal.day, foods: distinct });
-    }
+      )
+    );
   }
+
+  // ---- the same dish, ANY occasion, across the week — a per-occasion pass
+  // alone missed a plan where the exact same "roti, paneer, guava, olive
+  // oil" meal served as three different days' breakfast AND three different
+  // days' dinner: neither occasion's own count ever reached MAX_MEAL_REPEATS,
+  // because each occasion only ever saw half of the six occurrences.
+  issues.push(
+    ...flagRepeats(
+      allMeals,
+      (meal, alike) =>
+        `${meal.day} ${meal.meal} is the same dish as ${alike
+          .map((p) => `${p.day} ${p.meal}`)
+          .join(" and ")} — even across different meal occasions, the same dish appearing ${alike.length + 1} times this week is repetition, so give this one a genuinely different main dish`
+    )
+  );
 
   return issues;
 }
@@ -1914,7 +1948,8 @@ Hard rules:
   ).join("; ")}.
 8. Each alternative must be genuinely DIFFERENT from the original meal AND from the other alternatives — a different main dish and, where possible, a different protein source. The same meal with one item changed is not an alternative.
 9. Stay inside this client's real life: their cuisine, cooking time, budget, kitchen access and the foods they already like. Do not introduce exotic or expensive foods to look varied.
-10. Keep "notes" empty unless essential (max 5 words).`;
+10. Keep "notes" empty unless essential (max 5 words).
+11. EACH ALTERNATIVE MUST BE A REAL PLATE, not items from different food groups assembled independently. A non-vegetarian protein (fish, chicken, egg, mutton) is not paired with an unrelated standalone vegetable sabzi the way a vegetarian thali pairs roti with a sabzi — "Grilled fish" next to a separate "Bhindi sabzi" is not a combination anyone actually cooks or orders. Either fold the vegetable into the SAME dish as the protein, or pair the protein with an accompaniment that genuinely goes with it in this client's cuisine — rice/roti, a light salad, raita, dal — never a heavy standalone sabzi next to a dry-cooked non-vegetarian main.`;
 }
 
 const itemLine = (items: MealAlternate["items"]) =>

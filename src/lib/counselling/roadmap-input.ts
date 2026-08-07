@@ -121,10 +121,19 @@ export const roadmapNeeds = (a: Answers): string[] => roadmapMissing(roadmapInpu
  *
  * Null where there is no journey to project — a client already at or below
  * target weight, or a roadmap that cannot be built at all.
+ *
+ * A client already counselled as Category 4 IS the maintenance state this
+ * would otherwise project toward — projecting them onto a lower BMI-21
+ * "goal" weight contradicts the reverse-diet strategy, which targets
+ * maintenance at the CURRENT weight, not a smaller one. Their own roadmap
+ * already is that answer, so it is returned unchanged rather than recomputed
+ * at a weight the plan was never trying to reach.
  */
 export function roadmapAtGoal(a: Answers, base?: Roadmap | null): Roadmap | null {
   const from = base ?? roadmapFor(a);
-  if (!from || from.weightToLoseKg <= 0) return null;
+  if (!from) return null;
+  if (from.category.id === 4) return from;
+  if (from.weightToLoseKg <= 0) return null;
   return roadmapFor(a, { weightKg: from.targetWeightKg, category: 4 });
 }
 
