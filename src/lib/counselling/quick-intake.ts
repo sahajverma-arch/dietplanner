@@ -57,3 +57,27 @@ export function fillUnaskedRequired(answers: Answers): Answers {
   }
   return a;
 }
+
+const isSentinelValue = (v: string | string[] | undefined): boolean =>
+  v === QUICK_INTAKE_SENTINEL || (Array.isArray(v) && v.length === 1 && v[0] === QUICK_INTAKE_SENTINEL);
+
+/**
+ * The counselling record is meant to show only what was actually answered —
+ * a sentinel-filled question is not that, it just satisfies missingRequired()
+ * so the shared submission/generation pipeline keeps working. Anything that
+ * DISPLAYS the record back (the review page's cards, the full-record dump,
+ * the printed PDF) should read this stripped copy instead of the raw
+ * answers, or a quick-intake client's summary reads back "Not collected —
+ * quick intake" as if it were dozens of real answers.
+ *
+ * Never use this for missingRequired()/generation — those need the fields
+ * fillUnaskedRequired() added, or the submission is rejected downstream.
+ */
+export function stripSentinelFields(answers: Answers): Answers {
+  const out: Answers = {};
+  for (const [id, value] of Object.entries(answers)) {
+    if (isSentinelValue(value)) continue;
+    out[id] = value;
+  }
+  return out;
+}

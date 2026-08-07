@@ -9,7 +9,7 @@ import { fitnessAssessment } from "@/lib/counselling/fitness-assessment";
 import { counsellingRecord, recordSize } from "@/lib/counselling/record";
 import { variantIntake, macrosOf, variantLabel } from "@/lib/counselling/meal-variants";
 import { missingRequired, val, list, type Answers } from "@/lib/counselling/questions";
-import { isQuickIntake } from "@/lib/counselling/quick-intake";
+import { isQuickIntake, stripSentinelFields } from "@/lib/counselling/quick-intake";
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import {
@@ -72,19 +72,39 @@ export default function ClientDossier({
   const [progress, setProgress] = useState<PlanProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const energy = useMemo(() => energyEstimate(answers), [answers]);
-  const intake = useMemo(() => estimateProteinIntake(answers), [answers]);
-  const target = useMemo(() => proteinTarget(answers, intake), [answers, intake]);
-  const week = useMemo(() => variantIntake(answers), [answers]);
+  // The review page must never show a sentinel-filled question back as if it
+  // were a real answer — fillUnaskedRequired() only exists to satisfy the
+  // shared missingRequired() gate, not to be read back to anyone. Everything
+  // that DISPLAYS the counselling reads this stripped copy; anything that
+  // feeds generation or a genuine safety check keeps reading `answers` (the
+  // submission has to carry the full, gate-satisfying set, and stripping is
+  // provably a no-op for the safety-relevant fields since a quick-intake
+  // client answers those for real — see quick-intake.ts).
+  const displayAnswers = useMemo(
+    () => (isQuickIntake(answers) ? stripSentinelFields(answers) : answers),
+    [answers]
+  );
+
+  const energy = useMemo(() => energyEstimate(displayAnswers), [displayAnswers]);
+  const intake = useMemo(() => estimateProteinIntake(displayAnswers), [displayAnswers]);
+  const target = useMemo(() => proteinTarget(displayAnswers, intake), [displayAnswers, intake]);
+  const week = useMemo(() => variantIntake(displayAnswers), [displayAnswers]);
   const flags = useMemo(() => redFlags(answers), [answers]);
-  const score = useMemo(() => audit(answers), [answers]);
+  const score = useMemo(() => audit(displayAnswers), [displayAnswers]);
   const missing = useMemo(() => missingRequired(answers), [answers]);
-  const record = useMemo(() => counsellingRecord(answers), [answers]);
-  const fitness = useMemo(() => fitnessAssessment(answers), [answers]);
+  const record = useMemo(() => counsellingRecord(displayAnswers), [displayAnswers]);
+  const fitness = useMemo(() => fitnessAssessment(displayAnswers), [displayAnswers]);
   const form = useMemo(() => toIntake(answers, appointmentId), [answers, appointmentId]);
-  const roadmap = useMemo(() => roadmapFor(answers), [answers]);
-  const atGoal = useMemo(() => roadmapAtGoal(answers, roadmap), [answers, roadmap]);
-  const roadmapMissing = useMemo(() => (roadmap ? [] : roadmapNeeds(answers)), [roadmap, answers]);
+  const displayForm = useMemo(
+    () => toIntake(displayAnswers, appointmentId),
+    [displayAnswers, appointmentId]
+  );
+  const roadmap = useMemo(() => roadmapFor(displayAnswers), [displayAnswers]);
+  const atGoal = useMemo(() => roadmapAtGoal(displayAnswers, roadmap), [displayAnswers, roadmap]);
+  const roadmapMissing = useMemo(
+    () => (roadmap ? [] : roadmapNeeds(displayAnswers)),
+    [roadmap, displayAnswers]
+  );
   // The one number every protein display on this page must agree on — the
   // roadmap's week-1 figure when a roadmap exists, the measured-intake
   // heuristic otherwise.
@@ -125,7 +145,8 @@ export default function ClientDossier({
     <div className="space-y-4 pb-4">
       <Hero
         name={name}
-        answers={answers}
+        answers={displayAnswers}
+        appointmentId={appointmentId}
         score={score.score}
         band={score.band}
         answersCount={recordSize(record)}
@@ -135,9 +156,10 @@ export default function ClientDossier({
       {isQuickIntake(answers) && (
         <div className="rounded-lg bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
           <span className="font-semibold">Quick intake</span> — this client came through the
-          abbreviated form. Fields marked "Not collected — quick intake" in the full record below
-          were never asked, not answered "none"; go through the full counselling form with this
-          client if fuller clinical screening is needed.
+          abbreviated form. Everything below is only what was actually asked; the full clinical
+          screen (medicines, symptoms, lifestyle, coaching readiness, and more) was skipped, not
+          answered "none" — go through the full counselling form with this client if fuller
+          screening is needed.
         </div>
       )}
 
@@ -169,11 +191,11 @@ export default function ClientDossier({
           <WeekOfEating week={week} intake={intake} />
         </div>
         <div className="space-y-4">
-          <BodyJourney answers={answers} energy={energy} />
-          <ClinicalCard flags={flags} form={form} />
-          <PlateRules answers={answers} form={form} />
-          <MovementCard form={form} energy={energy} />
-          {fitness.recorded && <FitnessScore answers={answers} compact />}
+          <BodyJourney answers={displayAnswers} energy={energy} />
+          <ClinicalCard flags={flags} form={displayForm} />
+          <PlateRules answers={displayAnswers} form={displayForm} />
+          <MovementCard form={displayForm} energy={energy} />
+          {fitness.recorded && <FitnessScore answers={displayAnswers} compact />}
         </div>
       </div>
 
@@ -185,6 +207,8 @@ export default function ClientDossier({
 
       <GenerateBar
         first={first}
+        answers={answers}
+        appointmentId={appointmentId}
         missing={missing.length}
         escalations={escalations.length}
         lowScore={score.score < 60 ? score.score : null}
@@ -202,6 +226,7 @@ export default function ClientDossier({
 function Hero({
   name,
   answers,
+  appointmentId,
   score,
   band,
   answersCount,
@@ -209,11 +234,15 @@ function Hero({
 }: {
   name: string;
   answers: Answers;
+  appointmentId: string | null;
   score: number;
   band: string;
   answersCount: number;
   onRefresh: () => void;
 }) {
+  const editHref = `${isQuickIntake(answers) ? "/counselling/quick-new" : "/counselling/new"}${
+    appointmentId ? `?appointment=${encodeURIComponent(appointmentId)}` : ""
+  }`;
   const facts = [
     val(answers, "q9_age") ? `${val(answers, "q9_age")} yrs` : "",
     val(answers, "gender"),
@@ -263,7 +292,7 @@ function Hero({
             <span className="text-xs text-zinc-500">{answersCount} answers recorded</span>
             <div className="flex items-center gap-3">
               <Link
-                href="/counselling/new"
+                href={editHref}
                 className="text-xs font-medium text-zinc-400 underline-offset-4 hover:text-brand hover:underline"
               >
                 ← Back to edit the counselling
@@ -1042,6 +1071,8 @@ function FullRecord({ sections }: { sections: ReturnType<typeof counsellingRecor
  */
 function GenerateBar({
   first,
+  answers,
+  appointmentId,
   missing,
   escalations,
   lowScore,
@@ -1051,6 +1082,8 @@ function GenerateBar({
   preview,
 }: {
   first: string;
+  answers: Answers;
+  appointmentId: string | null;
   missing: number;
   escalations: number;
   lowScore: number | null;
@@ -1070,7 +1103,12 @@ function GenerateBar({
               created.
             </span>
           ) : missing > 0 ? (
-            <Link href="/counselling/new" className="text-red-400 underline underline-offset-4">
+            <Link
+              href={`${isQuickIntake(answers) ? "/counselling/quick-new" : "/counselling/new"}${
+                appointmentId ? `?appointment=${encodeURIComponent(appointmentId)}` : ""
+              }`}
+              className="text-red-400 underline underline-offset-4"
+            >
               {missing} mandatory question{missing > 1 ? "s" : ""} still unanswered — finish the
               counselling first
             </Link>

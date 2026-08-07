@@ -6,7 +6,13 @@
 //
 // Run: npx -y tsx scripts/tests/quick-intake.test.mts
 import { missingRequired, problemTypeId, PROBLEM_ALLERGY, type Answers } from "../../src/lib/counselling/questions";
-import { fillUnaskedRequired, isQuickIntake, QUICK_INTAKE_MARKER_ID } from "../../src/lib/counselling/quick-intake";
+import {
+  fillUnaskedRequired,
+  isQuickIntake,
+  stripSentinelFields,
+  QUICK_INTAKE_MARKER_ID,
+  QUICK_INTAKE_SENTINEL,
+} from "../../src/lib/counselling/quick-intake";
 import { roadmapFor } from "../../src/lib/counselling/roadmap-input";
 import { toIntake } from "../../src/lib/counselling/assessment";
 
@@ -86,6 +92,37 @@ check(
 // fillUnaskedRequired() unchanged — it must never overwrite a real answer.
 check("a real answer is never overwritten by the sentinel fill", filled.name === "Test Client");
 check("q9_age survives untouched", filled.q9_age === "32");
+
+// stripSentinelFields() — what the review page displays instead of `filled`.
+// The whole point of the sentinel fill is to satisfy missingRequired()
+// without ever being shown back as if it were a real answer.
+const stripped = stripSentinelFields(filled);
+check(
+  "every sentinel-filled question is removed by stripSentinelFields()",
+  Object.values(stripped).every(
+    (v) => v !== QUICK_INTAKE_SENTINEL && !(Array.isArray(v) && v.includes(QUICK_INTAKE_SENTINEL))
+  )
+);
+check("a real single-value answer survives stripping", stripped.name === "Test Client");
+check(
+  "a real multi-value answer survives stripping",
+  Array.isArray(stripped.q34) && stripped.q34.includes("North Indian")
+);
+check(
+  "the quick-intake marker itself survives stripping (it is never a sentinel value)",
+  isQuickIntake(stripped)
+);
+check(
+  "stripping undoes exactly what filling did — missingRequired() on the stripped copy " +
+    "matches the count before any filling happened",
+  missingRequired(stripped).length === missingRequired(quickAnswers).length,
+  `${missingRequired(stripped).length} missing after stripping vs ${missingRequired(quickAnswers).length} before filling`
+);
+check(
+  "a full-form answers object (no marker) passes through stripSentinelFields unchanged",
+  JSON.stringify(stripSentinelFields({ name: "Full Form Client", q17: ["No Medical Condition"] })) ===
+    JSON.stringify({ name: "Full Form Client", q17: ["No Medical Condition"] })
+);
 
 console.log(failed === 0 ? `\nall quick-intake checks pass` : `\n${failed} FAILURES`);
 process.exitCode = failed === 0 ? 0 : 1;
