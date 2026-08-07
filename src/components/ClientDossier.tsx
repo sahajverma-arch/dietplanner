@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { audit, redFlags, toIntake, weeklyDayRulesText } from "@/lib/counselling/assessment";
 import { energyEstimate, bmiBand } from "@/lib/counselling/energy";
@@ -296,12 +295,17 @@ function Hero({
             </span>
             <span className="text-xs text-zinc-500">{answersCount} answers recorded</span>
             <div className="flex items-center gap-3">
-              <Link
+              {/* A plain <a>, not next/link's <Link>: Link's prefetch + client
+                  router cache can replay a stale visit to this same edit URL
+                  (e.g. one from before a draft existed) instead of loading the
+                  in-progress draft fresh — the same class of bug fixed for the
+                  form→review direction by using window.location.href there. */}
+              <a
                 href={editHref}
                 className="text-xs font-medium text-zinc-400 underline-offset-4 hover:text-brand hover:underline"
               >
                 ← Back to edit the counselling
-              </Link>
+              </a>
               <button
                 type="button"
                 onClick={onRefresh}
@@ -1108,7 +1112,7 @@ function GenerateBar({
               created.
             </span>
           ) : missing > 0 ? (
-            <Link
+            <a
               href={`${isQuickIntake(answers) ? "/counselling/quick-new" : "/counselling/new"}${
                 appointmentId ? `?appointment=${encodeURIComponent(appointmentId)}` : ""
               }`}
@@ -1116,7 +1120,7 @@ function GenerateBar({
             >
               {missing} mandatory question{missing > 1 ? "s" : ""} still unanswered — finish the
               counselling first
-            </Link>
+            </a>
           ) : (
             <>
               Macros are grounded in the dietitian-curated food exchange list. You review the draft
