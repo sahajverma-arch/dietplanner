@@ -465,7 +465,7 @@ Hard rules:
 7. NAME THE ACTUAL DISH — never a bare category. "Sabzi", "Curry", "Salad", "Fruit", "Snack" and "Chutney" on their own are not foods the client can cook or shop for, and they cannot be costed accurately: a lauki sabzi and an aloo sabzi differ several-fold. Write "Bhindi sabzi", "Cucumber tomato salad", "Guava". Keep names short and specific. WRITE QUANTITIES IN GRAMS/ML, A PLAIN COUNT (roti, eggs, almonds, ...) OR TBSP/TSP — never katori, cup, bowl, plate, glass or handful; those vessels vary too much between kitchens to cost accurately, and the exchange budget above already prices its own foods in grams/ml the same way. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
   ).join(", ")}. A quantity that reads small will BE small once verified — write the portion this client actually needs to eat.
-8. The PRESCRIPTION block in the user message is the single authority on "daily_calories" and "macros". Copy its figures into "macros" exactly and build every day to them. They are a TARGET TO LAND ON, not a floor to beat: a day that overshoots the protein figure has missed it just as surely as one that falls short, and overshooting is the restrictive jump the progression exists to avoid. Do not substitute your own figures, do not round them, and do not raise protein because the client's food pattern could carry more — where a week's protein figure looks low against the client's bodyweight, that is deliberate and it is this week's step, not an error to correct. Where no PRESCRIPTION block is present, set the numbers from clinical need — body composition, goal, training and medical profile — and not from what is easy to reach with their current foods. When an EXCHANGE BUDGET block is present, it is the authority on FOOD SELECTION the same way PRESCRIPTION is the authority on numbers: build each day's meals from those exchange counts (any specific food within the named group is fine — chase the client's preferences and cuisine within it) rather than composing quantities from scratch, so the two blocks land on the same day by construction instead of by luck. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
+8. The PRESCRIPTION block in the user message is the single authority on "daily_calories" and "macros". Copy its figures into "macros" exactly and build every day to them. They are a TARGET TO LAND ON, not a floor to beat: a day that overshoots the protein figure has missed it just as surely as one that falls short, and overshooting is the restrictive jump the progression exists to avoid. Do not substitute your own figures, do not round them, and do not raise protein because the client's food pattern could carry more — where a week's protein figure looks low against the client's bodyweight, that is deliberate and it is this week's step, not an error to correct. Where no PRESCRIPTION block is present, set the numbers from clinical need — body composition, goal, training and medical profile — and not from what is easy to reach with their current foods. When an EXCHANGE BUDGET block is present, it is the authority on FOOD SELECTION the same way PRESCRIPTION is the authority on numbers: build each day's meals from those exchange counts (any specific food within the named group is fine — chase the client's preferences and cuisine within it) rather than composing quantities from scratch, so the two blocks land on the same day by construction instead of by luck. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule, and keep every day's meals in the order a real day happens — an item named for the evening (e.g. "Evening Snack") means the slot BEFORE dinner and must be timed before it; anything genuinely eaten after dinner belongs to a name that says so ("Night Snack", "Post-Dinner Snack"), not "Evening" with a late time bolted on.
 9. ONE FOOD PER ITEM. Each entry in "items" is a single food with its own quantity — never a sentence describing a whole plate. Write {"food":"Roti","quantity":"2"}, {"food":"Paneer sabzi","quantity":"150 g"}, {"food":"Curd","quantity":"150 g"} — NOT {"food":"Whole wheat roti with paneer and vegetable curry"}. Each item is priced separately against the food database, so a multi-food item cannot be costed at all and the whole meal falls back to your own estimate.
 10. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
 
@@ -879,7 +879,52 @@ function qualityIssues(
     ...proteinConsistencyIssues(days, targetProteinG),
     ...mealOccasionIssues(days, expectedOccasions),
     ...quantityUnitIssues(days),
+    ...mealTimingIssues(days),
   ];
+}
+
+const parseTimeMinutes = (time: string): number | null => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((time || "").trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h > 23 || min > 59) return null;
+  return h * 60 + min;
+};
+
+// A meal named for the evening slot but timed AFTER dinner is a real bug a
+// live plan shipped: "Evening Snack" at 21:00, two hours after a 19:00
+// dinner — a name that means "before dinner" attached to a time that means
+// "after it". Excludes anything already named for that later slot (night,
+// post-dinner, bedtime, late-night) so a genuinely late snack isn't flagged
+// for being what it says it is.
+const EVENING_NAME_RE = /\bevening\b/i;
+const LATE_SLOT_NAME_RE = /\b(night|post-?\s*dinner|bedtime|late)\b/i;
+const DINNER_NAME_RE = /\bdinner\b/i;
+
+/** Exported for the regression test, the same reason varietyIssues is. */
+export function mealTimingIssues(days: DietPlan["days"]): string[] {
+  const out: string[] = [];
+  for (const day of days) {
+    const dinnerTimes = day.meals
+      .filter((m) => DINNER_NAME_RE.test(m.name))
+      .map((m) => parseTimeMinutes(m.time))
+      .filter((t): t is number => t !== null);
+    if (dinnerTimes.length === 0) continue;
+    const dinnerTime = Math.min(...dinnerTimes);
+
+    for (const meal of day.meals) {
+      if (!EVENING_NAME_RE.test(meal.name) || LATE_SLOT_NAME_RE.test(meal.name) || DINNER_NAME_RE.test(meal.name))
+        continue;
+      const t = parseTimeMinutes(meal.time);
+      if (t !== null && t > dinnerTime) {
+        out.push(
+          `${day.day} "${meal.name}" is timed at ${meal.time}, AFTER dinner at ${day.meals.find((m) => DINNER_NAME_RE.test(m.name))?.time} — "evening" means before dinner, not after it. Either move this meal earlier or rename it for the slot it's actually in (e.g. "Night Snack", "Post-Dinner Snack").`
+        );
+      }
+    }
+  }
+  return out;
 }
 
 // Rule 7 says this as a hard instruction, but a habitual pattern ("1 cup
