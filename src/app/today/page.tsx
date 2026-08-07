@@ -135,12 +135,18 @@ export default async function TodayPage() {
                           View client
                         </Link>
                       ) : (
-                        <Link
+                        // A plain <a>, not <Link>: this route reads a
+                        // form_drafts row that may not have existed the last
+                        // time it was prefetched/visited — Link's router
+                        // cache can replay that stale (draft-less) view
+                        // instead of the real one. Same fix as the review
+                        // page's "back to edit" links.
+                        <a
                           href={`/counselling/new?appointment=${a.id}`}
                           className="btn-primary !px-3 !py-1.5 text-xs"
                         >
                           Start Counselling
-                        </Link>
+                        </a>
                       )}
                     </td>
                   </tr>

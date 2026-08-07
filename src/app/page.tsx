@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ClientCard, { type ClientCardData } from "@/components/ClientCard";
@@ -53,12 +52,16 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/counselling/quick-new" className="btn-secondary">
+            {/* Plain <a>s, not <Link>: an appointment-less draft lives at
+                appointment_id "" for this dietitian, so revisiting these
+                fixed URLs after saving one can replay a stale router-cache
+                view captured before that draft existed. */}
+            <a href="/counselling/quick-new" className="btn-secondary">
               <span className="text-lg leading-none">+</span> Quick Counselling
-            </Link>
-            <Link href="/counselling/new" className="btn-primary">
+            </a>
+            <a href="/counselling/new" className="btn-primary">
               <span className="text-lg leading-none">+</span> New Counselling
-            </Link>
+            </a>
           </div>
         </div>
 
@@ -71,12 +74,12 @@ export default async function DashboardPage() {
               it autosaves — then generate the Week 1 diet plan on submit.
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              <Link href="/counselling/quick-new" className="btn-secondary">
+              <a href="/counselling/quick-new" className="btn-secondary">
                 + Quick Counselling
-              </Link>
-              <Link href="/counselling/new" className="btn-primary">
+              </a>
+              <a href="/counselling/new" className="btn-primary">
                 + New Counselling
-              </Link>
+              </a>
             </div>
           </div>
         ) : (
