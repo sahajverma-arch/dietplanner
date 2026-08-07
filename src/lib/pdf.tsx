@@ -492,8 +492,8 @@ function PlanDocument({
             </View>
           </View>
           <Text style={styles.disclaimer}>
-            Nutrition data: ICMR-NIN IFCT/INDB &amp; USDA FoodData Central where
-            matched; otherwise estimated from standard portions.
+            Nutrition data: dietitian-curated food exchange list where matched;
+            otherwise estimated from standard portions.
           </Text>
         </View>
 

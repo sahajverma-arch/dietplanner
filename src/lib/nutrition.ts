@@ -2,8 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DietPlan } from "./nim";
 
 // ---------------------------------------------------------------------------
-// Grounds AI-estimated meal macros in the foods reference table (INDB Indian
-// recipes + USDA SR Legacy, seeded by scripts/seed-foods.mjs).
+// Grounds AI-estimated meal macros in the foods reference table — the
+// dietitian-curated exchange list, seeded by scripts/seed-food-exchanges.mjs
+// (the bulk INDB/USDA corpus this used to also draw on was removed in
+// migration 0017; see that file for why).
 //
 // Policy: a meal's calories/macros are replaced with database-computed values
 // only when EVERY item in the meal matched a food (fuzzy, pg_trgm) AND every
@@ -13,6 +15,11 @@ import type { DietPlan } from "./nim";
 
 // word_similarity() score below which a match is considered wrong.
 const MIN_SIMILARITY = 0.55;
+// Exchange-list household measures ("3 tbsp / 1 katori cooked") are meant for
+// the dietitian's own reference in food_exchanges.json, not for the printed
+// quantity — the diet plan itself must stay in grams/ml/plain-count/tbsp/tsp
+// (see rule 7 in nim.ts). Reused when reformatting a shrunk item below.
+const VESSEL_UNIT_RE = /\b(katori|cup|bowl|plate|glass|handful)s?\b/i;
 // Above MAX the match/quantity is assumed bad and the model estimate is
 // kept. There is deliberately NO lower bound for fully-matched meals:
 // "herbal tea (1 cup)" really is ~2 kcal, and keeping the model's 300 kcal
@@ -22,7 +29,7 @@ const MIN_SIMILARITY = 0.55;
 const MEAL_KCAL_MIN = 20;
 const MEAL_KCAL_MAX = 2500;
 // A single item above this is a wrong match, a bad quantity, or a source-data
-// outlier (a few INDB rows have implausible values) — fall back to AI estimate.
+// outlier — fall back to AI estimate.
 const ITEM_KCAL_MAX = 600;
 // The model's calorie estimate is only a PORTION HINT, never a result: when
 // the grounded total lands this far above it, the model probably priced one
@@ -43,7 +50,7 @@ export interface FoodMatch {
   query: string;
   food_id: number;
   name: string;
-  source: "INDB" | "USDA";
+  source: "EXCHANGE";
   kcal: number;
   protein_g: number;
   carbs_g: number;
@@ -59,13 +66,13 @@ export interface GroundingStats {
   matched_items: number;
   grounded_meals: number;
   total_meals: number;
-  sources: { INDB: number; USDA: number };
+  sources: { EXCHANGE: number };
 }
 
-// Hindi/Indian-English terms mapped to names USDA raw foods are listed under.
-// The rewritten query is matched IN ADDITION to the original (INDB names
-// already contain Hindi, e.g. "Brinjal bhartha (Baingan ka bhartha)"), and
-// whichever variant scores higher wins.
+// Hindi/Indian-English terms mapped to their common English name. The
+// rewritten query is matched IN ADDITION to the original, and whichever
+// variant scores higher wins — cheap insurance for a query the exchange
+// list's own naming doesn't already cover.
 const SYNONYMS: Record<string, string> = {
   bhindi: "okra",
   brinjal: "eggplant",
@@ -133,8 +140,8 @@ const UNIT_GRAMS: Record<string, number> = {
 const COUNT_UNITS = new Set(["piece", "pc", "no", "unit", "serving", "portion"]);
 
 // Household vessels: when the matched food has its own measured serving
-// weight (INDB dishes do), that beats the generic gram map — "1 cup poha"
-// means one serving of poha (55 g), not 200 g of it.
+// weight, that beats the generic gram map — "1 cup poha" means one serving
+// of poha (55 g), not 200 g of it.
 const VESSEL_UNITS = new Set(["cup", "bowl", "small bowl", "katori", "plate", "glass", "tea cup", "mug"]);
 
 // Volume vessels whose generic gram value assumes dense cooked food (~1 g/ml).
@@ -157,8 +164,8 @@ const densityFactor = (text: string): number =>
 // "1 small banana", "2 large bowls" — size adjectives scale the weight.
 const SIZE_FACTORS: Record<string, number> = { small: 0.8, medium: 1, large: 1.3, big: 1.3 };
 
-// Typical piece weights (g) for countable foods the databases often have no
-// serving weight for ("2 rotis" on a USDA match, "4 almonds", "1 apple").
+// Typical piece weights (g) for countable foods the exchange list often has
+// no serving weight for ("2 rotis", "4 almonds", "1 apple").
 // Deliberately conservative, and always bounded by the divergence guards.
 const PIECE_GRAMS: { pattern: RegExp; grams: number }[] = [
   { pattern: /phulka/i, grams: 30 },
@@ -183,16 +190,18 @@ const PIECE_GRAMS: { pattern: RegExp; grams: number }[] = [
 // What the client-facing report says each household measure means. Derived
 // from UNIT_GRAMS / PIECE_GRAMS so the PDF always states the same weights the
 // nutrition math uses — edit those tables, not this list.
+//
+// Deliberately excludes vessel measures (katori, bowl, plate, cup, glass,
+// handful): they vary too much between kitchens and households to cost
+// accurately, and the exchange list prices its own foods in grams/ml instead.
+// Plans now write quantities as grams/ml, plain counts (roti, eggs, ...) or
+// tbsp/tsp — UNIT_GRAMS above still recognises the vessel words so older
+// plans and free-typed dietitian notes still ground correctly, but new plans
+// are no longer instructed to write them.
 const pieceGrams = (name: string) => PIECE_GRAMS.find((p) => p.pattern.test(name))!.grams;
 export const PORTION_GUIDE: ReadonlyArray<{ measure: string; weight: string }> = [
-  { measure: "1 katori", weight: `${UNIT_GRAMS.katori} g` },
-  { measure: "1 bowl", weight: `${UNIT_GRAMS.bowl} g` },
-  { measure: "1 plate", weight: `${UNIT_GRAMS.plate} g` },
-  { measure: "1 cup", weight: `${UNIT_GRAMS.cup} g` },
-  { measure: "1 glass", weight: `${UNIT_GRAMS.glass} ml` },
   { measure: "1 tbsp", weight: `${UNIT_GRAMS.tbsp} g` },
   { measure: "1 tsp", weight: `${UNIT_GRAMS.tsp} g` },
-  { measure: "1 handful", weight: `${UNIT_GRAMS.handful} g` },
   { measure: "1 roti", weight: `${pieceGrams("roti")} g` },
   { measure: "1 paratha", weight: `${pieceGrams("paratha")} g` },
 ];
@@ -200,8 +209,8 @@ export const PORTION_GUIDE: ReadonlyArray<{ measure: string; weight: string }> =
 // Verified protein per everyday portion, fed to the generation prompt so the
 // model plans against the same numbers grounding will hold it to. Without it
 // the model prices Indian home food at roughly double its real protein (it
-// assumes ~9 g for a katori of dal; INDB says 3.8) and every plan lands 40-90 g
-// short of its own daily protein target once grounded.
+// assumes ~9 g for a katori of dal; the exchange list says 3.8) and every
+// plan lands 40-90 g short of its own daily protein target once grounded.
 //
 // Values are read from the seeded foods table — regenerate with
 // `npx tsx scripts/protein-reference.mts` after changing staples.json, and
@@ -268,8 +277,8 @@ function normalizeUnit(text: string): string {
 
 /**
  * Resolves an item quantity to grams, preferring the matched food's own
- * serving weight (e.g. INDB knows one parantha is 56 g) over generic
- * household measures. Generic vessel measures are scaled by the food's
+ * serving weight (e.g. the exchange list knows one paratha is 60 g) over
+ * generic household measures. Generic vessel measures are scaled by the food's
  * density class, size adjectives scale the result, and countable foods fall
  * back to typical piece weights. Returns null when nothing sensible can be
  * derived.
@@ -368,10 +377,17 @@ const TRAILING_CUT =
   /\s+(slices?|sticks?|cubes?|pieces?|chunks?|wedges?|halves|florets?|strips?|rings?|shreds?|batons?)\s*$/;
 const LEADING_CUT =
   /^(sliced|chopped|diced|grated|shredded|cubed|minced|mashed|crushed|halved)\s+/;
+// Same reasoning as TRAILING_CUT, for the generic "this vegetable, cooked"
+// suffix nim.ts now asks the model to always use ("Bhindi sabzi", not bare
+// "Bhindi" — a client can't be told to eat "1 cup Bhindi" on its own). The
+// exchange-list rows are named for the raw vegetable, so without this,
+// "Palak sabzi" (0.543) and "Lauki sabzi" (0.520) fall below MIN_SIMILARITY
+// and stop grounding at all — worse than the bare-name match they replaced.
+const TRAILING_VEG_PREP = /\s+(sabzi|sabji|ki sabzi|ki sabji)\s*$/;
 
 export function normName(s: string): string {
   let base = s.trim().toLowerCase().replace(TRAILING_QUANTITY, "").trim();
-  for (const cut of [TRAILING_CUT, LEADING_CUT]) {
+  for (const cut of [TRAILING_CUT, LEADING_CUT, TRAILING_VEG_PREP]) {
     const trimmed = base.replace(cut, "").trim();
     if (trimmed) base = trimmed;
   }
@@ -596,7 +612,7 @@ const emptyStats = (): GroundingStats => ({
   matched_items: 0,
   grounded_meals: 0,
   total_meals: 0,
-  sources: { INDB: 0, USDA: 0 },
+  sources: { EXCHANGE: 0 },
 });
 
 /** Every name these meals need matched — each item, plus its composite parts. */
@@ -775,7 +791,13 @@ function makeMealGrounder(matches: Map<string, FoodMatch>, stats: GroundingStats
           const items = meal.items.map((item, i) => {
             const r = retried.find((x) => x.idx === i);
             if (!r || !r.shrunk) return item;
-            const unit = r.match.serving_unit ? ` (1 ${r.match.serving_unit})` : "";
+            // Some household measures already carry their own count ("1
+            // tsp"); prepending another "1 " produced "(1 1 tsp)" — only add
+            // one when the measure doesn't already start with a number.
+            const unit =
+              r.match.serving_unit && !VESSEL_UNIT_RE.test(r.match.serving_unit)
+                ? ` (${/^\d/.test(r.match.serving_unit) ? "" : "1 "}${r.match.serving_unit})`
+                : "";
             return { ...item, quantity: `~${Math.round(r.grams)} g${unit}` };
           });
           return {

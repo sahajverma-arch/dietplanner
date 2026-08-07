@@ -324,7 +324,7 @@ function ReviewDocument({ answers, dietitianName, generatedOn }: ReviewPdfArgs) 
         )}
 
         <View style={s.footer} fixed>
-          <Text>LEANR by Fitelo · First counselling — client summary · macros grounded in ICMR-NIN/INDB and USDA</Text>
+          <Text>LEANR by Fitelo · First counselling — client summary · targets computed from the client's measured intake</Text>
           <Text render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
         </View>
       </Page>

@@ -1,6 +1,6 @@
 // End-to-end test of per-meal editing: a saved draft plan → generateMealAlternates()
 // (NVIDIA NIM + forbidden-food/diet-type/weekday enforcement) → groundMeals()
-// (INDB/USDA foods table). Exactly the code path of POST /api/plan-meal
+// (exchange-list foods table). Exactly the code path of POST /api/plan-meal
 // {type:"alternates"}, minus the authenticated HTTP wrapper and the DB write.
 //
 // Run:  npx -y tsx scripts/test-meal-alternates.ts

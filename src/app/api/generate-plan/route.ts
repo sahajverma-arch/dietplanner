@@ -20,6 +20,7 @@ import {
 import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
+import { isQuickIntake } from "@/lib/counselling/quick-intake";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 import { regionalizePlan } from "@/lib/regional-names";
 
@@ -147,7 +148,14 @@ export async function POST(request: Request) {
         // Independent clinical review BEFORE the client record is created —
         // on a pause nothing is persisted and the counselling stays a draft,
         // so the dietitian can address the gaps and resubmit.
-        aiReview = await runReview(intake);
+        //
+        // Skipped for quick-intake clients: the review is built to judge a
+        // full clinical screen, and reliably reads a quick-intake record's
+        // sentinel-filled "not collected" answers as a safety gap rather
+        // than a deliberately shortened form — see quick-intake.ts. The
+        // dietitian reviews every generated plan before it reaches a client
+        // regardless of this step.
+        aiReview = isQuickIntake(answers) ? null : await runReview(intake);
         if (aiReview && isPauseDecision(aiReview)) return pauseResponse(aiReview);
       }
 
@@ -264,8 +272,8 @@ export async function POST(request: Request) {
       startsOn,
     });
 
-    // ---- Ground macros in the foods reference table (INDB + USDA). Never
-    // fatal: if the table isn't seeded yet, the model estimates are kept.
+    // ---- Ground macros in the foods reference table (the exchange list).
+    // Never fatal: if the table isn't seeded yet, the model estimates are kept.
     let wasGrounded = false;
     try {
       const grounded = await groundPlan(supabase, plan, parseCuisines(intake.cuisines));
@@ -274,7 +282,7 @@ export async function POST(request: Request) {
       console.log(
         `nutrition grounding: ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ` +
           `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
-          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
+          `(exchange ${grounded.stats.sources.EXCHANGE})`
       );
     } catch (groundError) {
       console.warn(

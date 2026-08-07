@@ -61,9 +61,19 @@ check(
   regionalizeFoodName("Fish fry", bengali)
 );
 check(
-  "two unrelated buckets that aren't a refinement of each other stay ambiguous",
-  regionalizeFoodName("Fish curd bowl", bengali) === "Fish curd bowl",
-  regionalizeFoodName("Fish curd bowl", bengali)
+  "two unrelated buckets that both sit at a true edge stay ambiguous",
+  regionalizeFoodName("Fish curd", bengali) === "Fish curd",
+  regionalizeFoodName("Fish curd", bengali)
+);
+check(
+  "a bucket word buried mid-description is NOT that item's identity — no rename",
+  regionalizeFoodName("Chapati with dal and carrot", tamil) === "Chapati with dal and carrot",
+  regionalizeFoodName("Chapati with dal and carrot", tamil)
+);
+check(
+  "a bucket word leading a composite name still renames it",
+  regionalizeFoodName("Rice with paneer and cucumber", tamil) === "Sadham (Rice with paneer and cucumber)",
+  regionalizeFoodName("Rice with paneer and cucumber", tamil)
 );
 
 const plan = {

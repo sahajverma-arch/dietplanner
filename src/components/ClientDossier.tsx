@@ -9,6 +9,7 @@ import { fitnessAssessment } from "@/lib/counselling/fitness-assessment";
 import { counsellingRecord, recordSize } from "@/lib/counselling/record";
 import { variantIntake, macrosOf, variantLabel } from "@/lib/counselling/meal-variants";
 import { missingRequired, val, list, type Answers } from "@/lib/counselling/questions";
+import { isQuickIntake } from "@/lib/counselling/quick-intake";
 import { estimateProteinIntake, proteinTarget } from "@/lib/protein-intake";
 import { runPlanSteps, type PlanProgress } from "@/lib/run-plan-steps";
 import {
@@ -130,6 +131,15 @@ export default function ClientDossier({
         answersCount={recordSize(record)}
         onRefresh={() => router.refresh()}
       />
+
+      {isQuickIntake(answers) && (
+        <div className="rounded-lg bg-amber-500/10 px-4 py-3 text-xs text-amber-400">
+          <span className="font-semibold">Quick intake</span> — this client came through the
+          abbreviated form. Fields marked "Not collected — quick intake" in the full record below
+          were never asked, not answered "none"; go through the full counselling form with this
+          client if fuller clinical screening is needed.
+        </div>
+      )}
 
       <KpiStrip energy={energy} intake={intake} />
 
@@ -1066,7 +1076,7 @@ function GenerateBar({
             </Link>
           ) : (
             <>
-              Macros are grounded in the ICMR-NIN/INDB and USDA databases. You review the draft
+              Macros are grounded in the dietitian-curated food exchange list. You review the draft
               before any PDF is created.
               {escalations > 0 && (
                 <span className="text-red-400">

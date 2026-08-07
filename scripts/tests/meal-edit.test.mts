@@ -33,7 +33,7 @@ const supabase = {
     data: queries.flatMap((query) => {
       const food = FOODS.find((f) => normName(f.name) === query);
       return food
-        ? [{ query, food_id: 1, source: "INDB", fiber_g: null, similarity: 1, ...food }]
+        ? [{ query, food_id: 1, source: "EXCHANGE", fiber_g: null, similarity: 1, ...food }]
         : [];
     }),
     error: null,

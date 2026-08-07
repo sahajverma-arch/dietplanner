@@ -138,7 +138,11 @@ export const EXCHANGE_FOOD_EXAMPLES: Record<ExchangeGroupId, string[]> = {
   poultry_fish_meat: ["Chicken breast", "Fish (rohu/katla)", "Prawns"],
   fitty_protein: ["Fitty Protein"],
   cereals_starches: ["Roti (atta)", "Rice", "Oats", "Besan"],
-  vegetables: ["Palak", "Bhindi", "Cauliflower", "Lauki"],
+  // Dish names, not the bare raw-vegetable names the underlying exchange rows
+  // carry (see food_exchanges.json's "Bhindi / okra" etc.) — a client is
+  // never served "1 cup Bhindi" on its own; grounding's fuzzy match still
+  // finds the raw-vegetable row fine from a dish name like "Bhindi sabzi".
+  vegetables: ["Palak sabzi", "Bhindi sabzi", "Cauliflower sabzi", "Lauki sabzi"],
   fruit: ["Apple", "Banana", "Papaya", "Guava"],
   fats_oils: ["Mustard oil", "Ghee", "Olive oil"],
   nuts_seeds: ["Almonds", "Peanuts", "Pumpkin seeds"],

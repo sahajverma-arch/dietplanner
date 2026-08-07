@@ -52,9 +52,14 @@ export default async function DashboardPage() {
               {cards.length} client{cards.length === 1 ? "" : "s"}
             </p>
           </div>
-          <Link href="/counselling/new" className="btn-primary">
-            <span className="text-lg leading-none">+</span> New Counselling
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/counselling/quick-new" className="btn-secondary">
+              <span className="text-lg leading-none">+</span> Quick Counselling
+            </Link>
+            <Link href="/counselling/new" className="btn-primary">
+              <span className="text-lg leading-none">+</span> New Counselling
+            </Link>
+          </div>
         </div>
 
         {cards.length === 0 ? (
@@ -65,9 +70,14 @@ export default async function DashboardPage() {
               Start your first counselling session. Fill the form live during the call —
               it autosaves — then generate the Week 1 diet plan on submit.
             </p>
-            <Link href="/counselling/new" className="btn-primary mt-5">
-              + New Counselling
-            </Link>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              <Link href="/counselling/quick-new" className="btn-secondary">
+                + Quick Counselling
+              </Link>
+              <Link href="/counselling/new" className="btn-primary">
+                + New Counselling
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

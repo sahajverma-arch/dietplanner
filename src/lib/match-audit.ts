@@ -28,7 +28,7 @@ import {
 export interface MatchFinding {
   query: string;
   matchedName: string | null;
-  source: "INDB" | "USDA" | null;
+  source: "EXCHANGE" | null;
   similarity: number | null;
   verdict: "suspect" | "unmatched" | "weak" | "ok";
   reason: string;

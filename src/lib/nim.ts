@@ -462,11 +462,11 @@ Hard rules:
 4. Prefer foods the client likes and their preferred cuisines where healthy.
 5. Adapt the plan to all stated medical conditions (e.g. low-GI for diabetes, low-sodium for hypertension, PCOS-friendly, etc.).
 6. ${dayRule}
-7. NAME THE ACTUAL DISH — never a bare category. "Sabzi", "Curry", "Salad", "Fruit", "Snack" and "Chutney" on their own are not foods the client can cook or shop for, and they cannot be costed accurately: a lauki sabzi and an aloo sabzi differ several-fold. Write "Bhindi sabzi", "Cucumber tomato salad", "Guava". Keep names short and specific, and use realistic household measures. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
+7. NAME THE ACTUAL DISH — never a bare category. "Sabzi", "Curry", "Salad", "Fruit", "Snack" and "Chutney" on their own are not foods the client can cook or shop for, and they cannot be costed accurately: a lauki sabzi and an aloo sabzi differ several-fold. Write "Bhindi sabzi", "Cucumber tomato salad", "Guava". Keep names short and specific. WRITE QUANTITIES IN GRAMS/ML, A PLAIN COUNT (roti, eggs, almonds, ...) OR TBSP/TSP — never katori, cup, bowl, plate, glass or handful; those vessels vary too much between kitchens to cost accurately, and the exchange budget above already prices its own foods in grams/ml the same way. Every quantity is later re-costed against a food database using these exact weights, so size portions by them: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
   ).join(", ")}. A quantity that reads small will BE small once verified — write the portion this client actually needs to eat.
 8. The PRESCRIPTION block in the user message is the single authority on "daily_calories" and "macros". Copy its figures into "macros" exactly and build every day to them. They are a TARGET TO LAND ON, not a floor to beat: a day that overshoots the protein figure has missed it just as surely as one that falls short, and overshooting is the restrictive jump the progression exists to avoid. Do not substitute your own figures, do not round them, and do not raise protein because the client's food pattern could carry more — where a week's protein figure looks low against the client's bodyweight, that is deliberate and it is this week's step, not an error to correct. Where no PRESCRIPTION block is present, set the numbers from clinical need — body composition, goal, training and medical profile — and not from what is easy to reach with their current foods. When an EXCHANGE BUDGET block is present, it is the authority on FOOD SELECTION the same way PRESCRIPTION is the authority on numbers: build each day's meals from those exchange counts (any specific food within the named group is fine — chase the client's preferences and cuisine within it) rather than composing quantities from scratch, so the two blocks land on the same day by construction instead of by luck. EVERY meal must include estimated "calories", "protein_g", "carbs_g" and "fat_g" based on standard portion sizes. Meal calories of each day must add up to that day's "total_calories" (within ~5%), close to the daily target. Vary meal times sensibly around the client's schedule.
-9. ONE FOOD PER ITEM. Each entry in "items" is a single food with its own quantity — never a sentence describing a whole plate. Write {"food":"Roti","quantity":"2"}, {"food":"Paneer sabzi","quantity":"1 katori"}, {"food":"Curd","quantity":"1 katori"} — NOT {"food":"Whole wheat roti with paneer and vegetable curry"}. Each item is priced separately against the food database, so a multi-food item cannot be costed at all and the whole meal falls back to your own estimate.
+9. ONE FOOD PER ITEM. Each entry in "items" is a single food with its own quantity — never a sentence describing a whole plate. Write {"food":"Roti","quantity":"2"}, {"food":"Paneer sabzi","quantity":"150 g"}, {"food":"Curd","quantity":"150 g"} — NOT {"food":"Whole wheat roti with paneer and vegetable curry"}. Each item is priced separately against the food database, so a multi-food item cannot be costed at all and the whole meal falls back to your own estimate.
 10. BE CONCISE: keep "notes" empty unless essential (max 5 words), max 4 items per meal, food names under 5 words.
 
 LeanR Premium diet generation principles — the profile below is a full clinical assessment; use all of it:
@@ -838,9 +838,10 @@ async function validatedAttempts<T>(
 const CATEGORY_ONLY_NAMES = new Set([
   "sabzi", "sabji", "subzi", "vegetable", "vegetables", "veg", "mixed veg",
   // "Dal" is deliberately absent: it is the commonest item in every plan, a
-  // plain dal is a real everyday dish rather than a category, and INDB's
-  // "Mixed dal" is a fair measured proxy for it. Flagging it forced a retry on
-  // nearly every generation for little accuracy gain.
+  // plain dal is a real everyday dish rather than a category, and the
+  // exchange list's own dal entries are a fair measured proxy for it.
+  // Flagging it forced a retry on nearly every generation for little
+  // accuracy gain.
   "curry", "gravy", "salad", "pulse", "pulses", "legumes",
   "fruit", "fruits", "snack", "snacks", "chutney", "raita", "soup", "juice",
   "nuts", "seeds", "dry fruits", "millet", "cereal", "protein",
@@ -876,7 +877,31 @@ function qualityIssues(
     ...vagueItemIssues(days),
     ...proteinConsistencyIssues(days, targetProteinG),
     ...mealOccasionIssues(days, expectedOccasions),
+    ...quantityUnitIssues(days),
   ];
+}
+
+// Rule 7 says this as a hard instruction, but a habitual pattern ("1 cup
+// rice", "1 cup filter coffee") survives it more often than any other rule
+// in this file — a live run still wrote 26/119 items this way after the
+// instruction text was added. Checked deterministically, the same way
+// vagueItemIssues backstops rule 7's dish-naming half.
+const VESSEL_UNIT_RE = /\b(katori|cup|bowl|plate|glass|handful)s?\b/i;
+
+/** Exported for the regression test, the same reason varietyIssues is. */
+export function quantityUnitIssues(days: DietPlan["days"]): string[] {
+  const out: string[] = [];
+  for (const day of days)
+    for (const meal of day.meals) {
+      const offenders = meal.items.filter((i) => VESSEL_UNIT_RE.test(i.quantity || ""));
+      if (offenders.length)
+        out.push(
+          `${day.day} "${meal.name}" writes ${offenders
+            .map((i) => `"${i.food}" as "${i.quantity}"`)
+            .join(", ")} using a katori/cup/bowl/plate/glass/handful — rewrite in grams/ml, a plain count, or tbsp/tsp instead, per rule 7.`
+        );
+    }
+  return out;
 }
 
 /**
@@ -1467,7 +1492,8 @@ export function exchangeBlock(ctx: PlanContext): string {
     `\n\nEXCHANGE BUDGET — the day's food, pre-computed from the same clinical engine as the PRESCRIPTION above (DRAFT exchange list, still under nutrition-team review — treat as strong guidance, not the only foods the client may ever eat):`,
     ...describeExchangePlan(plan).map((l) => `- ${l}`),
     `Distribute these exchanges across the day's meals in an authentic regional combination. Do not add a concentrated protein food (paneer, dal, soya, curd, egg, chicken) that is not represented in an exchange above — that is exactly the double-counting rule 18 warns against. Vegetables, spices and everyday variety beyond this list are fine; the exchange counts are what the protein/fat/carb numbers above are actually built from.`,
-    `NAME EACH PROTEIN EXCHANGE AS ITS OWN ITEM, SPECIFICALLY: write "Moong dal", "Masoor dal", "Toor dal" or another named pulse from the list above — never a bare "Dal", which prices as a generic mixed-dal recipe at roughly a third of the protein an exchange assumes. Write "Paneer" or "Paneer, low-fat" as its own item — never folded into a composed dish name like "Paneer sabzi" or "Dal curry", which prices as a gravy-diluted recipe instead of the concentrated exchange amount. This applies to every protein exchange (pulses, soya, paneer/dairy, egg, poultry/fish/meat) — vegetables, cereals and spices may still be named as ordinary dishes.`,
+    `NAME EACH PROTEIN EXCHANGE AS ITS OWN ITEM, SPECIFICALLY: write "Moong dal", "Masoor dal", "Toor dal" or another named pulse from the list above — never a bare "Dal", which prices as a generic mixed-dal recipe at roughly a third of the protein an exchange assumes. Write "Paneer" or "Paneer, low-fat" as its own item — never folded into a composed dish name like "Paneer sabzi" or "Dal curry", which prices as a gravy-diluted recipe instead of the concentrated exchange amount. This applies to every protein exchange (pulses, soya, paneer/dairy, egg, poultry/fish/meat).`,
+    `VEGETABLE EXCHANGES ARE THE OPPOSITE: always name the actual cooked DISH, never the bare raw vegetable. Write "Bhindi sabzi", "Palak sabzi", "Cauliflower sabzi" (as shown in the examples above) — never a bare "Bhindi", "Palak", "Cauliflower" sitting in the meal on its own, which is not a food a client can be told to cook or eat as a quantity of "1 cup". Turn it into a real dish the same way rule 7 already requires everywhere else in this plan.`,
   ].join("\n");
 }
 
@@ -1879,7 +1905,7 @@ Hard rules:
 2. NEVER include a food the client is allergic or intolerant to, in any form or preparation, and never a food they dislike.
 3. Every alternative REPLACES the given meal — same occasion, same eating window. It must land within 10% of that meal's calories and carry AT LEAST as much protein. These are interchangeable choices, NOT extra food and NOT a lighter option.
 4. Each alternative is a COMPLETE meal the client can cook and eat, not a single-ingredient swap.
-5. ONE FOOD PER ITEM, each with its own quantity: {"food":"Roti","quantity":"2"}, {"food":"Paneer bhurji","quantity":"1 katori"} — never a sentence describing a whole plate. Max 4 items per alternative.
+5. ONE FOOD PER ITEM, each with its own quantity: {"food":"Roti","quantity":"2"}, {"food":"Paneer bhurji","quantity":"150 g"} — never a sentence describing a whole plate. Max 4 items per alternative. Write quantities in grams/ml, a plain count, or tbsp/tsp — never katori, cup, bowl, plate, glass or handful.
 6. NAME THE ACTUAL DISH, never a bare category — "Bhindi sabzi" not "Sabzi", "Cucumber tomato salad" not "Salad". Food names under 5 words.
 7. Every quantity is re-costed against a food database using these household weights, so size portions by them: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
@@ -2169,9 +2195,9 @@ ${PARSED_MEAL_SPEC}
 
 Hard rules:
 1. NEVER invent, add, remove, substitute or "improve" a food. Every item you return must be a food the dietitian actually wrote. If they wrote three foods, return exactly those three.
-2. ONE FOOD PER ITEM. "2 roti with dal and curd" becomes three items: Roti (2), Dal (1 katori), Curd (1 katori) — never one item describing the plate.
-3. Keep the dietitian's own quantity whenever they gave one, rewritten in a standard household form: "2", "1 katori", "150 g", "1 cup", "1 glass", "1 bowl".
-4. When they gave NO quantity for a food, fill in the ordinary single serving of that dish for one adult — never leave a quantity empty, and never guess large.
+2. ONE FOOD PER ITEM. "2 roti with dal and curd" becomes three items: Roti (2), Dal (150 g), Curd (150 g) — never one item describing the plate.
+3. Keep the dietitian's own quantity whenever they gave one, rewritten in a standard form: "2", "150 g", "225 ml", "1 tbsp". Never rewrite it as katori, cup, bowl, plate, glass or handful — those vessels vary too much between kitchens to cost accurately.
+4. When they gave NO quantity for a food, fill in the ordinary single serving of that dish for one adult in grams/ml — never leave a quantity empty, and never guess large.
 5. These are the weights every quantity is re-costed against, so choose units from this list wherever they fit: ${PORTION_GUIDE.map(
     (p) => `1 ${p.measure.replace(/^1 /, "")} = ${p.weight}`
   ).join(", ")}.

@@ -13,7 +13,24 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DietPlan } from "./nim";
 
-const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const wordsOf = (s: string): string[] =>
+  s.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/).filter(Boolean);
+
+/**
+ * True when `bucketWords` sits at the very start or very end of `nameWords` —
+ * "dal" matches "Moong dal" (suffix) and "Roti" matches "Roti" (whole name),
+ * but NOT "Chapati with dal and carrot", where "dal" is buried inside a
+ * conjunction describing a different dish entirely. A bucket word appearing
+ * only in the middle of a longer description is not that item's identity.
+ */
+const matchesAsEdge = (nameWords: string[], bucketWords: string[]): boolean => {
+  if (bucketWords.length === 0 || bucketWords.length > nameWords.length) return false;
+  const bucket = bucketWords.join(" ");
+  return (
+    nameWords.slice(0, bucketWords.length).join(" ") === bucket ||
+    nameWords.slice(-bucketWords.length).join(" ") === bucket
+  );
+};
 
 /** canonical_food (lowercased) -> regional_term, for one region's confirmed rows. */
 export async function fetchConfirmedRegionalTerms(
@@ -36,20 +53,23 @@ export async function fetchConfirmedRegionalTerms(
 }
 
 /**
- * "Roti" -> "Fulka (Roti)" when the name matches exactly one recognised
- * canonical food, or one bucket that strictly contains every other bucket
- * it also matched (e.g. "Fish curry" matching both "fish" and "fish curry" —
- * the second is a refinement of the first, not a conflict, so it wins and
- * "fish" is dropped). Two matches where neither contains the other (e.g.
- * "Curd rice" matching both "curd" and "rice") are genuinely ambiguous and
- * the name is left unchanged rather than guessed — same caution as
+ * "Roti" -> "Fulka (Roti)" when a recognised canonical food sits at the start
+ * or end of the name (matchesAsEdge) — never when it's only mentioned inside
+ * a longer description ("Chapati with dal and carrot" is a chapati, not a
+ * dal, even though the word "dal" appears in it). Matching exactly one bucket
+ * at an edge renames it; one bucket that strictly contains another matched
+ * bucket wins as a refinement ("Fish curry" over "Fish" in "Rohu fish
+ * curry"); two matches where neither contains the other (e.g. "Curd rice"
+ * matching both "curd" and "rice" at its two edges) are genuinely ambiguous
+ * and the name is left unchanged rather than guessed — same caution as
  * identityConflict() in nutrition.ts: a wrong guess is worse than no rename.
  */
 export function regionalizeFoodName(name: string, glossary: Map<string, string>): string {
   if (glossary.size === 0) return name;
+  const nameWords = wordsOf(name);
   const matches: { canonical: string; term: string }[] = [];
   glossary.forEach((term, canonical) => {
-    if (new RegExp(`\\b${escapeRegex(canonical)}\\b`, "i").test(name)) matches.push({ canonical, term });
+    if (matchesAsEdge(nameWords, wordsOf(canonical))) matches.push({ canonical, term });
   });
   if (matches.length === 0) return name;
   if (matches.length === 1) return `${matches[0].term} (${name})`;

@@ -31,6 +31,7 @@ import {
 const MAX_CORRECTION_ROUNDS = 3;
 import { auditPlan } from "@/lib/match-audit";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
+import { isQuickIntake } from "@/lib/counselling/quick-intake";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -251,7 +252,10 @@ async function start(
       }
       // Independent clinical review BEFORE anything is persisted — on a pause
       // the counselling stays a draft so the gaps can be addressed.
-      aiReview = await runReview(intake);
+      //
+      // Skipped for quick-intake clients — see the identical skip in
+      // /api/generate-plan/route.ts for why.
+      aiReview = isQuickIntake(answers) ? null : await runReview(intake);
       if (aiReview && isPauseDecision(aiReview)) return pauseResponse(aiReview);
     }
 
@@ -333,7 +337,8 @@ async function start(
       week = latest ? latest.week_number : 1;
       source = latest ? "follow_up" : "first_counselling";
       if (source === "first_counselling") {
-        aiReview = await runReview(intake);
+        const existingAnswers = (intake as IntakeForm & { answers?: Answers }).answers;
+        aiReview = existingAnswers && isQuickIntake(existingAnswers) ? null : await runReview(intake);
         if (aiReview && isPauseDecision(aiReview)) return pauseResponse(aiReview, { clientId });
       }
     }

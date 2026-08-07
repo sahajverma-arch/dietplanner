@@ -1,6 +1,6 @@
 // End-to-end pipeline test: LeanR counselling answers → toIntake() →
 // generateDietPlan() (NVIDIA NIM + forbidden-food enforcement) →
-// groundPlan() (INDB/USDA foods table) → renderPlanPdf() → local PDF.
+// groundPlan() (exchange-list foods table) → renderPlanPdf() → local PDF.
 // Exercises exactly the code path of POST /api/generate-plan, minus the
 // authenticated HTTP wrapper and DB/storage writes.
 //
@@ -101,7 +101,7 @@ async function main() {
       console.log(
         `grounding: ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ` +
           `${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
-          `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
+          `(exchange ${grounded.stats.sources.EXCHANGE})`
       );
       // The API route reconciles grounded days against the calorie/protein
       // targets before saving the draft. Skipping it here made this script

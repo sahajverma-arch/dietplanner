@@ -38,6 +38,11 @@ for (const c of CLIENTS) {
     block.includes('never a bare "Dal"') && block.includes('"Paneer sabzi"'),
     "naming-precision instruction missing — Dal/Paneer will collide with the old, more dilute alias: rows again"
   );
+  check(
+    `${c.name}: tells the model vegetables need a real dish name, not a bare vegetable`,
+    block.includes("VEGETABLE EXCHANGES ARE THE OPPOSITE") && block.includes('"Bhindi sabzi"'),
+    "vegetable dish-naming instruction missing — a bare 'Bhindi (1 cup)' will show up in the plan again"
+  );
 
   if (c.dietType === "vegetarian") {
     check(

@@ -932,7 +932,9 @@ function BmiPanel({ answers }: { answers: Answers }) {
 
 // ---------------------------------------------------------------------------
 
-function Field({
+/** Exported for QuickCounsellingForm, which reuses this renderer for its own
+ * curated question list instead of duplicating every field type's markup. */
+export function Field({
   q,
   answers,
   set,

@@ -152,28 +152,25 @@ function per100g(valuePerServing, servingG) {
 }
 
 /**
- * Mirrors the 88 exchange foods into public.foods (source='INDB',
+ * Mirrors the 88 exchange foods into public.foods (source='EXCHANGE',
  * source_id='exchange:<group>:<slug>'), so the SAME grounding pipeline that
  * already matches every other meal item (nutrition.ts, match-audit.ts) can
- * land on these curated, brand-robust values instead of an arbitrary
- * INDB/USDA row — no parallel matching path, just extra rows the existing
- * one now knows to prefer (see migration 0013).
+ * land on these curated, brand-robust values — match_foods_batch (migration
+ * 0016) matches exclusively against these rows.
  *
  * Where an item carries an `alias` (the short name used in nim.ts's
  * EXCHANGE_FOOD_EXAMPLES, e.g. "Moong dal" for "Moong dal (yellow), raw"), a
- * SECOND row is seeded under that shorter name. match_foods_batch gives an
- * exact text match +0.30 — far more than this migration's +0.04 exchange
- * boost — so a full descriptive name alone loses to an existing short-named
- * staples.json row for the same everyday query. The alias row carries the
- * SAME exchange-precise macros but the short name the model is actually
- * prompted to write, so it wins the exact match on its own merits instead of
- * needing the boost to fight an uphill battle.
+ * SECOND row is seeded under that shorter name, so a full descriptive name
+ * alone still gets an exact-text-match hit for the short everyday query. The
+ * alias row carries the SAME exchange-precise macros but the short name the
+ * model is actually prompted to write, so it wins the exact match on its own
+ * merits.
  */
 async function seedFoodsTableRows(groups, exchanges) {
   const labelById = new Map(groups.map((g) => [g.id, g.label]));
 
   const toRow = (e, name, idSuffix) => ({
-    source: "INDB",
+    source: "EXCHANGE",
     source_id: `exchange:${e.group}:${slugify(name)}${idSuffix}`,
     name,
     food_group: labelById.get(e.group) ?? e.group,

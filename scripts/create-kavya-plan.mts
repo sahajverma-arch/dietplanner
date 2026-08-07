@@ -102,13 +102,13 @@ async function main() {
   let plan = await generateDietPlan({ intake, week: 1, review, startsOn });
   console.log(`  generated in ${Math.round((Date.now() - t0) / 1000)}s`);
 
-  console.log("\n[3/6] Grounding against public.foods (normal, blended — the real production path)...");
+  console.log("\n[3/6] Grounding against public.foods (the exchange list — the real production path)...");
   const cuisines = parseCuisines(intake.cuisines);
   const grounded = await groundPlan(supabase as any, plan, cuisines);
   plan = grounded.plan;
   console.log(
     `  ${grounded.stats.grounded_meals}/${grounded.stats.total_meals} meals, ${grounded.stats.matched_items}/${grounded.stats.total_items} items ` +
-      `(INDB ${grounded.stats.sources.INDB}, USDA ${grounded.stats.sources.USDA})`
+      `(exchange ${grounded.stats.sources.EXCHANGE})`
   );
 
   console.log("\n[4/6] Nutrition reconcile...");
