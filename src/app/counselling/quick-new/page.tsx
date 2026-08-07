@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import QuickCounsellingForm from "@/components/QuickCounsellingForm";
 import AppHeader from "@/components/AppHeader";
 import type { Answers } from "@/lib/counselling/questions";
+import { QUICK_INTAKE_DRAFT_KIND } from "@/lib/counselling/quick-intake";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function QuickNewCounsellingPage({
       .from("form_drafts")
       .select("data")
       .eq("dietitian_id", user.id)
-      .eq("kind", "first_counselling")
+      .eq("kind", QUICK_INTAKE_DRAFT_KIND)
       .eq("appointment_id", appointmentId ?? "")
       .maybeSingle(),
     supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
@@ -37,10 +38,10 @@ export default async function QuickNewCounsellingPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  // Same draft namespace the full counselling form uses (dietitian_id + kind
-  // "first_counselling" + appointment_id) — a quick-intake draft and a full
-  // one for the same appointment share one slot, same as reopening the full
-  // form always resumes whatever was last saved for it.
+  // A quick-intake draft's own namespace (dietitian_id + kind
+  // "quick_counselling" + appointment_id) — deliberately separate from the
+  // full form's "first_counselling" drafts, so neither form can ever inherit
+  // the other's data for the same appointment slot. See quick-intake.ts.
   const saved = (draft?.data ?? null) as { answers?: Answers; appointmentId?: string | null } | null;
 
   let initialAnswers: Answers | null = saved?.answers ?? null;

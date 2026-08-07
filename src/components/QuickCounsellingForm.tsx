@@ -15,7 +15,12 @@ import {
   type Answers,
   type Question,
 } from "@/lib/counselling/questions";
-import { findQuestion, fillUnaskedRequired, QUICK_INTAKE_MARKER_ID } from "@/lib/counselling/quick-intake";
+import {
+  findQuestion,
+  fillUnaskedRequired,
+  QUICK_INTAKE_DRAFT_KIND,
+  QUICK_INTAKE_MARKER_ID,
+} from "@/lib/counselling/quick-intake";
 import { INTAKE_OVERRIDE_ID } from "@/lib/counselling/meal-variants";
 
 /**
@@ -151,7 +156,7 @@ export default function QuickCounsellingForm({
       const { error } = await supabase.from("form_drafts").upsert(
         {
           dietitian_id: dietitianId,
-          kind: "first_counselling",
+          kind: QUICK_INTAKE_DRAFT_KIND,
           appointment_id: appointmentId ?? "",
           data: { answers, appointmentId },
           updated_at: new Date().toISOString(),
@@ -189,7 +194,7 @@ export default function QuickCounsellingForm({
     const { error: saveError } = await supabase.from("form_drafts").upsert(
       {
         dietitian_id: dietitianId,
-        kind: "first_counselling",
+        kind: QUICK_INTAKE_DRAFT_KIND,
         appointment_id: appointmentId ?? "",
         data: { answers: finalAnswers, appointmentId },
         updated_at: new Date().toISOString(),

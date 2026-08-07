@@ -33,6 +33,22 @@ export function findQuestion(id: string): Question | undefined {
 export const QUICK_INTAKE_MARKER_ID = "_quickIntake";
 export const isQuickIntake = (a: Answers): boolean => a[QUICK_INTAKE_MARKER_ID] === "true";
 
+/**
+ * form_drafts.kind for a quick-intake draft — DELIBERATELY separate from the
+ * full form's "first_counselling". They used to share that key (same
+ * dietitian_id + appointment_id slot), on the reasoning that one appointment
+ * is only ever counselled one way at a time — wrong: a dietitian who tried
+ * the full form for an appointment, then switched to Quick Counselling for
+ * the same slot (or the reverse), had the two forms silently share a draft,
+ * so the quick form inherited stray full-form data (a whole week of typed
+ * meal variants showing up in a submission that never asked for one) and the
+ * full form could just as easily inherit a quick-intake draft's sentinel
+ * answers. Two keys, two drafts, no crossover — /counselling/review is the
+ * only place that reads either, since a client is either quick-intake or
+ * fully screened, never both at once.
+ */
+export const QUICK_INTAKE_DRAFT_KIND = "quick_counselling";
+
 /** What an auto-filled required question reads as — deliberately distinct
  * from any real clinical answer like "None" so it can never be mistaken for
  * one when the record is read back later. */

@@ -188,7 +188,12 @@ export default function ClientDossier({
             target={displayTarget}
             roadmap={roadmap}
           />
-          <WeekOfEating week={week} intake={intake} />
+          {/* Built entirely around a genuine meal-by-meal recall (variants
+              per occasion) — a quick-intake client only ever gave one rough
+              daily total, so this section has nothing of its own to show and
+              is skipped rather than rendered empty or, worse, showing a
+              stray leftover recall from an unrelated draft. */}
+          {!isQuickIntake(answers) && <WeekOfEating week={week} intake={intake} />}
         </div>
         <div className="space-y-4">
           <BodyJourney answers={displayAnswers} energy={energy} />

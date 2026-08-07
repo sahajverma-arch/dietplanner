@@ -20,7 +20,7 @@ import {
 import { auditPlan } from "@/lib/match-audit";
 import { renderPlanPdf } from "@/lib/pdf";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
-import { isQuickIntake } from "@/lib/counselling/quick-intake";
+import { isQuickIntake, QUICK_INTAKE_DRAFT_KIND } from "@/lib/counselling/quick-intake";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 import { regionalizePlan } from "@/lib/regional-names";
 
@@ -382,11 +382,14 @@ export async function POST(request: Request) {
 
     // First counselling succeeded — clear the autosaved draft
     if (body.type === "first") {
+      const submittedAnswers = (intake as IntakeForm & { answers?: Answers }).answers;
+      const draftKind =
+        submittedAnswers && isQuickIntake(submittedAnswers) ? QUICK_INTAKE_DRAFT_KIND : "first_counselling";
       await supabase
         .from("form_drafts")
         .delete()
         .eq("dietitian_id", user.id)
-        .eq("kind", "first_counselling")
+        .eq("kind", draftKind)
         .eq("appointment_id", body.appointmentId ?? "");
     }
 

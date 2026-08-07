@@ -31,7 +31,7 @@ import {
 const MAX_CORRECTION_ROUNDS = 3;
 import { auditPlan } from "@/lib/match-audit";
 import { missingRequired, type Answers } from "@/lib/counselling/questions";
-import { isQuickIntake } from "@/lib/counselling/quick-intake";
+import { isQuickIntake, QUICK_INTAKE_DRAFT_KIND } from "@/lib/counselling/quick-intake";
 import type { FollowUpInput, IntakeForm } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -370,11 +370,14 @@ async function start(
   if (planError) throw new Error(`Could not start the plan: ${planError.message}`);
 
   if (body.source === "first") {
+    const submittedAnswers = (intake as IntakeForm & { answers?: Answers }).answers;
+    const draftKind =
+      submittedAnswers && isQuickIntake(submittedAnswers) ? QUICK_INTAKE_DRAFT_KIND : "first_counselling";
     await supabase
       .from("form_drafts")
       .delete()
       .eq("dietitian_id", user.id)
-      .eq("kind", "first_counselling")
+      .eq("kind", draftKind)
       .eq("appointment_id", body.appointmentId ?? "");
   }
 
